@@ -180,6 +180,11 @@ log without absorbing transport or daemon ownership. It refuses to expose a
 compensation delivery unless `Started` and `DeliveryPrepared` are durable and
 treats every persistence failure as fatal to reverse progress.
 
+The Linux daemon loop now enrolls every valid forward saga success into the
+durable token log before its `ActionSucceeded` journal fact. A focused real
+`SOCK_SEQPACKET` test proves that ordering and ensures ordinary workflow
+scheduling cannot make the successor visible first.
+
 ## Build and Inspect
 
 From this directory:

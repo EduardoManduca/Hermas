@@ -64,3 +64,17 @@ progress; it never silently degrades to in-memory execution.
 The driver does not own sockets, files, app registration, or the forward
 executor. This keeps recovery policy testable without merging durability,
 transport, and graph traversal into one daemon-specific state machine.
+
+## Forward enrollment in the daemon loop
+
+The nonblocking daemon loop may attach a compensation-token writer. When a
+saga Action returns a valid success, the loop resolves that node's immutable
+SagaStep metadata and synchronizes the opaque token before appending
+`ActionSucceeded`. Only after both operations return can the already-computed
+successor become schedulable on the next poll iteration.
+
+A saga image without attached token durability, a route/type mismatch, or any
+token append failure is fatal to loop progress. Ordinary non-saga images do
+not require or write compensation state. The loop remains transport owner;
+the graph image remains compensation-route authority, and the token log
+remains opaque-value authority.

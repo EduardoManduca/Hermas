@@ -72,7 +72,8 @@ if(UNIX)
     target_sources(hermas2_daemon PRIVATE src/loop_linux.c)
     target_include_directories(hermas2_daemon PUBLIC include)
     target_link_libraries(hermas2_daemon PUBLIC
-        hermas2_image hermas2_protocol hermas2_runtime hermas2_journal)
+        hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
+        hermas2_compensation)
     add_library(hermas2_edge STATIC src/edge_linux.c)
     target_include_directories(hermas2_edge PUBLIC include)
     target_link_libraries(hermas2_edge PUBLIC hermas2_protocol)
@@ -281,6 +282,23 @@ if(BUILD_TESTING)
                          "$<TARGET_FILE:hermas2_grade_list>"
                          "$<TARGET_FILE:hermas2_mean_calculator>"
                          "$<TARGET_FILE:hermas2_printer>")
+        endif()
+        if(DEFINED HERMAS2_TEST_SAGA_IMAGE)
+            add_executable(hermas2_saga_loop_tests
+                           tests/test_saga_loop_linux.c)
+            target_link_libraries(hermas2_saga_loop_tests PRIVATE
+                hermas2_daemon hermas2_compensation)
+            target_compile_options(hermas2_saga_loop_tests PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+            if(HERMAS2_SANITIZE)
+                target_compile_options(hermas2_saga_loop_tests PRIVATE
+                    -fsanitize=address,undefined -fno-omit-frame-pointer)
+                target_link_options(hermas2_saga_loop_tests PRIVATE
+                    -fsanitize=address,undefined)
+            endif()
+            add_test(NAME hermas2_saga_loop_tests
+                     COMMAND hermas2_saga_loop_tests
+                             "${HERMAS2_TEST_SAGA_IMAGE}")
         endif()
     endif()
     if(DEFINED HERMAS2_TEST_IMAGE)

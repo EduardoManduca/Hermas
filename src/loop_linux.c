@@ -102,6 +102,86 @@ static hermas2_loop_result append_finished_if_complete(
     return result;
 }
 
+typedef struct saga_route {
+    uint16_t compensation_app;
+    uint16_t compensation_action;
+    uint16_t source_type;
+    uint16_t destination_type;
+} saga_route;
+
+static bool find_saga_route(
+    const hermas2_daemon_loop *loop,
+    uint16_t node,
+    saga_route *route) {
+    uint16_t regions = (uint16_t)loop->image[68] |
+                       ((uint16_t)loop->image[69] << 8u);
+    size_t base =
+        (size_t)loop->image[72] |
+        ((size_t)loop->image[73] << 8u) |
+        ((size_t)loop->image[74] << 16u) |
+        ((size_t)loop->image[75] << 24u);
+    for (uint16_t index = 0u; index < regions; ++index) {
+        size_t offset = base + (size_t)index * 16u;
+        uint16_t forward =
+            (uint16_t)loop->image[offset + 2u] |
+            ((uint16_t)loop->image[offset + 3u] << 8u);
+        if (loop->image[offset] == 3u && forward == node) {
+            *route = (saga_route){
+                .compensation_app =
+                    (uint16_t)loop->image[offset + 4u] |
+                    ((uint16_t)loop->image[offset + 5u] << 8u),
+                .compensation_action =
+                    (uint16_t)loop->image[offset + 6u] |
+                    ((uint16_t)loop->image[offset + 7u] << 8u),
+                .source_type =
+                    (uint16_t)loop->image[offset + 8u] |
+                    ((uint16_t)loop->image[offset + 9u] << 8u),
+                .destination_type =
+                    (uint16_t)loop->image[offset + 10u] |
+                    ((uint16_t)loop->image[offset + 11u] << 8u)
+            };
+            return true;
+        }
+    }
+    return false;
+}
+
+static hermas2_loop_result append_compensation_token(
+    hermas2_daemon_loop *loop,
+    const hermas2_loop_slot *slot,
+    const hermas2_frame *result) {
+    saga_route route;
+    if (!find_saga_route(loop, slot->node_id, &route)) {
+        return HERMAS2_LOOP_OK;
+    }
+    if (loop->compensation == NULL ||
+        result->source_type != route.source_type) {
+        return HERMAS2_LOOP_COMPENSATION_ERROR;
+    }
+    hermas2_compensation_record record = {
+        .key = {
+            .execution_id = slot->execution.execution_id,
+            .workflow_id = loop->workflow_id,
+            .request_id = slot->request_id,
+            .node_id = slot->node_id,
+            .image_fingerprint = loop->image_fingerprint
+        },
+        .compensation_app_id = route.compensation_app,
+        .compensation_action_id = route.compensation_action,
+        .source_type = route.source_type,
+        .destination_type = route.destination_type,
+        .token = result->payload,
+        .token_length = result->payload_length
+    };
+    return hermas2_compensation_writer_append(
+               loop->compensation, record,
+               loop->compensation_scratch,
+               sizeof(loop->compensation_scratch)) ==
+                   HERMAS2_COMPENSATION_OK
+               ? HERMAS2_LOOP_OK
+               : HERMAS2_LOOP_COMPENSATION_ERROR;
+}
+
 static hermas2_loop_result prepare_ready(
     hermas2_daemon_loop *loop,
     size_t *progress_count) {
@@ -287,6 +367,13 @@ static hermas2_loop_result receive_result(
         hermas2_execution_accept_result(&slot->execution, &result) ==
             HERMAS2_RUNTIME_OK;
     if (result_valid) {
+        if (result.outcome == HERMAS2_OUTCOME_SUCCESS) {
+            hermas2_loop_result tokenized =
+                append_compensation_token(loop, slot, &result);
+            if (tokenized != HERMAS2_LOOP_OK) {
+                return tokenized;
+            }
+        }
         hermas2_journal_kind kind =
             result.outcome == HERMAS2_OUTCOME_SUCCESS
                 ? HERMAS2_JOURNAL_ACTION_SUCCEEDED
@@ -350,6 +437,18 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
     }
     loop->journal = journal;
     loop->workflow_id = workflow_id;
+    return HERMAS2_LOOP_OK;
+}
+
+hermas2_loop_result hermas2_daemon_loop_attach_compensation(
+    hermas2_daemon_loop *loop,
+    hermas2_compensation_writer *compensation) {
+    if (loop == NULL || compensation == NULL ||
+        compensation->write == NULL || loop->image == NULL ||
+        hermas2_daemon_loop_active(loop) != 0u) {
+        return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    loop->compensation = compensation;
     return HERMAS2_LOOP_OK;
 }
 
@@ -511,7 +610,8 @@ const char *hermas2_loop_result_name(hermas2_loop_result result) {
     static const char *const names[] = {
         "ok", "invalid-argument", "invalid-image", "capacity-exhausted",
         "duplicate-execution", "unknown-execution", "execution-active",
-        "poll-error", "runtime-error", "protocol-error", "journal-error"
+        "poll-error", "runtime-error", "protocol-error", "journal-error",
+        "compensation-error"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0]) ? names[index] : "unknown";

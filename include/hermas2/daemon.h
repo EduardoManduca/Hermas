@@ -3,6 +3,7 @@
 
 #include "hermas2/runtime.h"
 #include "hermas2/journal.h"
+#include "hermas2/compensation.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -66,7 +67,8 @@ typedef enum hermas2_loop_result {
     HERMAS2_LOOP_POLL_ERROR,
     HERMAS2_LOOP_RUNTIME_ERROR,
     HERMAS2_LOOP_PROTOCOL_ERROR,
-    HERMAS2_LOOP_JOURNAL_ERROR
+    HERMAS2_LOOP_JOURNAL_ERROR,
+    HERMAS2_LOOP_COMPENSATION_ERROR
 } hermas2_loop_result;
 
 typedef struct hermas2_loop_slot {
@@ -90,6 +92,10 @@ typedef struct hermas2_daemon_loop {
     hermas2_loop_slot executions[HERMAS2_DAEMON_MAX_EXECUTIONS];
     size_t scheduler_cursor;
     hermas2_journal_writer *journal;
+    hermas2_compensation_writer *compensation;
+    uint8_t compensation_scratch[
+        HERMAS2_COMPENSATION_HEADER_SIZE +
+        HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
     uint32_t workflow_id;
     uint64_t image_fingerprint;
 } hermas2_daemon_loop;
@@ -111,6 +117,10 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
     hermas2_daemon_loop *loop,
     hermas2_journal_writer *journal,
     uint32_t workflow_id);
+
+hermas2_loop_result hermas2_daemon_loop_attach_compensation(
+    hermas2_daemon_loop *loop,
+    hermas2_compensation_writer *compensation);
 
 hermas2_loop_result hermas2_daemon_loop_poll(
     hermas2_daemon_loop *loop,
