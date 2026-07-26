@@ -2,11 +2,12 @@ use std::collections::{BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt;
 
-use crate::catalog::{ActionId, Catalog, TypeId};
+use crate::catalog::{ActionId, ActionKind, Catalog, TypeId};
 
 pub const MAX_GRAPH_NODES: usize = 64;
 pub const MAX_GRAPH_EDGES: usize = 192;
 pub const MAX_ALL_BRANCHES: usize = 8;
+const MAX_SAGA_STEPS: usize = 16;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceLocation {
@@ -101,6 +102,15 @@ pub(crate) struct EachRegion {
     pub concurrency: u8,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SagaStep {
+    pub forward: NodeId,
+    pub compensation: ActionId,
+    pub source_type: TypeId,
+    pub destination_type: TypeId,
+    pub ordinal: u16,
+}
+
 #[derive(Clone, Debug)]
 pub struct GraphBuilder {
     name: String,
@@ -112,6 +122,7 @@ pub struct GraphBuilder {
     edges: Vec<Edge>,
     deadlines: Vec<DeadlineRegion>,
     each_regions: Vec<EachRegion>,
+    saga: bool,
 }
 
 impl GraphBuilder {
@@ -126,6 +137,7 @@ impl GraphBuilder {
             edges: Vec::new(),
             deadlines: Vec::new(),
             each_regions: Vec::new(),
+            saga: false,
         }
     }
 
@@ -206,6 +218,10 @@ impl GraphBuilder {
         let id = u8::try_from(self.each_regions.len() + 1).expect("Each region count fits u8");
         self.each_regions.push(region);
         id
+    }
+
+    pub fn set_root_saga(&mut self) {
+        self.saga = true;
     }
 
     pub fn add_terminal_at(
@@ -509,6 +525,32 @@ impl VerifiedGraph {
                 }
             })
             .collect();
+        let saga_steps = if self.graph.saga {
+            self.graph
+                .nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| match node {
+                    NodeKind::Action(action_id) => {
+                        let action = catalog.action(*action_id)?;
+                        let ActionKind::Reversible { compensation } = action.kind else {
+                            return None;
+                        };
+                        let compensation_action = catalog.action(compensation)?;
+                        Some(SagaStep {
+                            forward: node_id(index),
+                            compensation,
+                            source_type: action.success,
+                            destination_type: compensation_action.input,
+                            ordinal: u16::try_from(index + 1).ok()?,
+                        })
+                    }
+                    _ => None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         GraphImageView {
             name: self.graph.name.clone(),
             input: self.graph.input,
@@ -518,6 +560,7 @@ impl VerifiedGraph {
             edges,
             deadlines: self.graph.deadlines.clone(),
             each_regions: self.graph.each_regions.clone(),
+            saga_steps,
         }
     }
 
@@ -689,6 +732,7 @@ pub(crate) struct GraphImageView {
     pub edges: Vec<ImageEdge>,
     pub deadlines: Vec<DeadlineRegion>,
     pub each_regions: Vec<EachRegion>,
+    pub saga_steps: Vec<SagaStep>,
 }
 
 fn verify(graph: &GraphBuilder, catalog: &Catalog) -> Result<(), GraphError> {
@@ -730,6 +774,52 @@ fn verify(graph: &GraphBuilder, catalog: &Catalog) -> Result<(), GraphError> {
             GraphErrorCode::LimitExceeded,
             "graph contains more than 8 Each regions",
         ));
+    }
+    if graph.saga {
+        let saga_action_count = graph
+            .nodes
+            .iter()
+            .filter(|node| matches!(node, NodeKind::Action(_)))
+            .count();
+        if saga_action_count == 0 || saga_action_count > MAX_SAGA_STEPS {
+            return Err(GraphError::graph(
+                GraphErrorCode::LimitExceeded,
+                format!("a saga must contain 1..={MAX_SAGA_STEPS} Actions"),
+            ));
+        }
+        if graph.nodes.iter().any(|node| {
+            matches!(
+                node,
+                NodeKind::Dispatch(_) | NodeKind::Fork(_, _) | NodeKind::Join(_)
+            )
+        }) || !graph.each_regions.is_empty()
+        {
+            return Err(GraphError::graph(
+                GraphErrorCode::InvalidRoute,
+                "the initial saga slice must be a sequential Action pipeline",
+            ));
+        }
+        for (index, node) in graph.nodes.iter().enumerate() {
+            if let NodeKind::Action(action_id) = node {
+                let action = catalog.action(*action_id).ok_or_else(|| {
+                    GraphError::node(
+                        GraphErrorCode::UnknownAction,
+                        node_id(index),
+                        format!("unknown Action ID {}", action_id.raw()),
+                    )
+                })?;
+                if !matches!(action.kind, ActionKind::Reversible { .. }) {
+                    return Err(GraphError::node(
+                        GraphErrorCode::InvalidRoute,
+                        node_id(index),
+                        format!(
+                            "Action {} is irreversible and cannot enter a saga",
+                            catalog.action_name(*action_id)
+                        ),
+                    ));
+                }
+            }
+        }
     }
     let mut templates = BTreeSet::new();
     for (index, region) in graph.each_regions.iter().enumerate() {

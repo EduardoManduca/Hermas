@@ -1,0 +1,20 @@
+app shipping
+
+type Request = Integer
+type Token = Integer
+type Failure = Unit
+type Empty = Unit
+
+action cancel {
+    input Token
+    success Empty
+    error Failure
+    kind irreversible
+}
+
+action book {
+    input Request
+    success Token
+    error Failure
+    kind reversible compensate cancel
+}

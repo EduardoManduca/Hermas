@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-use crate::catalog::{ActionId, Catalog, TypeId};
+use crate::catalog::{ActionId, ActionKind, Catalog, TypeId};
 use crate::graph::{
     EachRegion, EdgeSource, EdgeTarget, GraphBuilder, MAX_ALL_BRANCHES, SourceLocation,
     TerminalKind, VerifiedGraph,
@@ -428,6 +428,7 @@ struct Workflow {
     errors_span: Span,
     statements: Vec<Statement>,
     deadline_ms: Option<u64>,
+    saga: bool,
 }
 
 struct HScriptModule {
@@ -558,6 +559,13 @@ fn parse_workflow(file: &str, tokens: &mut Tokens) -> Result<Workflow, HScriptDi
         ));
     }
     tokens.expect_symbol(Symbol::LeftBrace)?;
+    let saga = if tokens.check_keyword("saga") {
+        tokens.expect_keyword("saga")?;
+        tokens.expect_symbol(Symbol::LeftBrace)?;
+        true
+    } else {
+        false
+    };
     let deadline_ms = if tokens.check_keyword("within") {
         tokens.expect_keyword("within")?;
         let (duration, _) = tokens.expect_duration()?;
@@ -722,6 +730,9 @@ fn parse_workflow(file: &str, tokens: &mut Tokens) -> Result<Workflow, HScriptDi
     if deadline_ms.is_some() {
         tokens.expect_symbol(Symbol::RightBrace)?;
     }
+    if saga {
+        tokens.expect_symbol(Symbol::RightBrace)?;
+    }
     if statements.is_empty() || !returned {
         return Err(HScriptDiagnostic::new(
             file,
@@ -741,6 +752,7 @@ fn parse_workflow(file: &str, tokens: &mut Tokens) -> Result<Workflow, HScriptDi
         errors_span,
         statements,
         deadline_ms,
+        saga,
     })
 }
 
@@ -1748,7 +1760,41 @@ fn compile_workflow(
     }
     let input_type = inferred_input.expect("a returned pipeline invokes at least one Action");
     assert!(!returned.is_empty(), "parser requires return");
+    if workflow.saga {
+        if !context.dispatches.is_empty()
+            || !context.all_scopes.is_empty()
+            || !context.each_regions.is_empty()
+        {
+            return Err(HScriptDiagnostic::new(
+                file,
+                "workflow",
+                "non-sequential-saga",
+                workflow.span,
+                "the initial saga slice must be a sequential Action pipeline",
+            ));
+        }
+        for step in &context.steps {
+            let action = catalog
+                .action(step.action)
+                .expect("resolved workflow Action exists");
+            if !matches!(action.kind, ActionKind::Reversible { .. }) {
+                return Err(HScriptDiagnostic::new(
+                    file,
+                    "workflow",
+                    "irreversible-saga-action",
+                    step.invocation_span,
+                    format!(
+                        "Action {} is irreversible and cannot enter a saga",
+                        catalog.action_name(step.action)
+                    ),
+                ));
+            }
+        }
+    }
     let mut builder = GraphBuilder::new(graph_name, input_type, success_type, error_types);
+    if workflow.saga {
+        builder.set_root_saga();
+    }
     if let Some(duration_ms) = workflow.deadline_ms {
         builder.set_root_deadline(duration_ms);
     }

@@ -151,6 +151,12 @@ records, sequence gaps, undersized lookup buffers, and ambiguous duplicate
 tokens. Token presence is not treated as forward success; execution-journal
 facts remain authoritative.
 
+The compiler and graph-image half of explicit sagas is also present.
+Sequential `saga` blocks admit only reversible Actions, are bounded to 16
+steps, and lower to dense per-node compensation records. Both the Rust and C
+decoders independently verify compensation app admission, token
+representations, ordering, uniqueness, and forward Success-edge types.
+
 ## Build and Inspect
 
 From this directory:

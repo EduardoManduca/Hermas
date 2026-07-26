@@ -1,0 +1,20 @@
+app payment
+
+type Request = Integer
+type Token = Integer
+type Failure = Unit
+type Empty = Unit
+
+action release {
+    input Token
+    success Empty
+    error Failure
+    kind irreversible
+}
+
+action reserve {
+    input Request
+    success Token
+    error Failure
+    kind reversible compensate release
+}

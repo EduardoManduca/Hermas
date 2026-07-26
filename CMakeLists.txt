@@ -229,7 +229,8 @@ if(BUILD_TESTING)
     if(DEFINED HERMAS2_TEST_IMAGE)
         add_test(NAME hermas2_image_tests
                  COMMAND hermas2_image_tests "${HERMAS2_TEST_IMAGE}"
-                         ${HERMAS2_TEST_PARALLEL_IMAGE})
+                         ${HERMAS2_TEST_PARALLEL_IMAGE}
+                         ${HERMAS2_TEST_SAGA_IMAGE})
     add_executable(hermas2_runtime_tests tests/test_runtime.c)
         target_link_libraries(hermas2_runtime_tests PRIVATE hermas2_runtime)
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

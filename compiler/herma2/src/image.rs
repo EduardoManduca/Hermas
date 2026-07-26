@@ -139,6 +139,11 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
             ImageNode::Dispatch(_) | ImageNode::Fork(_, _) | ImageNode::Join(_) => None,
             ImageNode::Terminal(_) => None,
         })
+        .chain(
+            view.saga_steps
+                .iter()
+                .filter_map(|step| catalog.action(step.compensation).map(|action| action.app)),
+        )
         .collect::<BTreeSet<_>>();
     let apps = required_apps
         .iter()
@@ -165,6 +170,11 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
                 .into_iter()
                 .flatten()
         }))
+        .chain(
+            view.saga_steps
+                .iter()
+                .flat_map(|step| [step.source_type, step.destination_type]),
+        )
         .collect::<BTreeSet<_>>();
     let mut representations = Vec::new();
     let type_representations = types
@@ -197,7 +207,7 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
     let regions_offset = edges_offset
         .checked_add(view.edges.len() * EDGE_RECORD_SIZE)
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
-    let region_count = view.deadlines.len() + view.each_regions.len();
+    let region_count = view.deadlines.len() + view.each_regions.len() + view.saga_steps.len();
     let representations_offset = regions_offset
         .checked_add(region_count * REGION_RECORD_SIZE)
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
@@ -367,6 +377,19 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
         put_u16(&mut output, region.bound);
         put_u16(&mut output, 0);
     }
+    for step in &view.saga_steps {
+        let compensation = catalog
+            .action(step.compensation)
+            .expect("verified saga compensation exists");
+        output.extend_from_slice(&[3, 0]);
+        put_u16(&mut output, step.forward.raw());
+        put_u16(&mut output, compensation.app.raw());
+        put_u16(&mut output, step.compensation.raw());
+        put_u16(&mut output, step.source_type.raw());
+        put_u16(&mut output, step.destination_type.raw());
+        put_u16(&mut output, step.ordinal);
+        put_u16(&mut output, 0);
+    }
     output.extend_from_slice(&representations);
     output.extend_from_slice(view.name.as_bytes());
     debug_assert_eq!(output.len(), total_size);
@@ -519,7 +542,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         || type_count > MAX_IMAGE_ERRORS
         || node_count > MAX_GRAPH_NODES
         || edge_count > MAX_GRAPH_EDGES
-        || region_count > 16
+        || region_count > 32
     {
         return Err(ImageError::new(
             ImageErrorCode::InvalidCount,
@@ -708,6 +731,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     }
     let mut deadline_ranges = Vec::new();
     let mut each_regions = BTreeMap::new();
+    let mut saga_steps = BTreeMap::new();
     for index in 0..region_count {
         let offset = regions_offset + index * REGION_RECORD_SIZE;
         match bytes[offset] {
@@ -737,6 +761,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                         && (first != 1 || count != node_count || parent != 0))
                     || read_u64(bytes, offset + 8)? == 0
                     || !each_regions.is_empty()
+                    || !saga_steps.is_empty()
                 {
                     return Err(ImageError::new(
                         ImageErrorCode::InvalidRecord,
@@ -747,6 +772,13 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                 deadline_ranges.push((first, end.expect("validated nonempty region")));
             }
             2 => {
+                if !saga_steps.is_empty() {
+                    return Err(ImageError::new(
+                        ImageErrorCode::InvalidRecord,
+                        Some(offset),
+                        "Each regions must precede saga steps",
+                    ));
+                }
                 let id = u16::try_from(each_regions.len() + 1).expect("region count is bounded");
                 let concurrency = bytes[offset + 1];
                 let template = read_u16(bytes, offset + 2)?;
@@ -811,6 +843,50 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                     ),
                 );
             }
+            3 => {
+                let forward = read_u16(bytes, offset + 2)?;
+                let compensation_app = read_u16(bytes, offset + 4)?;
+                let compensation_action = read_u16(bytes, offset + 6)?;
+                let source_type = read_u16(bytes, offset + 8)?;
+                let destination_type = read_u16(bytes, offset + 10)?;
+                let ordinal = read_u16(bytes, offset + 12)?;
+                let compatible = type_descriptors
+                    .get(&source_type)
+                    .zip(type_descriptors.get(&destination_type))
+                    .is_some_and(
+                        |((source_start, source_end), (destination_start, destination_end))| {
+                            bytes[*source_start..*source_end]
+                                == bytes[*destination_start..*destination_end]
+                        },
+                    );
+                let duplicate = saga_steps.contains_key(&forward);
+                if bytes[offset + 1] != 0
+                    || !action_nodes.contains(&forward)
+                    || compensation_app == 0
+                    || compensation_action == 0
+                    || !apps.contains(&compensation_app)
+                    || ordinal != u16::try_from(saga_steps.len() + 1).expect("region count fits")
+                    || !compatible
+                    || read_u16(bytes, offset + 14)? != 0
+                    || duplicate
+                {
+                    return Err(ImageError::new(
+                        ImageErrorCode::InvalidRecord,
+                        Some(offset),
+                        "invalid saga step",
+                    ));
+                }
+                saga_steps.insert(
+                    forward,
+                    (
+                        compensation_app,
+                        compensation_action,
+                        source_type,
+                        destination_type,
+                        ordinal,
+                    ),
+                );
+            }
             _ => {
                 return Err(ImageError::new(
                     ImageErrorCode::InvalidRecord,
@@ -829,6 +905,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     let mut join_output_types = BTreeMap::<(u16, u8), u16>::new();
     let mut each_input_ports = BTreeMap::<u16, usize>::new();
     let mut each_collect_ports = BTreeMap::<u16, usize>::new();
+    let mut action_success_types = BTreeMap::<u16, u16>::new();
     for index in 0..edge_count {
         let offset = edges_offset + index * EDGE_RECORD_SIZE;
         let source_kind = bytes[offset];
@@ -977,6 +1054,9 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                 "duplicate Join output",
             ));
         }
+        if source_kind == 1 {
+            action_success_types.insert(source_node, source_type);
+        }
         let source_port_tag = if matches!(source_kind, 5..=7) {
             case_tag
         } else {
@@ -1042,6 +1122,13 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                 || source_ports.get(&(8, *region, 0)) != Some(&1)
                 || source_ports.get(&(9, *region, 0)) != Some(&1)
         })
+        || (!saga_steps.is_empty()
+            && (saga_steps.len() != action_nodes.len()
+                || action_nodes.iter().any(|node| {
+                    saga_steps
+                        .get(node)
+                        .is_none_or(|step| action_success_types.get(node) != Some(&step.2))
+                })))
     {
         return Err(ImageError::new(
             ImageErrorCode::InvalidTopology,

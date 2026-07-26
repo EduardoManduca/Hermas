@@ -1,0 +1,10 @@
+workflow fulfill(input: payment::Request) -> shipping::Token
+errors { payment::Failure shipping::Failure }
+{
+    saga {
+        let payment_token = input |> payment/reserve()
+        return payment_token
+            |> as shipping::Request
+            |> shipping/book()
+    }
+}

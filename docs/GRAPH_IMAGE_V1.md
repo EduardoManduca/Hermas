@@ -161,6 +161,25 @@ Both decoders prove the source list's element representation and exact bound,
 the collected list's output representation and sufficient bound, the
 template's Action success type, and all four Each edge cardinalities.
 
+A saga step is one explicit compensation mapping:
+
+```text
+u8  kind                 // 3 SagaStep
+u8  flags                // zero
+u16 forward_node         // Action node
+u16 compensation_app
+u16 compensation_action
+u16 source_token_type    // forward Action success
+u16 destination_type     // compensation Action input
+u16 ordinal              // dense, one-based forward order
+u16 reserved_zero
+```
+
+Saga records follow Deadline and Each records. If any occur, every Action node
+has exactly one record, ordinals are dense, the compensation app is required
+by the image, and the two token representations are structurally equal. The
+forward node's Success edge must carry `source_token_type`.
+
 ## Structural validation
 
 The decoder rejects:

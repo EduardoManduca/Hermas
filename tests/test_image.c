@@ -67,9 +67,54 @@ static int validate_additional_fixture(const char *path) {
     return result;
 }
 
+static int validate_saga_fixture(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
+        return fail("cannot open saga fixture");
+    }
+    long length = ftell(file);
+    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return fail("invalid saga fixture length");
+    }
+    uint8_t *bytes = malloc((size_t)length);
+    if (bytes == NULL ||
+        fread(bytes, 1u, (size_t)length, file) != (size_t)length) {
+        fclose(file);
+        free(bytes);
+        return fail("cannot read saga fixture");
+    }
+    fclose(file);
+    int result = 0;
+    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS2_IMAGE_OK) {
+        result = fail("valid saga image was rejected");
+    } else {
+        size_t regions = read_u32(bytes, 72u);
+        uint16_t region_count =
+            (uint16_t)bytes[68] | ((uint16_t)bytes[69] << 8u);
+        if (region_count == 0u || bytes[regions] != 3u) {
+            result = fail("saga fixture contains no SagaStep");
+        } else {
+            uint8_t saved[2] = {bytes[regions + 12u],
+                                bytes[regions + 13u]};
+            bytes[regions + 12u] = 0u;
+            bytes[regions + 13u] = 0u;
+            if (hermas2_image_validate(bytes, (size_t)length, NULL) ==
+                HERMAS2_IMAGE_OK) {
+                result = fail("invalid saga ordinal was accepted");
+            }
+            bytes[regions + 12u] = saved[0];
+            bytes[regions + 13u] = saved[1];
+        }
+    }
+    free(bytes);
+    return result;
+}
+
 int main(int argc, char **argv) {
-    if (argc < 2 || argc > 3) {
-        return fail("expected graph-image fixture path and optional additional fixture");
+    if (argc < 2 || argc > 4) {
+        return fail("expected graph image and optional parallel/saga fixtures");
     }
     FILE *file = fopen(argv[1], "rb");
     if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
@@ -178,5 +223,6 @@ int main(int argc, char **argv) {
     bytes[82] = saved_error[0];
     bytes[83] = saved_error[1];
     free(bytes);
-    return argc == 3 ? validate_additional_fixture(argv[2]) : 0;
+    int result = argc >= 3 ? validate_additional_fixture(argv[2]) : 0;
+    return result == 0 && argc == 4 ? validate_saga_fixture(argv[3]) : result;
 }
