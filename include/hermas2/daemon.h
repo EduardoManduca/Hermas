@@ -137,6 +137,10 @@ hermas2_loop_result hermas2_daemon_loop_attach_saga(
     void *compensation_lookup_context,
     hermas2_saga_log_writer *saga_log);
 
+hermas2_loop_result hermas2_daemon_loop_resume_saga(
+    hermas2_daemon_loop *loop,
+    const hermas2_saga_execution *execution);
+
 hermas2_loop_result hermas2_daemon_loop_poll(
     hermas2_daemon_loop *loop,
     int timeout_milliseconds,

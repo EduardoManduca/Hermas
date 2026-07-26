@@ -113,3 +113,21 @@ delivery, and outcomes are written solely to the saga-attempt log, while
 opaque compensation inputs continue to come solely from the token log. This
 keeps the three durable authorities distinct even though one transport loop
 executes both directions.
+
+## Restart handoff
+
+After `hermas2_saga_recover` and `hermas2_saga_reconcile` produce a safe
+`Ready` executor, `hermas2_daemon_loop_resume_saga` installs it into a fresh
+transport loop. The loop replaces any transient token buffer with its attached
+lookup capability and starts the driver in resume mode, so no second `Started`
+record is emitted. Durable reverse successes are skipped and only the next
+uncompensated ordinal is delivered.
+
+The execution journal deliberately contains no business payloads. Therefore a
+restarted loop cannot recreate the original domain-error value even though it
+can prove the original outcome and finish rollback. Its eventual client result
+is conservatively `Unknown` with no value. This is distinct from delivery
+uncertainty: compensation itself may be fully proven, while the pre-crash
+terminal value remains unavailable. Exact known-failure replay requires a
+future durable terminal-value authority; the daemon never fabricates it from
+journal metadata.

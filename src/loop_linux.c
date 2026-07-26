@@ -641,6 +641,58 @@ hermas2_loop_result hermas2_daemon_loop_attach_saga(
     return HERMAS2_LOOP_OK;
 }
 
+hermas2_loop_result hermas2_daemon_loop_resume_saga(
+    hermas2_daemon_loop *loop,
+    const hermas2_saga_execution *execution) {
+    if (loop == NULL || execution == NULL ||
+        loop->compensation_lookup == NULL ||
+        loop->saga_log == NULL ||
+        execution->state != HERMAS2_SAGA_READY ||
+        execution->remaining == 0u ||
+        execution->execution_id == 0u ||
+        execution->workflow_id != loop->workflow_id ||
+        execution->image_fingerprint != loop->image_fingerprint ||
+        find_execution(loop, execution->execution_id) != NULL) {
+        return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0u;
+         index < HERMAS2_DAEMON_MAX_EXECUTIONS; ++index) {
+        hermas2_loop_slot *slot = &loop->executions[index];
+        if (slot->active) {
+            continue;
+        }
+        memset(slot, 0, sizeof(*slot));
+        hermas2_saga_execution resumed = *execution;
+        resumed.image = loop->image;
+        resumed.image_size = loop->image_size;
+        resumed.tokens = NULL;
+        resumed.token_bytes = 0u;
+        resumed.token_lookup = loop->compensation_lookup;
+        resumed.token_lookup_context =
+            loop->compensation_lookup_context;
+        if (hermas2_saga_driver_begin(
+                &slot->saga, &resumed, loop->saga_log, 1) !=
+            HERMAS2_SAGA_OK) {
+            memset(slot, 0, sizeof(*slot));
+            return HERMAS2_LOOP_COMPENSATION_ERROR;
+        }
+        slot->execution = (hermas2_execution){
+            .image = loop->image,
+            .image_size = loop->image_size,
+            .value_buffer = slot->value,
+            .value_capacity = sizeof(slot->value),
+            .execution_id = execution->execution_id,
+            .terminal_outcome = HERMAS2_OUTCOME_UNKNOWN,
+            .state = HERMAS2_EXECUTION_COMPLETE
+        };
+        slot->active = true;
+        slot->journal_finished = true;
+        slot->compensating = true;
+        return HERMAS2_LOOP_OK;
+    }
+    return HERMAS2_LOOP_CAPACITY_EXHAUSTED;
+}
+
 hermas2_loop_result hermas2_daemon_loop_admit(
     hermas2_daemon_loop *loop,
     uint64_t execution_id,
