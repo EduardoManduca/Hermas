@@ -58,6 +58,7 @@ if(UNIX)
     target_sources(hermas2_compensation PRIVATE
                    src/compensation_linux.c)
     target_sources(hermas2_saga_log PRIVATE src/saga_log_linux.c)
+    target_sources(hermas2_saga PRIVATE src/saga_linux.c)
     add_executable(hermas2_history tools/hermas2_history.c)
     target_link_libraries(hermas2_history PRIVATE hermas2_journal)
     target_compile_options(hermas2_history PRIVATE

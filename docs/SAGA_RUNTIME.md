@@ -131,3 +131,11 @@ uncertainty: compensation itself may be fully proven, while the pre-crash
 terminal value remains unavailable. Exact known-failure replay requires a
 future durable terminal-value authority; the daemon never fabricates it from
 journal metadata.
+
+On Linux, `hermas2_saga_recover_files` performs this recovery directly from
+the three already-open, exclusively locked durable files. It maps them
+read-only for the bounded validation pass, reconciles the reverse attempt
+history, then discards every mapping. A safely recovered executor is rebound
+to `hermas2_compensation_file_lookup`, so later preparation reads the token
+from the locked file and no startup mapping or caller buffer can become a
+dangling value authority.

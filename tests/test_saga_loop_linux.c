@@ -1,7 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "hermas2/daemon.h"
+#include "hermas2/saga_linux.h"
 
 #include <poll.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -37,6 +41,16 @@ typedef struct saga_route {
     uint16_t action_id;
     uint16_t success_type;
 } saga_route;
+
+typedef struct durable_files {
+    char directory[64];
+    char journal_path[96];
+    char token_path[96];
+    char saga_path[96];
+    hermas2_journal_file journal;
+    hermas2_compensation_file compensation;
+    hermas2_saga_log_file saga;
+} durable_files;
 
 static hermas2_journal_result write_journal(
     void *context,
@@ -295,6 +309,101 @@ static int drive_forward_failure(
     return 1;
 }
 
+static int open_durable_files(
+    durable_files *files,
+    const durable_probe *probe) {
+    memset(files, 0, sizeof(*files));
+    memcpy(
+        files->directory, "/tmp/hermas2-saga-XXXXXX",
+        sizeof("/tmp/hermas2-saga-XXXXXX"));
+    if (mkdtemp(files->directory) == NULL ||
+        snprintf(
+            files->journal_path, sizeof(files->journal_path),
+            "%s/execution.h2journal", files->directory) <= 0 ||
+        snprintf(
+            files->token_path, sizeof(files->token_path),
+            "%s/tokens.h2comp", files->directory) <= 0 ||
+        snprintf(
+            files->saga_path, sizeof(files->saga_path),
+            "%s/attempts.h2saga", files->directory) <= 0) {
+        return 0;
+    }
+    hermas2_journal_summary journal_summary;
+    hermas2_compensation_summary token_summary;
+    hermas2_saga_log_summary saga_summary;
+    if (hermas2_journal_file_open(
+            &files->journal, files->journal_path,
+            &journal_summary) != HERMAS2_JOURNAL_OK ||
+        hermas2_compensation_file_open(
+            &files->compensation, files->token_path,
+            &token_summary) != HERMAS2_COMPENSATION_OK ||
+        hermas2_saga_log_file_open(
+            &files->saga, files->saga_path,
+            &saga_summary) != HERMAS2_SAGA_LOG_OK) {
+        return 0;
+    }
+    size_t journal_count =
+        probe->journal_bytes / HERMAS2_JOURNAL_RECORD_SIZE;
+    for (size_t index = 0u; index < journal_count; ++index) {
+        hermas2_journal_record record;
+        if (hermas2_journal_decode(
+                probe->journal +
+                    index * HERMAS2_JOURNAL_RECORD_SIZE,
+                HERMAS2_JOURNAL_RECORD_SIZE, &record) !=
+                HERMAS2_JOURNAL_OK ||
+            hermas2_journal_writer_append(
+                &files->journal.writer, record) !=
+                HERMAS2_JOURNAL_OK) {
+            return 0;
+        }
+    }
+    size_t token_offset = 0u;
+    uint8_t scratch[
+        HERMAS2_COMPENSATION_HEADER_SIZE +
+        HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
+    while (token_offset < probe->token_bytes) {
+        hermas2_compensation_record record;
+        size_t record_size = 0u;
+        if (hermas2_compensation_decode(
+                probe->tokens + token_offset,
+                probe->token_bytes - token_offset,
+                &record, &record_size) != HERMAS2_COMPENSATION_OK ||
+            hermas2_compensation_writer_append(
+                &files->compensation.writer, record,
+                scratch, sizeof(scratch)) !=
+                HERMAS2_COMPENSATION_OK) {
+            return 0;
+        }
+        token_offset += record_size;
+    }
+    size_t saga_count =
+        probe->saga_bytes / HERMAS2_SAGA_LOG_RECORD_SIZE;
+    for (size_t index = 0u; index < saga_count; ++index) {
+        hermas2_saga_log_record record;
+        if (hermas2_saga_log_decode(
+                probe->saga +
+                    index * HERMAS2_SAGA_LOG_RECORD_SIZE,
+                HERMAS2_SAGA_LOG_RECORD_SIZE, &record) !=
+                HERMAS2_SAGA_LOG_OK ||
+            hermas2_saga_log_writer_append(
+                &files->saga.writer, record) !=
+                HERMAS2_SAGA_LOG_OK) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void close_durable_files(durable_files *files) {
+    hermas2_saga_log_file_close(&files->saga);
+    hermas2_compensation_file_close(&files->compensation);
+    hermas2_journal_file_close(&files->journal);
+    (void)unlink(files->saga_path);
+    (void)unlink(files->token_path);
+    (void)unlink(files->journal_path);
+    (void)rmdir(files->directory);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         return 2;
@@ -445,13 +554,12 @@ int main(int argc, char **argv) {
     }
 
     hermas2_saga_execution recovered;
-    if (hermas2_saga_recover(
+    durable_files files;
+    if (!open_durable_files(&files, &probe) ||
+        hermas2_saga_recover_files(
             &recovered, image, image_size,
-            probe.journal, probe.journal_bytes,
-            probe.tokens, probe.token_bytes, 42u, 7u) !=
-            HERMAS2_SAGA_OK ||
-        hermas2_saga_reconcile(
-            &recovered, probe.saga, probe.saga_bytes) !=
+            &files.journal, &files.compensation,
+            &files.saga, 42u, 7u) !=
             HERMAS2_SAGA_OK ||
         recovered.state != HERMAS2_SAGA_READY ||
         recovered.remaining != 1u) {
@@ -463,10 +571,13 @@ int main(int argc, char **argv) {
             &loop, &registry, image, image_size) !=
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_journal(
-            &loop, &journal, 7u) != HERMAS2_LOOP_OK ||
+            &loop, &files.journal.writer, 7u) !=
+            HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
-            &loop, &compensation, lookup_token, &probe,
-            &saga_log) != HERMAS2_LOOP_OK ||
+            &loop, &files.compensation.writer,
+            hermas2_compensation_file_lookup,
+            &files.compensation, &files.saga.writer) !=
+            HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_resume_saga(
             &loop, &recovered) != HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_result(
@@ -496,15 +607,12 @@ int main(int argc, char **argv) {
             HERMAS2_LOOP_OK &&
         restarted_result.outcome == HERMAS2_OUTCOME_UNKNOWN &&
         restarted_result.payload_length == 0u &&
-        hermas2_saga_log_scan(
-            probe.saga, probe.saga_bytes, &saga_summary) ==
+        hermas2_saga_log_file_scan(
+            &files.saga, &saga_summary) ==
             HERMAS2_SAGA_LOG_OK &&
         saga_summary.active_count == 0u &&
         saga_summary.record_count == 16u &&
-        hermas2_compensation_scan(
-            probe.tokens, probe.token_bytes, NULL, NULL,
-            &token_summary) == HERMAS2_COMPENSATION_OK &&
-        token_summary.record_count == 4u &&
+        files.compensation.writer.next_sequence == 5u &&
         hermas2_daemon_loop_release(&loop, 42u) ==
             HERMAS2_LOOP_OK;
     if (!ok) {
@@ -516,10 +624,13 @@ int main(int argc, char **argv) {
             &loop, &registry, image, image_size) !=
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_journal(
-            &loop, &journal, 7u) != HERMAS2_LOOP_OK ||
+            &loop, &files.journal.writer, 7u) !=
+            HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
-            &loop, &compensation, lookup_token, &probe,
-            &saga_log) != HERMAS2_LOOP_OK ||
+            &loop, &files.compensation.writer,
+            hermas2_compensation_file_lookup,
+            &files.compensation, &files.saga.writer) !=
+            HERMAS2_LOOP_OK ||
         !drive_forward_failure(
             &loop, 43u, image, routes, channels,
             registry.app_count, packet) ||
@@ -532,13 +643,10 @@ int main(int argc, char **argv) {
         return 1;
     }
     hermas2_saga_result reconciled;
-    if (hermas2_saga_recover(
-            &recovered, image, image_size,
-            probe.journal, probe.journal_bytes,
-            probe.tokens, probe.token_bytes, 43u, 7u) !=
-            HERMAS2_SAGA_OK ||
-        (reconciled = hermas2_saga_reconcile(
-             &recovered, probe.saga, probe.saga_bytes)) !=
+    if ((reconciled = hermas2_saga_recover_files(
+             &recovered, image, image_size,
+             &files.journal, &files.compensation,
+             &files.saga, 43u, 7u)) !=
             HERMAS2_SAGA_UNSAFE_HISTORY ||
         recovered.state != HERMAS2_SAGA_BLOCKED ||
         recovered.compensation_outcome !=
@@ -550,10 +658,13 @@ int main(int argc, char **argv) {
             &loop, &registry, image, image_size) !=
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_journal(
-            &loop, &journal, 7u) != HERMAS2_LOOP_OK ||
+            &loop, &files.journal.writer, 7u) !=
+            HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
-            &loop, &compensation, lookup_token, &probe,
-            &saga_log) != HERMAS2_LOOP_OK ||
+            &loop, &files.compensation.writer,
+            hermas2_compensation_file_lookup,
+            &files.compensation, &files.saga.writer) !=
+            HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_resume_saga(
             &loop, &recovered) !=
             HERMAS2_LOOP_INVALID_ARGUMENT) {
@@ -564,6 +675,7 @@ int main(int argc, char **argv) {
         close(channels[index].peer);
     }
     hermas2_daemon_registry_close(&registry);
+    close_durable_files(&files);
     puts("live, restarted, and uncertain saga compensation passed");
     return 0;
 }
