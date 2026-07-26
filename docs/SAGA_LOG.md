@@ -35,3 +35,11 @@ The saga executor consumes this summary through `hermas2_saga_reconcile`.
 It resumes at `next_ordinal` only when there is no open delivery or terminal
 failure, advances request IDs above both forward and compensation history,
 and leaves completed logs complete across repeated restart.
+
+## Linux storage
+
+`hermas2_saga_log_file_open` accepts only a non-symlink regular file owned by
+the current user, uses mode `0600`, and takes an exclusive nonblocking writer
+lock. Startup memory-maps and validates the complete history before
+initializing the next sequence. Every append is fully written and followed by
+`fdatasync`; reopen and explicit scans observe only validated records.

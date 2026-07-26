@@ -171,6 +171,9 @@ from being replayed after restart.
 Recovery reconciliation now applies that log to the reverse executor:
 confirmed compensation successes resume at the predecessor, finished plans
 stay terminal, and any open compensation delivery becomes blocked `Unknown`.
+Linux storage now gives that attempt history an exclusively locked,
+owner-only, append-and-`fdatasync` implementation with complete startup
+validation.
 
 ## Build and Inspect
 

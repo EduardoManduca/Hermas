@@ -57,6 +57,7 @@ if(UNIX)
     target_sources(hermas2_journal PRIVATE src/journal_linux.c)
     target_sources(hermas2_compensation PRIVATE
                    src/compensation_linux.c)
+    target_sources(hermas2_saga_log PRIVATE src/saga_log_linux.c)
     add_executable(hermas2_history tools/hermas2_history.c)
     target_link_libraries(hermas2_history PRIVATE hermas2_journal)
     target_compile_options(hermas2_history PRIVATE
@@ -223,6 +224,20 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME hermas2_journal_linux_tests
                  COMMAND hermas2_journal_linux_tests)
+        add_executable(hermas2_saga_log_linux_tests
+                       tests/test_saga_log_linux.c)
+        target_link_libraries(hermas2_saga_log_linux_tests
+                              PRIVATE hermas2_saga_log)
+        target_compile_options(hermas2_saga_log_linux_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS2_SANITIZE)
+            target_compile_options(hermas2_saga_log_linux_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2_saga_log_linux_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+        add_test(NAME hermas2_saga_log_linux_tests
+                 COMMAND hermas2_saga_log_linux_tests)
         add_executable(hermas2_edge_tests tests/test_edge_linux.c)
         target_link_libraries(hermas2_edge_tests PRIVATE hermas2_edge)
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
