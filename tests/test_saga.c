@@ -298,6 +298,103 @@ static void test_refusal_paths(fixture *value) {
             "compensation app failure did not stop the saga");
 }
 
+static size_t append_saga_log(
+    uint8_t *bytes,
+    size_t size,
+    const fixture *value,
+    hermas2_saga_log_kind kind,
+    uint16_t outcome,
+    uint16_t ordinal) {
+    hermas2_saga_log_record record = {
+        .kind = kind,
+        .outcome = outcome,
+        .sequence = size / HERMAS2_SAGA_LOG_RECORD_SIZE + 1u,
+        .execution_id = 41u,
+        .workflow_id = 7u,
+        .ordinal = ordinal,
+        .image_fingerprint = value->fingerprint
+    };
+    if (kind >= HERMAS2_SAGA_LOG_DELIVERY_PREPARED &&
+        kind <= HERMAS2_SAGA_LOG_STEP_UNKNOWN) {
+        const hermas2_saga_step *step =
+            &value->steps[ordinal - 1u];
+        record.request_id = 10u + ordinal;
+        record.forward_node = step->forward_node;
+        record.app_id = step->compensation_app_id;
+        record.action_id = step->compensation_action_id;
+    }
+    require(hermas2_saga_log_encode(
+                &record, bytes + size,
+                HERMAS2_SAGA_LOG_RECORD_SIZE) ==
+                HERMAS2_SAGA_LOG_OK,
+            "could not encode reconciliation log");
+    return size + HERMAS2_SAGA_LOG_RECORD_SIZE;
+}
+
+static void test_durable_reconciliation(fixture *value) {
+    uint8_t log[8u * HERMAS2_SAGA_LOG_RECORD_SIZE];
+    size_t size = 0u;
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_STARTED,
+        HERMAS2_OUTCOME_APP_ERROR, 2u);
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_DELIVERY_PREPARED,
+        HERMAS2_OUTCOME_NONE, 2u);
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_DELIVERY_SENT,
+        HERMAS2_OUTCOME_NONE, 2u);
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_STEP_SUCCEEDED,
+        HERMAS2_OUTCOME_SUCCESS, 2u);
+
+    hermas2_saga_execution execution;
+    require(hermas2_saga_recover(
+                &execution, value->image, value->image_size,
+                value->journal, value->journal_size,
+                value->tokens, value->token_size, 41u, 7u) ==
+                HERMAS2_SAGA_OK &&
+                hermas2_saga_reconcile(&execution, log, size) ==
+                    HERMAS2_SAGA_OK &&
+                execution.remaining == 1u &&
+                execution.state == HERMAS2_SAGA_READY,
+            "durable reverse success was not skipped");
+
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_DELIVERY_PREPARED,
+        HERMAS2_OUTCOME_NONE, 1u);
+    require(hermas2_saga_recover(
+                &execution, value->image, value->image_size,
+                value->journal, value->journal_size,
+                value->tokens, value->token_size, 41u, 7u) ==
+                HERMAS2_SAGA_OK &&
+                hermas2_saga_reconcile(&execution, log, size) ==
+                    HERMAS2_SAGA_UNSAFE_HISTORY &&
+                execution.state == HERMAS2_SAGA_BLOCKED &&
+                execution.compensation_outcome ==
+                    HERMAS2_OUTCOME_UNKNOWN,
+            "open compensation delivery was replayable");
+
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_DELIVERY_SENT,
+        HERMAS2_OUTCOME_NONE, 1u);
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_STEP_SUCCEEDED,
+        HERMAS2_OUTCOME_SUCCESS, 1u);
+    size = append_saga_log(
+        log, size, value, HERMAS2_SAGA_LOG_FINISHED,
+        HERMAS2_OUTCOME_SUCCESS, 0u);
+    require(hermas2_saga_recover(
+                &execution, value->image, value->image_size,
+                value->journal, value->journal_size,
+                value->tokens, value->token_size, 41u, 7u) ==
+                HERMAS2_SAGA_OK &&
+                hermas2_saga_reconcile(&execution, log, size) ==
+                    HERMAS2_SAGA_OK &&
+                execution.state == HERMAS2_SAGA_COMPLETE &&
+                execution.remaining == 0u,
+            "durably finished saga did not remain complete");
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         return 2;
@@ -326,6 +423,7 @@ int main(int argc, char **argv) {
     initialize_fixture(&value);
     test_reverse_recovery(&value);
     test_refusal_paths(&value);
+    test_durable_reconciliation(&value);
     free(image);
     if (failures != 0) {
         fprintf(stderr, "%d saga tests failed\n", failures);

@@ -4,6 +4,7 @@
 #include "hermas2/compensation.h"
 #include "hermas2/journal.h"
 #include "hermas2/protocol.h"
+#include "hermas2/saga_log.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -81,6 +82,11 @@ hermas2_saga_result hermas2_saga_prepare(
     uint8_t *token_buffer,
     size_t token_capacity,
     hermas2_frame *invocation);
+
+hermas2_saga_result hermas2_saga_reconcile(
+    hermas2_saga_execution *execution,
+    const uint8_t *saga_log,
+    size_t saga_log_bytes);
 
 hermas2_saga_result hermas2_saga_mark_sent(
     hermas2_saga_execution *execution);

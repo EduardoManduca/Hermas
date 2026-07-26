@@ -30,3 +30,8 @@ compatibility, global sequence continuity, and terminal agreement. Its restart
 summary distinguishes resumable state after a durable success from open
 prepared/sent deliveries. An open delivery is uncertainty and must never be
 replayed.
+
+The saga executor consumes this summary through `hermas2_saga_reconcile`.
+It resumes at `next_ordinal` only when there is no open delivery or terminal
+failure, advances request IDs above both forward and compensation history,
+and leaves completed logs complete across repeated restart.

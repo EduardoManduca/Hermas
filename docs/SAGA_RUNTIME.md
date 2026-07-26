@@ -44,6 +44,12 @@ using the compensation success/error types embedded in the image. It never
 retries a compensation or proceeds past an uncertain or failed compensation.
 
 This layer reconstructs forward facts and executes a bounded reverse plan.
-Durable recording and restart reconciliation of the compensation attempts
-themselves is the next boundary; callers must not treat this in-memory state
-as durable progress.
+`hermas2_saga_reconcile` additionally applies a validated saga attempt log.
+Durably successful reverse steps reduce the remaining ordinal and are never
+replayed. A finished log remains complete or blocked according to its terminal
+outcome. Any open prepared or sent compensation is converted to blocked
+`Unknown`; recovery never guesses whether the app observed it.
+
+The executor and journal remain separate primitives: orchestration code owns
+the write-ahead calls around socket delivery, while reconciliation owns the
+restart decision.

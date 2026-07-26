@@ -168,6 +168,10 @@ allocation-free scanner enforces descending ordinals and delivery transitions,
 classifies prepared/sent crashes, and prevents a durable compensation success
 from being replayed after restart.
 
+Recovery reconciliation now applies that log to the reverse executor:
+confirmed compensation successes resume at the predecessor, finished plans
+stay terminal, and any open compensation delivery becomes blocked `Unknown`.
+
 ## Build and Inspect
 
 From this directory:

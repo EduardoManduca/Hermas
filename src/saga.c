@@ -313,6 +313,114 @@ hermas2_saga_result hermas2_saga_prepare(
     return HERMAS2_SAGA_OK;
 }
 
+hermas2_saga_result hermas2_saga_reconcile(
+    hermas2_saga_execution *execution,
+    const uint8_t *saga_log,
+    size_t saga_log_bytes) {
+    if (execution == NULL ||
+        (saga_log == NULL && saga_log_bytes != 0u)) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    if (execution->state != HERMAS2_SAGA_READY &&
+        execution->state != HERMAS2_SAGA_COMPLETE) {
+        return HERMAS2_SAGA_INVALID_STATE;
+    }
+    hermas2_saga_log_summary summary;
+    if (hermas2_saga_log_scan(
+            saga_log, saga_log_bytes, &summary) !=
+        HERMAS2_SAGA_LOG_OK) {
+        return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+    }
+    bool started = false;
+    bool finished = false;
+    uint16_t finished_outcome = HERMAS2_OUTCOME_NONE;
+    uint16_t initial_ordinal = 0u;
+    uint64_t largest_request = execution->next_request_id - 1u;
+    size_t count =
+        saga_log_bytes / HERMAS2_SAGA_LOG_RECORD_SIZE;
+    for (size_t index = 0u; index < count; ++index) {
+        hermas2_saga_log_record record;
+        if (hermas2_saga_log_decode(
+                saga_log + index * HERMAS2_SAGA_LOG_RECORD_SIZE,
+                HERMAS2_SAGA_LOG_RECORD_SIZE, &record) !=
+            HERMAS2_SAGA_LOG_OK) {
+            return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+        }
+        if (record.execution_id != execution->execution_id) {
+            continue;
+        }
+        if (record.workflow_id != execution->workflow_id ||
+            record.image_fingerprint != execution->image_fingerprint) {
+            return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+        }
+        if (record.kind == HERMAS2_SAGA_LOG_STARTED) {
+            if (started || record.outcome != execution->original_outcome) {
+                return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+            }
+            started = true;
+            initial_ordinal = record.ordinal;
+        } else if (!started || finished) {
+            return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+        }
+        if (record.request_id > largest_request) {
+            largest_request = record.request_id;
+        }
+        if (record.kind == HERMAS2_SAGA_LOG_FINISHED) {
+            finished = true;
+            finished_outcome = record.outcome;
+        }
+    }
+    if (!started) {
+        return HERMAS2_SAGA_OK;
+    }
+    if (initial_ordinal != execution->remaining ||
+        largest_request == UINT64_MAX) {
+        return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+    }
+    execution->next_request_id = largest_request + 1u;
+    if (finished) {
+        execution->remaining =
+            finished_outcome == HERMAS2_OUTCOME_SUCCESS
+                ? 0u
+                : execution->remaining;
+        execution->compensation_outcome = finished_outcome;
+        execution->state =
+            finished_outcome == HERMAS2_OUTCOME_SUCCESS
+                ? HERMAS2_SAGA_COMPLETE
+                : HERMAS2_SAGA_BLOCKED;
+        return HERMAS2_SAGA_OK;
+    }
+    const hermas2_saga_log_active *active = NULL;
+    for (uint8_t index = 0u; index < summary.active_count; ++index) {
+        if (summary.active[index].execution_id ==
+            execution->execution_id) {
+            active = &summary.active[index];
+            break;
+        }
+    }
+    if (active == NULL ||
+        active->next_ordinal > execution->remaining) {
+        return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+    }
+    execution->remaining = (uint8_t)active->next_ordinal;
+    if (active->has_open_delivery != 0u) {
+        execution->compensation_outcome =
+            HERMAS2_OUTCOME_UNKNOWN;
+        execution->state = HERMAS2_SAGA_BLOCKED;
+        return HERMAS2_SAGA_UNSAFE_HISTORY;
+    }
+    if (active->terminal_outcome != HERMAS2_OUTCOME_NONE) {
+        execution->compensation_outcome =
+            active->terminal_outcome;
+        execution->state = HERMAS2_SAGA_BLOCKED;
+        return HERMAS2_SAGA_OK;
+    }
+    execution->state = execution->remaining == 0u
+                           ? HERMAS2_SAGA_COMPLETE
+                           : HERMAS2_SAGA_READY;
+    return HERMAS2_SAGA_OK;
+}
+
 hermas2_saga_result hermas2_saga_mark_sent(
     hermas2_saga_execution *execution) {
     if (execution == NULL ||

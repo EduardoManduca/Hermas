@@ -18,12 +18,13 @@ add_library(hermas2_journal STATIC src/journal.c)
 target_include_directories(hermas2_journal PUBLIC include)
 add_library(hermas2_compensation STATIC src/compensation.c)
 target_include_directories(hermas2_compensation PUBLIC include)
+add_library(hermas2_saga_log STATIC src/saga_log.c)
+target_include_directories(hermas2_saga_log PUBLIC include)
 add_library(hermas2_saga STATIC src/saga.c)
 target_include_directories(hermas2_saga PUBLIC include)
 target_link_libraries(hermas2_saga PUBLIC
-    hermas2_image hermas2_protocol hermas2_journal hermas2_compensation)
-add_library(hermas2_saga_log STATIC src/saga_log.c)
-target_include_directories(hermas2_saga_log PUBLIC include)
+    hermas2_image hermas2_protocol hermas2_journal hermas2_compensation
+    hermas2_saga_log)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(hermas2_image PRIVATE -Wall -Wextra -Wpedantic -Werror)
