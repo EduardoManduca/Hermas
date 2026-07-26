@@ -1,5 +1,4 @@
 pub mod catalog;
-pub mod grade_pipeline;
 pub mod graph;
 pub mod hscript;
 pub mod image;
@@ -8,10 +7,6 @@ pub mod schema;
 pub use catalog::{
     ActionDeclaration, ActionDef, ActionId, ActionKind, ActionKindDeclaration, AppDef, AppId,
     Catalog, CatalogError, NominalType, Representation, TypeId,
-};
-pub use grade_pipeline::{
-    GradeListContract, GradePipelineError, MeanCalculatorContract, PrinterContract,
-    build_grade_pipeline, declare_grade_list, declare_mean_calculator, declare_printer,
 };
 pub use graph::{
     EdgeSource, EdgeTarget, GraphBuilder, GraphError, GraphErrorCode, NodeId, ResourceSummary,

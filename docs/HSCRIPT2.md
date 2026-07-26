@@ -315,4 +315,6 @@ validates and reports every workflow.
 The Grade Pipeline proof source is
 `apps/grade-pipeline/grade-pipeline.hscript2`. Its integration path parses the
 three HSchema2 files, compiles this HScript2 source, verifies the resulting
-graph, and then exposes that same graph to every inspection command.
+graph, and then exposes that same graph to every inspection command. It has
+no built-in compiler or CLI path; it is processed as an ordinary external
+workflow.

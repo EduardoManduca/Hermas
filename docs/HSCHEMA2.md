@@ -134,5 +134,5 @@ contract.hschema2:7:18: schema/unknown-type: unknown type `Missing`
 ```
 
 The three executable proof contracts live in
-`apps/grade-pipeline/*.hschema2`. The directly constructed Grade Pipeline
-loads these files through the same parser and catalog path used by the CLI.
+`apps/grade-pipeline/*.hschema2`. They are ordinary external inputs loaded
+through the same parser and catalog path as every third-party contract.

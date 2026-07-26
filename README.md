@@ -36,7 +36,7 @@ written decision and an executable test.
 Milestone 1 has a working sequential Rust graph kernel. It currently provides:
 
 - Independent Grade List, Mean Calculator, and Printer Action contracts.
-- A directly constructed, verified Grade Pipeline graph.
+- An externally described, verified Grade Pipeline example graph.
 - Exact nominal edges and explicit representation-compatible presentations.
 - Separate success, known app-error, `NotSent`, and delivery-`Unknown` exits.
 - Graph bounds, acyclicity, reachability, and port-cardinality verification.
@@ -196,10 +196,6 @@ From this directory:
 
 ```text
 cargo test --workspace
-cargo run -p herma2 -- check grade-pipeline
-cargo run -p herma2 -- explain grade-pipeline
-cargo run -p herma2 -- graph grade-pipeline
-cargo run -p herma2 -- resources grade-pipeline
 cargo run -p herma2 -- schema check apps/grade-pipeline/grade-list.hschema2 apps/grade-pipeline/mean-calculator.hschema2 apps/grade-pipeline/printer.hschema2
 cargo run -p herma2 -- workflow check apps/grade-pipeline/grade-pipeline.hscript2 apps/grade-pipeline/grade-list.hschema2 apps/grade-pipeline/mean-calculator.hschema2 apps/grade-pipeline/printer.hschema2
 cargo run -p herma2 -- workflow image apps/grade-pipeline/grade-pipeline.hscript2 grade-pipeline.h2gi apps/grade-pipeline/grade-list.hschema2 apps/grade-pipeline/mean-calculator.hschema2 apps/grade-pipeline/printer.hschema2

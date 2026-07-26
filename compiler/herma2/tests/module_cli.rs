@@ -80,3 +80,15 @@ fn cli_emits_one_selected_graph_image() {
     assert_eq!(decoded.workflow_name, "operations::calculate");
     fs::remove_file(output_path).expect("temporary selected image is removed");
 }
+
+#[test]
+fn cli_has_no_built_in_workflows() {
+    let result = Command::new(env!("CARGO_BIN_EXE_herma2"))
+        .args(["check", "grade-pipeline"])
+        .output()
+        .expect("unsupported built-in workflow command runs");
+    assert!(!result.status.success());
+    let error = String::from_utf8(result.stderr).unwrap();
+    assert!(error.contains("herma2 schema check"));
+    assert!(!error.contains("grade-pipeline"));
+}

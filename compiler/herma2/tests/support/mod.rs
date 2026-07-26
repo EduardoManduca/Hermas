@@ -1,17 +1,19 @@
+#![allow(dead_code)]
+
 use std::error::Error;
 use std::fmt;
 
-use crate::catalog::{ActionId, Catalog, CatalogError, TypeId};
-use crate::graph::{GraphError, VerifiedGraph};
-use crate::hscript::{HScriptDiagnostic, compile_hscript};
-use crate::schema::{SchemaDiagnostic, compile_schema};
+use herma2::{
+    ActionId, Catalog, CatalogError, GraphError, HScriptDiagnostic, SchemaContract,
+    SchemaDiagnostic, TypeId, VerifiedGraph, compile_hscript, compile_schema,
+};
 
-const GRADE_LIST_SCHEMA: &str = include_str!("../../../apps/grade-pipeline/grade-list.hschema2");
+const GRADE_LIST_SCHEMA: &str = include_str!("../../../../apps/grade-pipeline/grade-list.hschema2");
 const MEAN_CALCULATOR_SCHEMA: &str =
-    include_str!("../../../apps/grade-pipeline/mean-calculator.hschema2");
-const PRINTER_SCHEMA: &str = include_str!("../../../apps/grade-pipeline/printer.hschema2");
+    include_str!("../../../../apps/grade-pipeline/mean-calculator.hschema2");
+const PRINTER_SCHEMA: &str = include_str!("../../../../apps/grade-pipeline/printer.hschema2");
 const GRADE_PIPELINE_SCRIPT: &str =
-    include_str!("../../../apps/grade-pipeline/grade-pipeline.hscript2");
+    include_str!("../../../../apps/grade-pipeline/grade-pipeline.hscript2");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GradeListContract {
@@ -88,10 +90,7 @@ fn schema_catalog_error(error: SchemaDiagnostic) -> CatalogError {
     CatalogError::InvalidRepresentation(error.to_string())
 }
 
-fn required_type(
-    contract: &crate::schema::SchemaContract,
-    name: &str,
-) -> Result<TypeId, CatalogError> {
+fn required_type(contract: &SchemaContract, name: &str) -> Result<TypeId, CatalogError> {
     contract.type_id(name).ok_or_else(|| {
         CatalogError::InvalidRepresentation(format!(
             "embedded schema is missing required type `{name}`"
@@ -99,10 +98,7 @@ fn required_type(
     })
 }
 
-fn required_action(
-    contract: &crate::schema::SchemaContract,
-    name: &str,
-) -> Result<ActionId, CatalogError> {
+fn required_action(contract: &SchemaContract, name: &str) -> Result<ActionId, CatalogError> {
     contract.action_id(name).ok_or_else(|| {
         CatalogError::InvalidRepresentation(format!(
             "embedded schema is missing required Action `{name}`"

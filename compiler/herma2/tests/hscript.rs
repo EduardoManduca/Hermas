@@ -1,8 +1,10 @@
+mod support;
+
 use herma2::{
-    Catalog, build_grade_pipeline, compile_hscript, compile_hscript_module,
-    compile_hscript_workflow, declare_grade_list, declare_mean_calculator, declare_printer,
-    decode_graph_image, encode_graph_image,
+    Catalog, compile_hscript, compile_hscript_module, compile_hscript_workflow, decode_graph_image,
+    encode_graph_image,
 };
+use support::{build_grade_pipeline, declare_grade_list, declare_mean_calculator, declare_printer};
 
 fn grade_catalog() -> Catalog {
     let mut catalog = Catalog::new();

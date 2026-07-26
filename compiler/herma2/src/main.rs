@@ -3,8 +3,7 @@ use std::fs;
 use std::process::ExitCode;
 
 use herma2::{
-    Catalog, build_grade_pipeline, compile_hscript_module, compile_schema, decode_graph_image,
-    encode_graph_image,
+    Catalog, compile_hscript_module, compile_schema, decode_graph_image, encode_graph_image,
 };
 
 fn main() -> ExitCode {
@@ -18,28 +17,8 @@ fn main() -> ExitCode {
     if arguments.first().map(String::as_str) == Some("image") {
         return image_command(&arguments[1..]);
     }
-    if arguments.len() != 2 || arguments[1] != "grade-pipeline" {
-        usage();
-        return ExitCode::from(2);
-    }
-    let (catalog, graph) = match build_grade_pipeline() {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("herma2: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    match arguments[0].as_str() {
-        "check" => println!("valid: {}", graph.name()),
-        "explain" => print!("{}", graph.explain(&catalog)),
-        "graph" => print!("{}", graph.to_dot(&catalog)),
-        "resources" => println!("{}", graph.resources(&catalog)),
-        _ => {
-            usage();
-            return ExitCode::from(2);
-        }
-    }
-    ExitCode::SUCCESS
+    usage();
+    ExitCode::from(2)
 }
 
 fn schema_command(arguments: &[String]) -> ExitCode {
@@ -219,6 +198,6 @@ fn read_source(path: &str, kind: &str) -> Result<String, ExitCode> {
 
 fn usage() {
     eprintln!(
-        "usage:\n  herma2 <check|explain|graph|resources> grade-pipeline\n  herma2 schema check <file.hschema2>...\n  herma2 workflow check <module.hscript2> <file.hschema2>...\n  herma2 workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript2> <file.hschema2>...\n  herma2 workflow image [--workflow NAME] <module.hscript2> <output.h2gi> <file.hschema2>...\n  herma2 image check <file.h2gi>"
+        "usage:\n  herma2 schema check <file.hschema2>...\n  herma2 workflow check <module.hscript2> <file.hschema2>...\n  herma2 workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript2> <file.hschema2>...\n  herma2 workflow image [--workflow NAME] <module.hscript2> <output.h2gi> <file.hschema2>...\n  herma2 image check <file.h2gi>"
     );
 }

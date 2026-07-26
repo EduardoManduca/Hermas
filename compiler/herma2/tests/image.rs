@@ -1,8 +1,8 @@
-use herma2::{
-    ImageErrorCode, build_grade_pipeline, decode_graph_image, encode_graph_image,
-    validate_graph_value,
-};
+mod support;
+
+use herma2::{ImageErrorCode, decode_graph_image, encode_graph_image, validate_graph_value};
 use sha2::{Digest, Sha256};
+use support::build_grade_pipeline;
 
 fn encoded_pipeline() -> Vec<u8> {
     let (catalog, graph) = build_grade_pipeline().expect("pipeline");

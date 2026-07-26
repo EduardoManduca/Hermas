@@ -1,7 +1,7 @@
-use herma2::{
-    Catalog, compile_hscript, declare_grade_list, declare_mean_calculator, decode_graph_image,
-    encode_graph_image,
-};
+mod support;
+
+use herma2::{Catalog, compile_hscript, decode_graph_image, encode_graph_image};
+use support::{declare_grade_list, declare_mean_calculator};
 
 fn catalog() -> Catalog {
     let mut catalog = Catalog::new();

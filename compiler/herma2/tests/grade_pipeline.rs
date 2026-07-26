@@ -1,8 +1,10 @@
+mod support;
+
 use herma2::{
     ActionId, ActionKindDeclaration, Catalog, EdgeSource, EdgeTarget, GraphBuilder, GraphErrorCode,
-    Representation, TerminalKind, build_grade_pipeline, declare_grade_list,
-    declare_mean_calculator, declare_printer,
+    Representation, TerminalKind,
 };
+use support::{build_grade_pipeline, declare_grade_list, declare_mean_calculator, declare_printer};
 
 #[test]
 fn grade_pipeline_is_verified_and_inspectable() {
