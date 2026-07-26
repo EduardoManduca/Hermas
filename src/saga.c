@@ -97,9 +97,14 @@ static hermas2_saga_result validate_token(
         .image_fingerprint = execution->image_fingerprint
     };
     int found = 0;
-    hermas2_compensation_result found_result = hermas2_compensation_find(
-        execution->tokens, execution->token_bytes, key, record,
-        buffer, capacity, &found);
+    hermas2_compensation_result found_result =
+        execution->token_lookup != NULL
+            ? execution->token_lookup(
+                  execution->token_lookup_context, key, record,
+                  buffer, capacity, &found)
+            : hermas2_compensation_find(
+                  execution->tokens, execution->token_bytes, key,
+                  record, buffer, capacity, &found);
     if (found_result == HERMAS2_COMPENSATION_DUPLICATE_TOKEN) {
         return HERMAS2_SAGA_DUPLICATE_TOKEN;
     }
@@ -268,6 +273,68 @@ hermas2_saga_result hermas2_saga_recover(
     execution->state = execution->remaining == 0u
                            ? HERMAS2_SAGA_COMPLETE
                            : HERMAS2_SAGA_READY;
+    return HERMAS2_SAGA_OK;
+}
+
+hermas2_saga_result hermas2_saga_begin_live(
+    hermas2_saga_execution *execution,
+    const uint8_t *image,
+    size_t image_size,
+    uint64_t execution_id,
+    uint32_t workflow_id,
+    uint16_t original_outcome,
+    const uint64_t *forward_request_ids,
+    uint8_t completed_steps,
+    uint64_t next_request_id,
+    hermas2_compensation_lookup token_lookup,
+    void *token_lookup_context) {
+    if (execution == NULL || image == NULL || execution_id == 0u ||
+        workflow_id == 0u || forward_request_ids == NULL ||
+        completed_steps == 0u ||
+        completed_steps > HERMAS2_SAGA_MAX_STEPS ||
+        next_request_id == 0u || next_request_id == UINT64_MAX ||
+        token_lookup == NULL ||
+        (original_outcome != HERMAS2_OUTCOME_APP_ERROR &&
+         original_outcome != HERMAS2_OUTCOME_NOT_SENT)) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    if (hermas2_image_validate(image, image_size, NULL) !=
+        HERMAS2_IMAGE_OK) {
+        return HERMAS2_SAGA_INVALID_IMAGE;
+    }
+    memset(execution, 0, sizeof(*execution));
+    execution->image = image;
+    execution->image_size = image_size;
+    execution->execution_id = execution_id;
+    execution->workflow_id = workflow_id;
+    execution->image_fingerprint =
+        hermas2_journal_image_fingerprint(image, image_size);
+    execution->original_outcome = original_outcome;
+    execution->next_request_id = next_request_id;
+    execution->token_lookup = token_lookup;
+    execution->token_lookup_context = token_lookup_context;
+    if (!load_steps(execution) ||
+        completed_steps > execution->step_count) {
+        return HERMAS2_SAGA_NOT_SAGA;
+    }
+    execution->remaining = completed_steps;
+    for (uint8_t index = 0u; index < completed_steps; ++index) {
+        if (forward_request_ids[index] == 0u ||
+            forward_request_ids[index] >= next_request_id) {
+            return HERMAS2_SAGA_INCONSISTENT_HISTORY;
+        }
+        execution->steps[index].forward_request_id =
+            forward_request_ids[index];
+        uint8_t scratch[HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
+        hermas2_compensation_record token;
+        hermas2_saga_result valid = validate_token(
+            execution, &execution->steps[index], scratch,
+            sizeof(scratch), &token);
+        if (valid != HERMAS2_SAGA_OK) {
+            return valid;
+        }
+    }
+    execution->state = HERMAS2_SAGA_READY;
     return HERMAS2_SAGA_OK;
 }
 

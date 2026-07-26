@@ -130,6 +130,17 @@ hermas2_compensation_result hermas2_compensation_file_find(
     return result;
 }
 
+hermas2_compensation_result hermas2_compensation_file_lookup(
+    void *context,
+    hermas2_compensation_key key,
+    hermas2_compensation_record *record,
+    uint8_t *token,
+    size_t token_capacity,
+    int *found) {
+    return hermas2_compensation_file_find(
+        context, key, record, token, token_capacity, found);
+}
+
 void hermas2_compensation_file_close(
     hermas2_compensation_file *file) {
     if (file == NULL) {

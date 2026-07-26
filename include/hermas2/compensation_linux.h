@@ -21,6 +21,14 @@ hermas2_compensation_result hermas2_compensation_file_find(
     size_t token_capacity,
     int *found);
 
+hermas2_compensation_result hermas2_compensation_file_lookup(
+    void *context,
+    hermas2_compensation_key key,
+    hermas2_compensation_record *record,
+    uint8_t *token,
+    size_t token_capacity,
+    int *found);
+
 void hermas2_compensation_file_close(
     hermas2_compensation_file *file);
 

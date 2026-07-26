@@ -78,3 +78,16 @@ token append failure is fatal to loop progress. Ordinary non-saga images do
 not require or write compensation state. The loop remains transport owner;
 the graph image remains compensation-route authority, and the token log
 remains opaque-value authority.
+
+## Live plan construction
+
+`hermas2_saga_begin_live` constructs the same bounded reverse executor from
+the daemon's already-durable forward enrollment request IDs. Token access is a
+small lookup capability rather than a file or byte-buffer assumption. The
+in-memory log adapter and Linux compensation file both implement that
+capability.
+
+Live construction revalidates the image, dense enrollment prefix, monotonic
+request boundary, every exact token key, route metadata, and canonical input
+value. It therefore does not trust transient daemon bookkeeping as proof of
+success; that bookkeeping only identifies the journal/token facts to verify.

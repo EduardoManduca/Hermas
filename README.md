@@ -185,6 +185,11 @@ durable token log before its `ActionSucceeded` journal fact. A focused real
 `SOCK_SEQPACKET` test proves that ordering and ensures ordinary workflow
 scheduling cannot make the successor visible first.
 
+Live reverse-plan construction is storage-agnostic: it consumes a narrow
+exact-token lookup capability implemented by both memory logs and the Linux
+file store. It revalidates all durable enrollments and image routes before
+exposing the first compensation.
+
 ## Build and Inspect
 
 From this directory:

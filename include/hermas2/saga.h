@@ -54,6 +54,8 @@ typedef struct hermas2_saga_execution {
     size_t image_size;
     const uint8_t *tokens;
     size_t token_bytes;
+    hermas2_compensation_lookup token_lookup;
+    void *token_lookup_context;
     uint64_t execution_id;
     uint32_t workflow_id;
     uint64_t image_fingerprint;
@@ -83,6 +85,19 @@ hermas2_saga_result hermas2_saga_recover(
     size_t token_bytes,
     uint64_t execution_id,
     uint32_t workflow_id);
+
+hermas2_saga_result hermas2_saga_begin_live(
+    hermas2_saga_execution *execution,
+    const uint8_t *image,
+    size_t image_size,
+    uint64_t execution_id,
+    uint32_t workflow_id,
+    uint16_t original_outcome,
+    const uint64_t *forward_request_ids,
+    uint8_t completed_steps,
+    uint64_t next_request_id,
+    hermas2_compensation_lookup token_lookup,
+    void *token_lookup_context);
 
 hermas2_saga_result hermas2_saga_prepare(
     hermas2_saga_execution *execution,

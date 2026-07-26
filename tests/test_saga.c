@@ -37,6 +37,19 @@ typedef struct fixture {
     size_t token_size;
 } fixture;
 
+static hermas2_compensation_result fixture_lookup(
+    void *context,
+    hermas2_compensation_key key,
+    hermas2_compensation_record *record,
+    uint8_t *token,
+    size_t token_capacity,
+    int *found) {
+    fixture *value = context;
+    return hermas2_compensation_find(
+        value->tokens, value->token_size, key, record, token,
+        token_capacity, found);
+}
+
 static void append_journal(
     fixture *value,
     hermas2_journal_kind kind,
@@ -467,6 +480,29 @@ static void test_write_ahead_driver(fixture *value) {
             "driver log is not a complete durable reverse history");
 }
 
+static void test_live_plan(fixture *value) {
+    uint64_t requests[2] = {1u, 2u};
+    hermas2_saga_execution execution;
+    require(hermas2_saga_begin_live(
+                &execution, value->image, value->image_size, 41u, 7u,
+                HERMAS2_OUTCOME_APP_ERROR, requests, 2u, 4u,
+                fixture_lookup, value) == HERMAS2_SAGA_OK &&
+                execution.state == HERMAS2_SAGA_READY &&
+                execution.remaining == 2u &&
+                execution.next_request_id == 4u,
+            "durable live enrollments did not form a saga plan");
+    uint8_t token[8];
+    hermas2_frame invocation;
+    require(hermas2_saga_prepare(
+                &execution, token, sizeof(token), &invocation) ==
+                HERMAS2_SAGA_OK &&
+                invocation.request_id == 4u &&
+                invocation.app_id ==
+                    value->steps[1].compensation_app_id &&
+                token[0] == 12u,
+            "live plan did not select the latest enrollment");
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         return 2;
@@ -497,6 +533,7 @@ int main(int argc, char **argv) {
     test_refusal_paths(&value);
     test_durable_reconciliation(&value);
     test_write_ahead_driver(&value);
+    test_live_plan(&value);
     free(image);
     if (failures != 0) {
         fprintf(stderr, "%d saga tests failed\n", failures);

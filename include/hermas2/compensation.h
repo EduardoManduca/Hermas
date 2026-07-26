@@ -44,6 +44,14 @@ typedef struct hermas2_compensation_summary {
     uint64_t next_sequence;
 } hermas2_compensation_summary;
 
+typedef hermas2_compensation_result (*hermas2_compensation_lookup)(
+    void *context,
+    hermas2_compensation_key key,
+    hermas2_compensation_record *record,
+    uint8_t *token,
+    size_t token_capacity,
+    int *found);
+
 typedef hermas2_compensation_result (*hermas2_compensation_visitor)(
     void *context,
     const hermas2_compensation_record *record);
