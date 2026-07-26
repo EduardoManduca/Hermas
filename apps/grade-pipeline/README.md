@@ -8,10 +8,17 @@ end-to-end gate:
 - `hermas2_mean_calculator` owns the arithmetic and returns `80`.
 - `hermas2_printer` owns presentation and prints `Mean: 80`.
 
-The executables share [grade_app.c](grade_app.c) only to keep their small
-protocol bootstrap identical. Each target is compiled with one closed app
-identity and handler, connects outward through `libhermas2edge`, registers its
-exact graph-image contract fingerprint, serves exactly one Action, and exits.
+Each app owns a separate implementation file:
+
+- [grade_list_app.c](grade_list_app.c)
+- [mean_calculator_app.c](mean_calculator_app.c)
+- [printer_app.c](printer_app.c)
+
+They share only [app_common.c](app_common.c), a small example bootstrap that
+parses the fingerprint, connects through `libhermas2edge`, and serves one
+Action. App IDs, Action checks, nominal Type IDs, buffers, and business logic
+remain in their owning app source. This is the same boundary future apps are
+expected to use: reuse the stable edge ABI, not another app's handler.
 
 No calculation or printing is performed by HScript2 or the daemon. The
 workflow graph only routes the canonical values and nominal presentation

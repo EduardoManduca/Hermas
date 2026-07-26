@@ -90,11 +90,9 @@ if(UNIX)
         endif()
     endif()
 
-    function(add_hermas2_grade_app target app_id)
-        add_executable(${target} apps/grade-pipeline/grade_app.c)
+    function(add_hermas2_edge_app target)
+        add_executable(${target} ${ARGN})
         target_link_libraries(${target} PRIVATE hermas2_edge)
-        target_compile_definitions(${target} PRIVATE
-            HERMAS2_GRADE_APP=${app_id})
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
             target_compile_options(${target} PRIVATE
                 -Wall -Wextra -Wpedantic -Werror)
@@ -107,9 +105,18 @@ if(UNIX)
         endif()
     endfunction()
 
-    add_hermas2_grade_app(hermas2_grade_list 1)
-    add_hermas2_grade_app(hermas2_mean_calculator 2)
-    add_hermas2_grade_app(hermas2_printer 3)
+    add_hermas2_edge_app(
+        hermas2_grade_list
+        apps/grade-pipeline/grade_list_app.c
+        apps/grade-pipeline/app_common.c)
+    add_hermas2_edge_app(
+        hermas2_mean_calculator
+        apps/grade-pipeline/mean_calculator_app.c
+        apps/grade-pipeline/app_common.c)
+    add_hermas2_edge_app(
+        hermas2_printer
+        apps/grade-pipeline/printer_app.c
+        apps/grade-pipeline/app_common.c)
 endif()
 
 include(CTest)
