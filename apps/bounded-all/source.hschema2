@@ -1,0 +1,12 @@
+app source
+
+type Trigger = Unit
+type Item = Integer
+type SourceError = Unit
+
+action get {
+    input Trigger
+    success Item
+    error SourceError
+    kind irreversible
+}

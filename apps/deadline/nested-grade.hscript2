@@ -1,0 +1,12 @@
+workflow nested(input: grade-list::Empty) -> mean-calculator::Mean
+errors { grade-list::GradeError mean-calculator::MeanError }
+{
+    within 5s {
+        let grades = input |> grade-list/get()
+        within 1s {
+            return grades
+                |> as mean-calculator::MeanInput
+                |> mean-calculator/calculate()
+        }
+    }
+}

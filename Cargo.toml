@@ -1,0 +1,3 @@
+[workspace]
+members = ["compiler/herma2"]
+resolver = "3"

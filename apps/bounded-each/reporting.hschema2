@@ -1,0 +1,13 @@
+app reporting
+
+type Input = Integer
+type Report = Integer
+type Reports = List<Report, 4>
+type ReportError = Unit
+
+action create {
+    input Input
+    success Report
+    error ReportError
+    kind irreversible
+}

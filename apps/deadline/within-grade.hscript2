@@ -1,0 +1,7 @@
+workflow timed(input: mean-calculator::MeanInput) -> mean-calculator::Mean
+errors { mean-calculator::MeanError }
+{
+    within 5s {
+        return input |> mean-calculator/calculate()
+    }
+}

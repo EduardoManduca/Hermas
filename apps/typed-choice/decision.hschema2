@@ -1,0 +1,32 @@
+app decision
+
+type Trigger = Unit
+type Approved = Integer
+type Rejected = String<16>
+type Decision = variant {
+    approved: Approved
+    rejected: Rejected
+}
+type Done = Boolean
+type DecisionError = Unit
+
+action decide {
+    input Trigger
+    success Decision
+    error DecisionError
+    kind irreversible
+}
+
+action accept {
+    input Approved
+    success Done
+    error DecisionError
+    kind irreversible
+}
+
+action reject {
+    input Rejected
+    success Done
+    error DecisionError
+    kind irreversible
+}

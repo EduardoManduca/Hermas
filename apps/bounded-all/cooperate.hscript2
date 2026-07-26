@@ -1,0 +1,15 @@
+workflow cooperate(input: source::Trigger) -> sink::Done
+errors {
+    source::SourceError
+    alpha::AlphaError
+    beta::BetaError
+    sink::SinkError
+}
+{
+    let item = input |> source/get()
+    let results = all item {
+        left = item |> as alpha::Input |> alpha/run()
+        right = item |> as beta::Input |> beta/run()
+    }
+    return results.left |> as sink::Input |> sink/use()
+}

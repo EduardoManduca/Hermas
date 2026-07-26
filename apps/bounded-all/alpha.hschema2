@@ -1,0 +1,12 @@
+app alpha
+
+type Input = Integer
+type Output = Integer
+type AlphaError = Unit
+
+action run {
+    input Input
+    success Output
+    error AlphaError
+    kind irreversible
+}

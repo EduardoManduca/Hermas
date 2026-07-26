@@ -1,0 +1,13 @@
+app mean-calculator
+
+type Grade = Integer
+type MeanInput = List<Grade, 32>
+type Mean = Integer
+type MeanError = Unit
+
+action calculate {
+    input MeanInput
+    success Mean
+    error MeanError
+    kind irreversible
+}

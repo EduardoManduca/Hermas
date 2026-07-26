@@ -1,0 +1,13 @@
+app grade-list
+
+type Empty = Unit
+type Grade = Integer
+type GradeList = List<Grade, 32>
+type GradeError = Unit
+
+action get {
+    input Empty
+    success GradeList
+    error GradeError
+    kind irreversible
+}

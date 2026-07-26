@@ -1,0 +1,55 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "hermas2/journal_linux.h"
+
+#include <inttypes.h>
+#include <stdio.h>
+
+static const char *kind_name(hermas2_journal_kind kind) {
+    static const char *const names[] = {
+        "invalid", "execution-started", "delivery-prepared",
+        "delivery-sent", "action-succeeded", "action-failed",
+        "action-unknown", "execution-finished"
+    };
+    size_t index = (size_t)kind;
+    return index < sizeof(names) / sizeof(names[0])
+               ? names[index]
+               : "invalid";
+}
+
+static hermas2_journal_result print_record(
+    void *context,
+    const hermas2_journal_record *record) {
+    (void)context;
+    printf(
+        "%" PRIu64 "\t%" PRIu64 "\t%u\t%s\t%u\t%" PRIu64
+        "\t%u\t%u\t%u\t%016" PRIx64 "\n",
+        record->sequence, record->execution_id, record->workflow_id,
+        kind_name(record->kind), record->outcome, record->request_id,
+        record->node_id, record->app_id, record->action_id,
+        record->image_fingerprint);
+    return HERMAS2_JOURNAL_OK;
+}
+
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "usage: hermas2_history FILE.h2journal\n");
+        return 2;
+    }
+    puts("sequence\texecution\tworkflow\tkind\toutcome\trequest"
+         "\tnode\tapp\taction\timage");
+    hermas2_journal_summary summary;
+    hermas2_journal_result result = hermas2_journal_file_inspect(
+        argv[1], print_record, NULL, &summary);
+    if (result != HERMAS2_JOURNAL_OK) {
+        fprintf(stderr, "%s: %s\n", argv[1],
+                hermas2_journal_result_name(result));
+        return 1;
+    }
+    fprintf(stderr,
+            "records=%" PRIu64 " interrupted=%u next-execution=%" PRIu64
+            "\n",
+            summary.record_count, summary.interrupted_count,
+            summary.next_execution_id);
+    return 0;
+}

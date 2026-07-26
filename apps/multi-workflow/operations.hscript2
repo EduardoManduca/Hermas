@@ -1,0 +1,13 @@
+module operations
+
+workflow calculate(input: mean-calculator::MeanInput) -> mean-calculator::Mean
+errors { mean-calculator::MeanError }
+{
+    return input |> mean-calculator/calculate()
+}
+
+workflow print(input: printer::PrintInput) -> printer::Printed
+errors { printer::PrintError }
+{
+    return input |> printer/print()
+}

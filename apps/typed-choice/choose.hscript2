@@ -1,0 +1,17 @@
+workflow choose(input: decision::Trigger) -> decision::Done
+errors {
+    decision::DecisionError
+}
+{
+    let decision = input |> decision/decide()
+
+    match decision {
+        case approved value {
+            return value |> decision/accept()
+        }
+
+        case rejected reason {
+            return reason |> decision/reject()
+        }
+    }
+}

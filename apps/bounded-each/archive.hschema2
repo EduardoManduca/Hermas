@@ -1,0 +1,13 @@
+app archive
+
+type Report = Integer
+type Reports = List<Report, 4>
+type Done = Boolean
+type ArchiveError = Unit
+
+action store {
+    input Reports
+    success Done
+    error ArchiveError
+    kind irreversible
+}

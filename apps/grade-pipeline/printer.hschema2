@@ -1,0 +1,12 @@
+app printer
+
+type PrintInput = Integer
+type Printed = Boolean
+type PrintError = Unit
+
+action print {
+    input PrintInput
+    success Printed
+    error PrintError
+    kind irreversible
+}

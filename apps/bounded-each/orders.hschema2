@@ -1,0 +1,13 @@
+app orders
+
+type Trigger = Unit
+type Order = Integer
+type Orders = List<Order, 4>
+type OrdersError = Unit
+
+action list {
+    input Trigger
+    success Orders
+    error OrdersError
+    kind irreversible
+}

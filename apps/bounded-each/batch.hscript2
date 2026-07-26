@@ -1,0 +1,9 @@
+workflow batch(input: orders::Trigger) -> archive::Done
+errors { orders::OrdersError reporting::ReportError archive::ArchiveError }
+{
+    let orders = input |> orders/list()
+    let reports = each order in orders concurrency 3 {
+        order |> as reporting::Input |> reporting/create()
+    } collect as reporting::Reports
+    return reports |> as archive::Reports |> archive/store()
+}

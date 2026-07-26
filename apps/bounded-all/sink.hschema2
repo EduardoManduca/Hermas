@@ -1,0 +1,12 @@
+app sink
+
+type Input = Integer
+type Done = Boolean
+type SinkError = Unit
+
+action use {
+    input Input
+    success Done
+    error SinkError
+    kind irreversible
+}

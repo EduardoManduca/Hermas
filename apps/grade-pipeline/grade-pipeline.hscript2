@@ -1,0 +1,17 @@
+workflow grade_pipeline() -> printer::Printed
+errors {
+    grade-list::GradeError
+    mean-calculator::MeanError
+    printer::PrintError
+}
+{
+    let grades = grade-list/get()
+
+    let mean = grades
+        |> as mean-calculator::MeanInput
+        |> mean-calculator/calculate()
+
+    return mean
+        |> as printer::PrintInput
+        |> printer/print()
+}

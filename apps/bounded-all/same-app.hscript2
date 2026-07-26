@@ -1,0 +1,14 @@
+workflow serialize(input: source::Trigger) -> sink::Done
+errors {
+    source::SourceError
+    alpha::AlphaError
+    sink::SinkError
+}
+{
+    let item = input |> source/get()
+    let results = all item {
+        first = item |> as alpha::Input |> alpha/run()
+        second = item |> as alpha::Input |> alpha/run()
+    }
+    return results.first |> as sink::Input |> sink/use()
+}
