@@ -157,6 +157,12 @@ steps, and lower to dense per-node compensation records. Both the Rust and C
 decoders independently verify compensation app admission, token
 representations, ordering, uniqueness, and forward Success-edge types.
 
+The bounded saga recovery runtime validates complete execution/token logs,
+refuses `Unknown` and inconsistent history, and schedules only
+journal-confirmed successes in reverse ordinal order. Compensation invocations
+use caller-owned token storage, continue monotonic request IDs, validate typed
+results, and stop without retry on `NotSent`, `Unknown`, or app failure.
+
 ## Build and Inspect
 
 From this directory:

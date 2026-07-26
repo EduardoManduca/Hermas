@@ -27,10 +27,10 @@ fn compile_fixture() -> (Catalog, herma2::VerifiedGraph) {
 fn saga_lowers_to_ordered_compensation_records() {
     let (catalog, graph) = compile_fixture();
     let image = encode_graph_image(&graph, &catalog).unwrap();
-    assert_eq!(decode_graph_image(&image).unwrap().region_count, 4);
+    assert_eq!(decode_graph_image(&image).unwrap().region_count, 6);
 
     let regions = u32::from_le_bytes(image[72..76].try_into().unwrap()) as usize;
-    for (index, ordinal) in [1u16, 2].into_iter().enumerate() {
+    for (index, ordinal) in [1u16, 2, 3].into_iter().enumerate() {
         let offset = regions + index * 32;
         assert_eq!(image[offset], 3);
         assert_eq!(
