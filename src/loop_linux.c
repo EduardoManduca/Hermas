@@ -107,6 +107,7 @@ typedef struct saga_route {
     uint16_t compensation_action;
     uint16_t source_type;
     uint16_t destination_type;
+    uint16_t ordinal;
 } saga_route;
 
 static bool find_saga_route(
@@ -138,7 +139,10 @@ static bool find_saga_route(
                     ((uint16_t)loop->image[offset + 9u] << 8u),
                 .destination_type =
                     (uint16_t)loop->image[offset + 10u] |
-                    ((uint16_t)loop->image[offset + 11u] << 8u)
+                    ((uint16_t)loop->image[offset + 11u] << 8u),
+                .ordinal =
+                    (uint16_t)loop->image[offset + 12u] |
+                    ((uint16_t)loop->image[offset + 13u] << 8u)
             };
             return true;
         }
@@ -146,9 +150,73 @@ static bool find_saga_route(
     return false;
 }
 
+static hermas2_saga_state saga_state(
+    const hermas2_loop_slot *slot) {
+    return slot->saga.execution.state;
+}
+
+static bool slot_ready(const hermas2_loop_slot *slot) {
+    return slot->compensating
+               ? saga_state(slot) == HERMAS2_SAGA_READY
+               : slot->execution.state == HERMAS2_EXECUTION_READY;
+}
+
+static bool slot_prepared(const hermas2_loop_slot *slot) {
+    return slot->compensating
+               ? saga_state(slot) == HERMAS2_SAGA_PREPARED
+               : slot->execution.state == HERMAS2_EXECUTION_PREPARED;
+}
+
+static bool slot_sent(const hermas2_loop_slot *slot) {
+    return slot->compensating
+               ? saga_state(slot) == HERMAS2_SAGA_SENT
+               : slot->execution.state == HERMAS2_EXECUTION_SENT;
+}
+
+static void fail_compensation(
+    hermas2_loop_slot *slot,
+    uint16_t outcome) {
+    slot->compensating = false;
+    slot->execution.terminal_outcome =
+        outcome == HERMAS2_OUTCOME_NOT_SENT
+            ? HERMAS2_OUTCOME_NOT_SENT
+            : HERMAS2_OUTCOME_UNKNOWN;
+    slot->execution.value_length = 0u;
+    slot->execution.value_source_type = 0u;
+    slot->execution.value_destination_type = 0u;
+}
+
+static hermas2_loop_result begin_live_compensation(
+    hermas2_daemon_loop *loop,
+    hermas2_loop_slot *slot,
+    uint16_t outcome) {
+    if (slot->saga_success_count == 0u) {
+        return HERMAS2_LOOP_OK;
+    }
+    if (loop->compensation_lookup == NULL ||
+        loop->saga_log == NULL || slot->request_id == UINT64_MAX) {
+        return HERMAS2_LOOP_COMPENSATION_ERROR;
+    }
+    hermas2_saga_execution execution;
+    if (hermas2_saga_begin_live(
+            &execution, loop->image, loop->image_size,
+            slot->execution.execution_id, loop->workflow_id,
+            outcome, slot->saga_forward_requests,
+            slot->saga_success_count, slot->request_id + 1u,
+            loop->compensation_lookup,
+            loop->compensation_lookup_context) != HERMAS2_SAGA_OK ||
+        hermas2_saga_driver_begin(
+            &slot->saga, &execution, loop->saga_log, 0) !=
+            HERMAS2_SAGA_OK) {
+        return HERMAS2_LOOP_COMPENSATION_ERROR;
+    }
+    slot->compensating = true;
+    return HERMAS2_LOOP_OK;
+}
+
 static hermas2_loop_result append_compensation_token(
     hermas2_daemon_loop *loop,
-    const hermas2_loop_slot *slot,
+    hermas2_loop_slot *slot,
     const hermas2_frame *result) {
     saga_route route;
     if (!find_saga_route(loop, slot->node_id, &route)) {
@@ -173,13 +241,22 @@ static hermas2_loop_result append_compensation_token(
         .token = result->payload,
         .token_length = result->payload_length
     };
-    return hermas2_compensation_writer_append(
+    hermas2_compensation_result appended =
+        hermas2_compensation_writer_append(
                loop->compensation, record,
                loop->compensation_scratch,
-               sizeof(loop->compensation_scratch)) ==
-                   HERMAS2_COMPENSATION_OK
-               ? HERMAS2_LOOP_OK
-               : HERMAS2_LOOP_COMPENSATION_ERROR;
+               sizeof(loop->compensation_scratch));
+    if (appended != HERMAS2_COMPENSATION_OK ||
+        route.ordinal == 0u ||
+        route.ordinal > HERMAS2_SAGA_MAX_STEPS) {
+        return HERMAS2_LOOP_COMPENSATION_ERROR;
+    }
+    slot->saga_forward_requests[route.ordinal - 1u] =
+        slot->request_id;
+    if (route.ordinal > slot->saga_success_count) {
+        slot->saga_success_count = (uint8_t)route.ordinal;
+    }
+    return HERMAS2_LOOP_OK;
 }
 
 static hermas2_loop_result prepare_ready(
@@ -189,13 +266,22 @@ static hermas2_loop_result prepare_ready(
         size_t index =
             (loop->scheduler_cursor + step) % HERMAS2_DAEMON_MAX_EXECUTIONS;
         hermas2_loop_slot *slot = &loop->executions[index];
-        if (!slot->active ||
-            slot->execution.state != HERMAS2_EXECUTION_READY) {
+        if (!slot->active || !slot_ready(slot)) {
             continue;
         }
         hermas2_frame invocation;
-        if (hermas2_execution_prepare(&slot->execution, &invocation) !=
-            HERMAS2_RUNTIME_OK) {
+        if (slot->compensating) {
+            if (hermas2_saga_driver_prepare(
+                    &slot->saga,
+                    slot->packet + HERMAS2_PROTOCOL_HEADER_SIZE,
+                    sizeof(slot->packet) -
+                        HERMAS2_PROTOCOL_HEADER_SIZE,
+                    &invocation) != HERMAS2_SAGA_OK) {
+                return HERMAS2_LOOP_COMPENSATION_ERROR;
+            }
+        } else if (hermas2_execution_prepare(
+                       &slot->execution, &invocation) !=
+                   HERMAS2_RUNTIME_OK) {
             return HERMAS2_LOOP_RUNTIME_ERROR;
         }
         if (hermas2_protocol_encode(&invocation, slot->packet,
@@ -206,13 +292,19 @@ static hermas2_loop_result prepare_ready(
         }
         slot->app_id = invocation.app_id;
         slot->action_id = invocation.action_id;
-        slot->node_id = slot->execution.current_node;
+        slot->node_id = slot->compensating
+                            ? slot->saga.execution.steps[
+                                  slot->saga.execution.remaining - 1u]
+                                  .forward_node
+                            : slot->execution.current_node;
         slot->request_id = invocation.request_id;
-        hermas2_loop_result journaled = append_record(
-            loop, slot, HERMAS2_JOURNAL_DELIVERY_PREPARED,
-            HERMAS2_OUTCOME_NONE, true);
-        if (journaled != HERMAS2_LOOP_OK) {
-            return journaled;
+        if (!slot->compensating) {
+            hermas2_loop_result journaled = append_record(
+                loop, slot, HERMAS2_JOURNAL_DELIVERY_PREPARED,
+                HERMAS2_OUTCOME_NONE, true);
+            if (journaled != HERMAS2_LOOP_OK) {
+                return journaled;
+            }
         }
         ++*progress_count;
     }
@@ -227,7 +319,7 @@ static void assign_available_apps(hermas2_daemon_loop *loop) {
             (loop->scheduler_cursor + step) % HERMAS2_DAEMON_MAX_EXECUTIONS;
         hermas2_loop_slot *slot = &loop->executions[index];
         if (!slot->active || slot->owns_app ||
-            slot->execution.state != HERMAS2_EXECUTION_PREPARED ||
+            !slot_prepared(slot) ||
             hermas2_daemon_registry_find(loop->registry, slot->app_id) < 0 ||
             app_owned_by_other(loop, slot)) {
             continue;
@@ -246,7 +338,16 @@ static hermas2_loop_result reconcile_missing_apps(
             continue;
         }
         slot->owns_app = false;
-        if (slot->execution.state == HERMAS2_EXECUTION_SENT) {
+        if (slot_sent(slot)) {
+            if (slot->compensating) {
+                if (hermas2_saga_driver_mark_unknown(&slot->saga) !=
+                    HERMAS2_SAGA_OK) {
+                    return HERMAS2_LOOP_COMPENSATION_ERROR;
+                }
+                fail_compensation(slot, HERMAS2_OUTCOME_UNKNOWN);
+                ++*progress_count;
+                continue;
+            }
             hermas2_loop_result journaled = append_record(
                 loop, slot, HERMAS2_JOURNAL_ACTION_UNKNOWN,
                 HERMAS2_OUTCOME_UNKNOWN, true);
@@ -280,6 +381,14 @@ static hermas2_loop_result send_invocation(
     ssize_t sent = send(descriptor, slot->packet, slot->packet_size,
                         MSG_DONTWAIT | MSG_NOSIGNAL);
     if (sent == (ssize_t)slot->packet_size) {
+        if (slot->compensating) {
+            if (hermas2_saga_driver_mark_sent(&slot->saga) !=
+                HERMAS2_SAGA_OK) {
+                return HERMAS2_LOOP_COMPENSATION_ERROR;
+            }
+            ++*progress_count;
+            return HERMAS2_LOOP_OK;
+        }
         hermas2_loop_result journaled = append_record(
             loop, slot, HERMAS2_JOURNAL_DELIVERY_SENT,
             HERMAS2_OUTCOME_NONE, true);
@@ -295,6 +404,17 @@ static hermas2_loop_result send_invocation(
     }
     if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK ||
                      errno == EINTR)) {
+        return HERMAS2_LOOP_OK;
+    }
+    if (slot->compensating) {
+        if (hermas2_saga_driver_mark_not_sent(&slot->saga) !=
+            HERMAS2_SAGA_OK) {
+            return HERMAS2_LOOP_COMPENSATION_ERROR;
+        }
+        slot->owns_app = false;
+        drop_app(loop->registry, slot->app_id);
+        fail_compensation(slot, HERMAS2_OUTCOME_NOT_SENT);
+        ++*progress_count;
         return HERMAS2_LOOP_OK;
     }
     hermas2_loop_result journaled = append_record(
@@ -313,6 +433,11 @@ static hermas2_loop_result send_invocation(
     if (journaled != HERMAS2_LOOP_OK) {
         return journaled;
     }
+    hermas2_loop_result compensation = begin_live_compensation(
+        loop, slot, HERMAS2_OUTCOME_NOT_SENT);
+    if (compensation != HERMAS2_LOOP_OK) {
+        return compensation;
+    }
     ++*progress_count;
     return HERMAS2_LOOP_OK;
 }
@@ -324,6 +449,16 @@ static hermas2_loop_result receive_result(
     int descriptor =
         hermas2_daemon_registry_find(loop->registry, slot->app_id);
     if (descriptor < 0) {
+        if (slot->compensating) {
+            if (hermas2_saga_driver_mark_unknown(&slot->saga) !=
+                HERMAS2_SAGA_OK) {
+                return HERMAS2_LOOP_COMPENSATION_ERROR;
+            }
+            slot->owns_app = false;
+            fail_compensation(slot, HERMAS2_OUTCOME_UNKNOWN);
+            ++*progress_count;
+            return HERMAS2_LOOP_OK;
+        }
         hermas2_loop_result journaled = append_record(
             loop, slot, HERMAS2_JOURNAL_ACTION_UNKNOWN,
             HERMAS2_OUTCOME_UNKNOWN, true);
@@ -362,6 +497,30 @@ static hermas2_loop_result receive_result(
         !transport_failed &&
         hermas2_protocol_decode(slot->packet, (size_t)received, &result) ==
             HERMAS2_PROTOCOL_OK;
+    if (slot->compensating) {
+        bool accepted =
+            decoded &&
+            hermas2_saga_driver_accept_result(
+                &slot->saga, &result) == HERMAS2_SAGA_OK;
+        if (!accepted) {
+            if (hermas2_saga_driver_mark_unknown(&slot->saga) !=
+                HERMAS2_SAGA_OK) {
+                return HERMAS2_LOOP_COMPENSATION_ERROR;
+            }
+            drop_app(loop->registry, slot->app_id);
+            fail_compensation(slot, HERMAS2_OUTCOME_UNKNOWN);
+        } else if (slot->saga.execution.state ==
+                   HERMAS2_SAGA_COMPLETE) {
+            slot->compensating = false;
+        } else if (slot->saga.execution.state ==
+                   HERMAS2_SAGA_BLOCKED) {
+            fail_compensation(
+                slot, slot->saga.execution.compensation_outcome);
+        }
+        slot->owns_app = false;
+        ++*progress_count;
+        return HERMAS2_LOOP_OK;
+    }
     bool result_valid =
         decoded &&
         hermas2_execution_accept_result(&slot->execution, &result) ==
@@ -402,6 +561,15 @@ static hermas2_loop_result receive_result(
         append_finished_if_complete(loop, slot);
     if (finished != HERMAS2_LOOP_OK) {
         return finished;
+    }
+    if (result_valid &&
+        result.outcome == HERMAS2_OUTCOME_APP_ERROR) {
+        hermas2_loop_result compensation =
+            begin_live_compensation(
+                loop, slot, HERMAS2_OUTCOME_APP_ERROR);
+        if (compensation != HERMAS2_LOOP_OK) {
+            return compensation;
+        }
     }
     ++*progress_count;
     return HERMAS2_LOOP_OK;
@@ -449,6 +617,27 @@ hermas2_loop_result hermas2_daemon_loop_attach_compensation(
         return HERMAS2_LOOP_INVALID_ARGUMENT;
     }
     loop->compensation = compensation;
+    return HERMAS2_LOOP_OK;
+}
+
+hermas2_loop_result hermas2_daemon_loop_attach_saga(
+    hermas2_daemon_loop *loop,
+    hermas2_compensation_writer *compensation,
+    hermas2_compensation_lookup compensation_lookup,
+    void *compensation_lookup_context,
+    hermas2_saga_log_writer *saga_log) {
+    if (loop == NULL || compensation == NULL ||
+        compensation->write == NULL || compensation_lookup == NULL ||
+        saga_log == NULL || saga_log->write == NULL ||
+        loop->image == NULL ||
+        hermas2_daemon_loop_active(loop) != 0u) {
+        return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    loop->compensation = compensation;
+    loop->compensation_lookup = compensation_lookup;
+    loop->compensation_lookup_context =
+        compensation_lookup_context;
+    loop->saga_log = saga_log;
     return HERMAS2_LOOP_OK;
 }
 
@@ -522,9 +711,7 @@ hermas2_loop_result hermas2_daemon_loop_poll(
         }
         poll_items[poll_count] = (struct pollfd){
             .fd = descriptor,
-            .events = slot->execution.state == HERMAS2_EXECUTION_PREPARED
-                          ? POLLOUT
-                          : POLLIN
+            .events = slot_prepared(slot) ? POLLOUT : POLLIN
         };
         owners[poll_count] = slot;
         ++poll_count;
@@ -540,14 +727,12 @@ hermas2_loop_result hermas2_daemon_loop_poll(
         hermas2_loop_slot *slot = owners[index];
         short events = poll_items[index].revents;
         hermas2_loop_result result = HERMAS2_LOOP_OK;
-        if ((events & POLLOUT) != 0 &&
-            slot->execution.state == HERMAS2_EXECUTION_PREPARED) {
+        if ((events & POLLOUT) != 0 && slot_prepared(slot)) {
             result = send_invocation(loop, slot, progress_count);
-        } else if ((events & POLLIN) != 0 &&
-                   slot->execution.state == HERMAS2_EXECUTION_SENT) {
+        } else if ((events & POLLIN) != 0 && slot_sent(slot)) {
             result = receive_result(loop, slot, progress_count);
         } else if ((events & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
-            result = slot->execution.state == HERMAS2_EXECUTION_PREPARED
+            result = slot_prepared(slot)
                          ? send_invocation(loop, slot, progress_count)
                          : receive_result(loop, slot, progress_count);
         }
@@ -570,6 +755,9 @@ hermas2_loop_result hermas2_daemon_loop_result(
     if (slot == NULL) {
         return HERMAS2_LOOP_UNKNOWN_EXECUTION;
     }
+    if (slot->compensating) {
+        return HERMAS2_LOOP_EXECUTION_ACTIVE;
+    }
     return hermas2_execution_get_result(&slot->execution, result) ==
                    HERMAS2_RUNTIME_OK
                ? HERMAS2_LOOP_OK
@@ -586,7 +774,8 @@ hermas2_loop_result hermas2_daemon_loop_release(
     if (slot == NULL) {
         return HERMAS2_LOOP_UNKNOWN_EXECUTION;
     }
-    if (slot->execution.state != HERMAS2_EXECUTION_COMPLETE) {
+    if (slot->execution.state != HERMAS2_EXECUTION_COMPLETE ||
+        slot->compensating) {
         return HERMAS2_LOOP_EXECUTION_ACTIVE;
     }
     memset(slot, 0, sizeof(*slot));

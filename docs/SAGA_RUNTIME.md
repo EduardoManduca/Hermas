@@ -91,3 +91,25 @@ Live construction revalidates the image, dense enrollment prefix, monotonic
 request boundary, every exact token key, route metadata, and canonical input
 value. It therefore does not trust transient daemon bookkeeping as proof of
 success; that bookkeeping only identifies the journal/token facts to verify.
+
+## Live reverse execution in the daemon
+
+`hermas2_daemon_loop_attach_saga` attaches the token writer and lookup
+capability together with the saga-attempt writer. After a known forward
+failure (`AppError` or `NotSent`), the loop constructs the verified live plan
+and drives its compensation invocations through the existing nonblocking app
+transport. The forward executor is already terminal at this point; the saga
+driver exclusively owns the slot's prepare/send/result transitions until the
+reverse plan closes.
+
+The original known failure remains private while compensation is active.
+Successful reverse completion releases that original result unchanged.
+Failure before a compensation send becomes `NotSent`; any sent, rejected, or
+otherwise uncertain compensation becomes `Unknown`. The loop never reports
+successful rollback when the durable delivery facts cannot prove it.
+
+Forward journal records remain forward facts only. Reverse preparation,
+delivery, and outcomes are written solely to the saga-attempt log, while
+opaque compensation inputs continue to come solely from the token log. This
+keeps the three durable authorities distinct even though one transport loop
+executes both directions.

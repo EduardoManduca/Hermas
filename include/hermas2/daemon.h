@@ -4,6 +4,7 @@
 #include "hermas2/runtime.h"
 #include "hermas2/journal.h"
 #include "hermas2/compensation.h"
+#include "hermas2/saga.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -83,6 +84,10 @@ typedef struct hermas2_loop_slot {
     bool active;
     bool owns_app;
     bool journal_finished;
+    bool compensating;
+    uint8_t saga_success_count;
+    uint64_t saga_forward_requests[HERMAS2_SAGA_MAX_STEPS];
+    hermas2_saga_driver saga;
 } hermas2_loop_slot;
 
 typedef struct hermas2_daemon_loop {
@@ -93,6 +98,9 @@ typedef struct hermas2_daemon_loop {
     size_t scheduler_cursor;
     hermas2_journal_writer *journal;
     hermas2_compensation_writer *compensation;
+    hermas2_compensation_lookup compensation_lookup;
+    void *compensation_lookup_context;
+    hermas2_saga_log_writer *saga_log;
     uint8_t compensation_scratch[
         HERMAS2_COMPENSATION_HEADER_SIZE +
         HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
@@ -121,6 +129,13 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
 hermas2_loop_result hermas2_daemon_loop_attach_compensation(
     hermas2_daemon_loop *loop,
     hermas2_compensation_writer *compensation);
+
+hermas2_loop_result hermas2_daemon_loop_attach_saga(
+    hermas2_daemon_loop *loop,
+    hermas2_compensation_writer *compensation,
+    hermas2_compensation_lookup compensation_lookup,
+    void *compensation_lookup_context,
+    hermas2_saga_log_writer *saga_log);
 
 hermas2_loop_result hermas2_daemon_loop_poll(
     hermas2_daemon_loop *loop,
