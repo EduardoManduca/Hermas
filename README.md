@@ -175,6 +175,11 @@ Linux storage now gives that attempt history an exclusively locked,
 owner-only, append-and-`fdatasync` implementation with complete startup
 validation.
 
+A narrow write-ahead saga driver composes the recovery executor and attempt
+log without absorbing transport or daemon ownership. It refuses to expose a
+compensation delivery unless `Started` and `DeliveryPrepared` are durable and
+treats every persistence failure as fatal to reverse progress.
+
 ## Build and Inspect
 
 From this directory:

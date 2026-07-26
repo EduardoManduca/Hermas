@@ -53,3 +53,14 @@ outcome. Any open prepared or sent compensation is converted to blocked
 The executor and journal remain separate primitives: orchestration code owns
 the write-ahead calls around socket delivery, while reconciliation owns the
 restart decision.
+
+`hermas2_saga_driver` is the narrow composition layer for callers that want
+those write-ahead calls enforced. It appends `Started` before exposing the
+plan, `DeliveryPrepared` before an invocation can be sent, and the matching
+sent/outcome facts around runtime transitions. A final success or blocked
+outcome is closed with `Finished`. Any log-write failure is fatal to driver
+progress; it never silently degrades to in-memory execution.
+
+The driver does not own sockets, files, app registration, or the forward
+executor. This keeps recovery policy testable without merging durability,
+transport, and graph traversal into one daemon-specific state machine.

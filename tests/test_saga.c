@@ -395,6 +395,78 @@ static void test_durable_reconciliation(fixture *value) {
             "durably finished saga did not remain complete");
 }
 
+typedef struct saga_sink {
+    uint8_t bytes[8u * HERMAS2_SAGA_LOG_RECORD_SIZE];
+    size_t size;
+} saga_sink;
+
+static hermas2_saga_log_result write_saga_record(
+    void *context,
+    const uint8_t *record,
+    size_t record_size) {
+    saga_sink *sink = context;
+    if (record_size > sizeof(sink->bytes) - sink->size) {
+        return HERMAS2_SAGA_LOG_WRITE_ERROR;
+    }
+    memcpy(sink->bytes + sink->size, record, record_size);
+    sink->size += record_size;
+    return HERMAS2_SAGA_LOG_OK;
+}
+
+static void test_write_ahead_driver(fixture *value) {
+    hermas2_saga_execution recovered;
+    require(hermas2_saga_recover(
+                &recovered, value->image, value->image_size,
+                value->journal, value->journal_size,
+                value->tokens, value->token_size, 41u, 7u) ==
+                HERMAS2_SAGA_OK,
+            "could not recover driver fixture");
+    saga_sink sink;
+    memset(&sink, 0, sizeof(sink));
+    hermas2_saga_log_writer writer;
+    hermas2_saga_driver driver;
+    require(hermas2_saga_log_writer_init(
+                &writer, write_saga_record, &sink, 1u) ==
+                HERMAS2_SAGA_LOG_OK &&
+                hermas2_saga_driver_begin(
+                    &driver, &recovered, &writer, 0) ==
+                    HERMAS2_SAGA_OK,
+            "could not begin durable saga driver");
+    for (uint8_t remaining = 2u; remaining > 0u; --remaining) {
+        uint8_t token[8];
+        hermas2_frame invocation;
+        require(hermas2_saga_driver_prepare(
+                    &driver, token, sizeof(token), &invocation) ==
+                    HERMAS2_SAGA_OK &&
+                    hermas2_saga_driver_mark_sent(&driver) ==
+                    HERMAS2_SAGA_OK,
+                "driver did not record delivery boundary");
+        const hermas2_saga_step *step =
+            &value->steps[remaining - 1u];
+        hermas2_frame result = {
+            .kind = HERMAS2_FRAME_RESULT,
+            .execution_id = invocation.execution_id,
+            .request_id = invocation.request_id,
+            .app_id = invocation.app_id,
+            .action_id = invocation.action_id,
+            .source_type = step->success_type,
+            .destination_type = step->success_type,
+            .outcome = HERMAS2_OUTCOME_SUCCESS
+        };
+        require(hermas2_saga_driver_accept_result(
+                    &driver, &result) == HERMAS2_SAGA_OK,
+                "driver did not record successful compensation");
+    }
+    hermas2_saga_log_summary summary;
+    require(driver.execution.state == HERMAS2_SAGA_COMPLETE &&
+                sink.size == 8u * HERMAS2_SAGA_LOG_RECORD_SIZE &&
+                hermas2_saga_log_scan(
+                    sink.bytes, sink.size, &summary) ==
+                    HERMAS2_SAGA_LOG_OK &&
+                summary.active_count == 0u,
+            "driver log is not a complete durable reverse history");
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         return 2;
@@ -424,6 +496,7 @@ int main(int argc, char **argv) {
     test_reverse_recovery(&value);
     test_refusal_paths(&value);
     test_durable_reconciliation(&value);
+    test_write_ahead_driver(&value);
     free(image);
     if (failures != 0) {
         fprintf(stderr, "%d saga tests failed\n", failures);

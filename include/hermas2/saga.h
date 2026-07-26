@@ -24,7 +24,8 @@ typedef enum hermas2_saga_result {
     HERMAS2_SAGA_BUFFER_TOO_SMALL,
     HERMAS2_SAGA_INVALID_STATE,
     HERMAS2_SAGA_UNEXPECTED_RESULT,
-    HERMAS2_SAGA_REQUEST_ID_EXHAUSTED
+    HERMAS2_SAGA_REQUEST_ID_EXHAUSTED,
+    HERMAS2_SAGA_LOG_ERROR
 } hermas2_saga_result;
 
 typedef enum hermas2_saga_state {
@@ -66,6 +67,12 @@ typedef struct hermas2_saga_execution {
     hermas2_saga_step steps[HERMAS2_SAGA_MAX_STEPS];
 } hermas2_saga_execution;
 
+typedef struct hermas2_saga_driver {
+    hermas2_saga_execution execution;
+    hermas2_saga_log_writer *log;
+    uint8_t started;
+} hermas2_saga_driver;
+
 hermas2_saga_result hermas2_saga_recover(
     hermas2_saga_execution *execution,
     const uint8_t *image,
@@ -99,6 +106,31 @@ hermas2_saga_result hermas2_saga_mark_unknown(
 
 hermas2_saga_result hermas2_saga_accept_result(
     hermas2_saga_execution *execution,
+    const hermas2_frame *result);
+
+hermas2_saga_result hermas2_saga_driver_begin(
+    hermas2_saga_driver *driver,
+    const hermas2_saga_execution *execution,
+    hermas2_saga_log_writer *log,
+    int resume_existing);
+
+hermas2_saga_result hermas2_saga_driver_prepare(
+    hermas2_saga_driver *driver,
+    uint8_t *token_buffer,
+    size_t token_capacity,
+    hermas2_frame *invocation);
+
+hermas2_saga_result hermas2_saga_driver_mark_sent(
+    hermas2_saga_driver *driver);
+
+hermas2_saga_result hermas2_saga_driver_mark_not_sent(
+    hermas2_saga_driver *driver);
+
+hermas2_saga_result hermas2_saga_driver_mark_unknown(
+    hermas2_saga_driver *driver);
+
+hermas2_saga_result hermas2_saga_driver_accept_result(
+    hermas2_saga_driver *driver,
     const hermas2_frame *result);
 
 const char *hermas2_saga_result_name(hermas2_saga_result result);

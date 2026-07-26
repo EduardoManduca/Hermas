@@ -503,10 +503,191 @@ const char *hermas2_saga_result_name(hermas2_saga_result result) {
         "ok", "invalid-argument", "invalid-image", "not-saga",
         "inconsistent-history", "unsafe-history", "missing-token",
         "duplicate-token", "invalid-token", "buffer-too-small",
-        "invalid-state", "unexpected-result", "request-id-exhausted"
+        "invalid-state", "unexpected-result", "request-id-exhausted",
+        "log-error"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0])
                ? names[index]
                : "unknown";
+}
+
+static hermas2_saga_log_record driver_record(
+    const hermas2_saga_driver *driver,
+    hermas2_saga_log_kind kind,
+    uint16_t outcome,
+    bool action) {
+    hermas2_saga_log_record record = {
+        .kind = kind,
+        .outcome = outcome,
+        .execution_id = driver->execution.execution_id,
+        .workflow_id = driver->execution.workflow_id,
+        .image_fingerprint = driver->execution.image_fingerprint
+    };
+    if (action) {
+        const hermas2_saga_step *step =
+            &driver->execution.steps[
+                driver->execution.remaining - 1u];
+        record.request_id =
+            driver->execution.current_request_id;
+        record.forward_node = step->forward_node;
+        record.app_id = step->compensation_app_id;
+        record.action_id = step->compensation_action_id;
+        record.ordinal = step->ordinal;
+    } else if (kind == HERMAS2_SAGA_LOG_STARTED) {
+        record.ordinal = driver->execution.remaining;
+    }
+    return record;
+}
+
+static hermas2_saga_result append_driver_record(
+    hermas2_saga_driver *driver,
+    hermas2_saga_log_kind kind,
+    uint16_t outcome,
+    bool action) {
+    return hermas2_saga_log_writer_append(
+               driver->log,
+               driver_record(driver, kind, outcome, action)) ==
+                   HERMAS2_SAGA_LOG_OK
+               ? HERMAS2_SAGA_OK
+               : HERMAS2_SAGA_LOG_ERROR;
+}
+
+hermas2_saga_result hermas2_saga_driver_begin(
+    hermas2_saga_driver *driver,
+    const hermas2_saga_execution *execution,
+    hermas2_saga_log_writer *log,
+    int resume_existing) {
+    if (driver == NULL || execution == NULL || log == NULL ||
+        log->write == NULL ||
+        (execution->state != HERMAS2_SAGA_READY &&
+         execution->state != HERMAS2_SAGA_COMPLETE)) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    memset(driver, 0, sizeof(*driver));
+    driver->execution = *execution;
+    driver->log = log;
+    driver->started = resume_existing != 0;
+    if (driver->execution.state == HERMAS2_SAGA_COMPLETE ||
+        driver->started != 0u) {
+        return HERMAS2_SAGA_OK;
+    }
+    hermas2_saga_result appended = append_driver_record(
+        driver, HERMAS2_SAGA_LOG_STARTED,
+        driver->execution.original_outcome, false);
+    if (appended == HERMAS2_SAGA_OK) {
+        driver->started = 1u;
+    }
+    return appended;
+}
+
+hermas2_saga_result hermas2_saga_driver_prepare(
+    hermas2_saga_driver *driver,
+    uint8_t *token_buffer,
+    size_t token_capacity,
+    hermas2_frame *invocation) {
+    if (driver == NULL || driver->log == NULL ||
+        driver->started == 0u) {
+        return HERMAS2_SAGA_INVALID_STATE;
+    }
+    hermas2_saga_result prepared = hermas2_saga_prepare(
+        &driver->execution, token_buffer, token_capacity, invocation);
+    if (prepared != HERMAS2_SAGA_OK) {
+        return prepared;
+    }
+    return append_driver_record(
+        driver, HERMAS2_SAGA_LOG_DELIVERY_PREPARED,
+        HERMAS2_OUTCOME_NONE, true);
+}
+
+hermas2_saga_result hermas2_saga_driver_mark_sent(
+    hermas2_saga_driver *driver) {
+    if (driver == NULL) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    hermas2_saga_result changed =
+        hermas2_saga_mark_sent(&driver->execution);
+    if (changed != HERMAS2_SAGA_OK) {
+        return changed;
+    }
+    return append_driver_record(
+        driver, HERMAS2_SAGA_LOG_DELIVERY_SENT,
+        HERMAS2_OUTCOME_NONE, true);
+}
+
+static hermas2_saga_result finish_driver(
+    hermas2_saga_driver *driver,
+    hermas2_saga_log_kind kind,
+    uint16_t outcome) {
+    hermas2_saga_result step =
+        append_driver_record(driver, kind, outcome, true);
+    if (step != HERMAS2_SAGA_OK) {
+        return step;
+    }
+    return append_driver_record(
+        driver, HERMAS2_SAGA_LOG_FINISHED, outcome, false);
+}
+
+hermas2_saga_result hermas2_saga_driver_mark_not_sent(
+    hermas2_saga_driver *driver) {
+    if (driver == NULL) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    hermas2_saga_result changed =
+        hermas2_saga_mark_not_sent(&driver->execution);
+    if (changed != HERMAS2_SAGA_OK) {
+        return changed;
+    }
+    return finish_driver(
+        driver, HERMAS2_SAGA_LOG_STEP_FAILED,
+        HERMAS2_OUTCOME_NOT_SENT);
+}
+
+hermas2_saga_result hermas2_saga_driver_mark_unknown(
+    hermas2_saga_driver *driver) {
+    if (driver == NULL) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    hermas2_saga_result changed =
+        hermas2_saga_mark_unknown(&driver->execution);
+    if (changed != HERMAS2_SAGA_OK) {
+        return changed;
+    }
+    return finish_driver(
+        driver, HERMAS2_SAGA_LOG_STEP_UNKNOWN,
+        HERMAS2_OUTCOME_UNKNOWN);
+}
+
+hermas2_saga_result hermas2_saga_driver_accept_result(
+    hermas2_saga_driver *driver,
+    const hermas2_frame *result) {
+    if (driver == NULL || result == NULL) {
+        return HERMAS2_SAGA_INVALID_ARGUMENT;
+    }
+    uint16_t outcome = result->outcome;
+    hermas2_saga_log_record durable = driver_record(
+        driver,
+        outcome == HERMAS2_OUTCOME_SUCCESS
+            ? HERMAS2_SAGA_LOG_STEP_SUCCEEDED
+            : HERMAS2_SAGA_LOG_STEP_FAILED,
+        outcome, true);
+    hermas2_saga_result accepted =
+        hermas2_saga_accept_result(&driver->execution, result);
+    if (accepted != HERMAS2_SAGA_OK) {
+        return accepted;
+    }
+    if (hermas2_saga_log_writer_append(
+            driver->log, durable) != HERMAS2_SAGA_LOG_OK) {
+        return HERMAS2_SAGA_LOG_ERROR;
+    }
+    if (driver->execution.state == HERMAS2_SAGA_COMPLETE ||
+        driver->execution.state == HERMAS2_SAGA_BLOCKED) {
+        return append_driver_record(
+            driver, HERMAS2_SAGA_LOG_FINISHED,
+            outcome == HERMAS2_OUTCOME_SUCCESS
+                ? HERMAS2_OUTCOME_SUCCESS
+                : outcome,
+            false);
+    }
+    return HERMAS2_SAGA_OK;
 }
