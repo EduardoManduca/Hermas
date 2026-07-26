@@ -170,11 +170,14 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
                 .into_iter()
                 .flatten()
         }))
-        .chain(
-            view.saga_steps
-                .iter()
-                .flat_map(|step| [step.source_type, step.destination_type]),
-        )
+        .chain(view.saga_steps.iter().flat_map(|step| {
+            [
+                step.source_type,
+                step.destination_type,
+                step.success_type,
+                step.error_type,
+            ]
+        }))
         .collect::<BTreeSet<_>>();
     let mut representations = Vec::new();
     let type_representations = types
@@ -207,7 +210,7 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
     let regions_offset = edges_offset
         .checked_add(view.edges.len() * EDGE_RECORD_SIZE)
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
-    let region_count = view.deadlines.len() + view.each_regions.len() + view.saga_steps.len();
+    let region_count = view.deadlines.len() + view.each_regions.len() + view.saga_steps.len() * 2;
     let representations_offset = regions_offset
         .checked_add(region_count * REGION_RECORD_SIZE)
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
@@ -389,6 +392,11 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
         put_u16(&mut output, step.destination_type.raw());
         put_u16(&mut output, step.ordinal);
         put_u16(&mut output, 0);
+        output.extend_from_slice(&[4, 0]);
+        put_u16(&mut output, step.forward.raw());
+        put_u16(&mut output, step.success_type.raw());
+        put_u16(&mut output, step.error_type.raw());
+        output.extend_from_slice(&[0; 8]);
     }
     output.extend_from_slice(&representations);
     output.extend_from_slice(view.name.as_bytes());
@@ -542,7 +550,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         || type_count > MAX_IMAGE_ERRORS
         || node_count > MAX_GRAPH_NODES
         || edge_count > MAX_GRAPH_EDGES
-        || region_count > 32
+        || region_count > 40
     {
         return Err(ImageError::new(
             ImageErrorCode::InvalidCount,
@@ -732,6 +740,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     let mut deadline_ranges = Vec::new();
     let mut each_regions = BTreeMap::new();
     let mut saga_steps = BTreeMap::new();
+    let mut saga_outcomes = BTreeMap::new();
     for index in 0..region_count {
         let offset = regions_offset + index * REGION_RECORD_SIZE;
         match bytes[offset] {
@@ -886,6 +895,30 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                         ordinal,
                     ),
                 );
+            }
+            4 => {
+                let forward = read_u16(bytes, offset + 2)?;
+                let success_type = read_u16(bytes, offset + 4)?;
+                let error_type = read_u16(bytes, offset + 6)?;
+                let next_outcome = saga_steps.len() == saga_outcomes.len() + 1
+                    && saga_steps
+                        .get(&forward)
+                        .is_some_and(|step| usize::from(step.4) == saga_steps.len());
+                if bytes[offset + 1] != 0
+                    || !next_outcome
+                    || !type_descriptors.contains_key(&success_type)
+                    || !type_descriptors.contains_key(&error_type)
+                    || bytes[offset + 8..offset + 16] != [0; 8]
+                    || saga_outcomes
+                        .insert(forward, (success_type, error_type))
+                        .is_some()
+                {
+                    return Err(ImageError::new(
+                        ImageErrorCode::InvalidRecord,
+                        Some(offset),
+                        "invalid saga outcome record",
+                    ));
+                }
             }
             _ => {
                 return Err(ImageError::new(
@@ -1124,6 +1157,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         })
         || (!saga_steps.is_empty()
             && (saga_steps.len() != action_nodes.len()
+                || saga_outcomes.len() != saga_steps.len()
                 || action_nodes.iter().any(|node| {
                     saga_steps
                         .get(node)

@@ -27,16 +27,17 @@ fn compile_fixture() -> (Catalog, herma2::VerifiedGraph) {
 fn saga_lowers_to_ordered_compensation_records() {
     let (catalog, graph) = compile_fixture();
     let image = encode_graph_image(&graph, &catalog).unwrap();
-    assert_eq!(decode_graph_image(&image).unwrap().region_count, 2);
+    assert_eq!(decode_graph_image(&image).unwrap().region_count, 4);
 
     let regions = u32::from_le_bytes(image[72..76].try_into().unwrap()) as usize;
     for (index, ordinal) in [1u16, 2].into_iter().enumerate() {
-        let offset = regions + index * 16;
+        let offset = regions + index * 32;
         assert_eq!(image[offset], 3);
         assert_eq!(
             u16::from_le_bytes(image[offset + 12..offset + 14].try_into().unwrap()),
             ordinal
         );
+        assert_eq!(image[offset + 16], 4);
     }
 }
 
@@ -46,7 +47,7 @@ fn decoder_rejects_corrupt_saga_metadata() {
     let image = encode_graph_image(&graph, &catalog).unwrap();
     let regions = u32::from_le_bytes(image[72..76].try_into().unwrap()) as usize;
 
-    for field in [4usize, 6, 8, 12] {
+    for field in [4usize, 6, 8, 12, 20, 22] {
         let mut corrupt = image.clone();
         corrupt[regions + field..regions + field + 2].fill(0);
         assert!(decode_graph_image(&corrupt).is_err(), "field {field}");

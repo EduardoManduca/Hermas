@@ -281,8 +281,9 @@ Every forward Action must be declared `reversible` in HSchema2 and name a
 valid compensation Action. The initial bounded slice admits 1 through 16
 Actions and excludes `all`, `each`, and variant dispatch. Compilation records
 each forward node, compensation app and Action, forward success token type,
-compensation input type, and dense forward ordinal. This milestone defines
-the verified compiler/image contract; reverse runtime scheduling is separate.
+compensation input/success/error types, and dense forward ordinal. This
+metadata is sufficient for strict reverse runtime scheduling without loading
+the compiler catalog.
 
 ## Source provenance
 

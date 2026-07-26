@@ -108,6 +108,8 @@ pub(crate) struct SagaStep {
     pub compensation: ActionId,
     pub source_type: TypeId,
     pub destination_type: TypeId,
+    pub success_type: TypeId,
+    pub error_type: TypeId,
     pub ordinal: u16,
 }
 
@@ -542,6 +544,8 @@ impl VerifiedGraph {
                             compensation,
                             source_type: action.success,
                             destination_type: compensation_action.input,
+                            success_type: compensation_action.success,
+                            error_type: compensation_action.error,
                             ordinal: u16::try_from(index + 1).ok()?,
                         })
                     }

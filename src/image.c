@@ -353,7 +353,7 @@ hermas2_image_result hermas2_image_validate(
         error_count > HERMAS2_MAX_ERRORS || app_count == 0u ||
         app_count > HERMAS2_MAX_NODES || type_count == 0u ||
         type_count > HERMAS2_MAX_ERRORS || node_count > HERMAS2_MAX_NODES ||
-        edge_count > HERMAS2_MAX_EDGES || region_count > 32u) {
+        edge_count > HERMAS2_MAX_EDGES || region_count > 40u) {
         return HERMAS2_IMAGE_INVALID_COUNT;
     }
 
@@ -519,7 +519,11 @@ hermas2_image_result hermas2_image_validate(
     uint16_t each_bound[9] = {0u};
     uint8_t each_concurrency[9] = {0u};
     size_t saga_count = 0u;
+    size_t saga_outcome_count = 0u;
+    uint16_t last_saga_forward = 0u;
     uint16_t saga_source_type[HERMAS2_MAX_NODES + 1u] = {0u};
+    uint16_t saga_success_type[HERMAS2_MAX_NODES + 1u] = {0u};
+    uint16_t saga_error_type[HERMAS2_MAX_NODES + 1u] = {0u};
     for (size_t index = 0u; index < region_count; ++index) {
         size_t offset = regions_offset + index * HERMAS2_REGION_RECORD_SIZE;
         uint8_t kind = bytes[offset];
@@ -636,7 +640,27 @@ hermas2_image_result hermas2_image_validate(
                 return HERMAS2_IMAGE_INVALID_RECORD;
             }
             saga_source_type[forward] = source_type;
+            last_saga_forward = forward;
             ++saga_count;
+        } else if (kind == 4u) {
+            uint16_t forward = read_u16(bytes, offset + 2u);
+            uint16_t success_type = read_u16(bytes, offset + 4u);
+            uint16_t error_type = read_u16(bytes, offset + 6u);
+            if (bytes[offset + 1u] != 0u || forward == 0u ||
+                forward > node_count || saga_source_type[forward] == 0u ||
+                saga_count != saga_outcome_count + 1u ||
+                forward != last_saga_forward ||
+                saga_success_type[forward] != 0u ||
+                !contains_u16(bytes, types_offset, type_count,
+                              HERMAS2_TYPE_RECORD_SIZE, success_type) ||
+                !contains_u16(bytes, types_offset, type_count,
+                              HERMAS2_TYPE_RECORD_SIZE, error_type) ||
+                read_u64(bytes, offset + 8u) != 0u) {
+                return HERMAS2_IMAGE_INVALID_RECORD;
+            }
+            saga_success_type[forward] = success_type;
+            saga_error_type[forward] = error_type;
+            ++saga_outcome_count;
         } else {
             return HERMAS2_IMAGE_INVALID_RECORD;
         }
@@ -843,6 +867,8 @@ hermas2_image_result hermas2_image_validate(
         }
         if (action_nodes[node] && saga_count != 0u &&
             (saga_source_type[node] == 0u ||
+             saga_success_type[node] == 0u ||
+             saga_error_type[node] == 0u ||
              saga_source_type[node] != action_success_type[node])) {
             return HERMAS2_IMAGE_INVALID_TOPOLOGY;
         }
@@ -887,7 +913,8 @@ hermas2_image_result hermas2_image_validate(
         for (size_t node = 1u; node <= node_count; ++node) {
             action_count += action_nodes[node] ? 1u : 0u;
         }
-        if (saga_count != action_count) {
+        if (saga_count != action_count ||
+            saga_outcome_count != saga_count) {
             return HERMAS2_IMAGE_INVALID_TOPOLOGY;
         }
     }

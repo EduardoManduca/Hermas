@@ -175,10 +175,22 @@ u16 ordinal              // dense, one-based forward order
 u16 reserved_zero
 ```
 
-Saga records follow Deadline and Each records. If any occur, every Action node
-has exactly one record, ordinals are dense, the compensation app is required
-by the image, and the two token representations are structurally equal. The
-forward node's Success edge must carry `source_token_type`.
+Every step is followed immediately by its compensation outcome contract:
+
+```text
+u8  kind                 // 4 SagaOutcome
+u8  flags                // zero
+u16 forward_node
+u16 compensation_success_type
+u16 compensation_error_type
+u64 reserved_zero
+```
+
+Saga pairs follow Deadline and Each records. If any occur, every Action node
+has exactly one pair, ordinals are dense, the compensation app is required by
+the image, and the two token representations are structurally equal. The
+forward node's Success edge must carry `source_token_type`. Outcome Type IDs
+let the runtime validate both successful and app-error compensation results.
 
 ## Structural validation
 
