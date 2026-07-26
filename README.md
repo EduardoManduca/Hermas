@@ -163,6 +163,11 @@ journal-confirmed successes in reverse ordinal order. Compensation invocations
 use caller-owned token storage, continue monotonic request IDs, validate typed
 results, and stop without retry on `NotSent`, `Unknown`, or app failure.
 
+A separate fixed-record saga attempt log now preserves reverse progress. Its
+allocation-free scanner enforces descending ordinals and delivery transitions,
+classifies prepared/sent crashes, and prevents a durable compensation success
+from being replayed after restart.
+
 ## Build and Inspect
 
 From this directory:

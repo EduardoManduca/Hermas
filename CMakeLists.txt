@@ -22,6 +22,8 @@ add_library(hermas2_saga STATIC src/saga.c)
 target_include_directories(hermas2_saga PUBLIC include)
 target_link_libraries(hermas2_saga PUBLIC
     hermas2_image hermas2_protocol hermas2_journal hermas2_compensation)
+add_library(hermas2_saga_log STATIC src/saga_log.c)
+target_include_directories(hermas2_saga_log PUBLIC include)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(hermas2_image PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -30,6 +32,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(hermas2_journal PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(hermas2_compensation PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(hermas2_saga PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(hermas2_saga_log PRIVATE -Wall -Wextra -Wpedantic -Werror)
     if(HERMAS2_SANITIZE)
         target_compile_options(hermas2_image PRIVATE
             -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -43,6 +46,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas2_compensation PRIVATE
             -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_compile_options(hermas2_saga PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_compile_options(hermas2_saga_log PRIVATE
             -fsanitize=address,undefined -fno-omit-frame-pointer)
     endif()
 endif()
@@ -134,6 +139,19 @@ if(BUILD_TESTING)
         endif()
     endif()
     add_test(NAME hermas2_journal_tests COMMAND hermas2_journal_tests)
+    add_executable(hermas2_saga_log_tests tests/test_saga_log.c)
+    target_link_libraries(hermas2_saga_log_tests PRIVATE hermas2_saga_log)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(hermas2_saga_log_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS2_SANITIZE)
+            target_compile_options(hermas2_saga_log_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2_saga_log_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+    endif()
+    add_test(NAME hermas2_saga_log_tests COMMAND hermas2_saga_log_tests)
     if(DEFINED HERMAS2_TEST_SAGA_IMAGE)
         add_executable(hermas2_saga_tests tests/test_saga.c)
         target_link_libraries(hermas2_saga_tests PRIVATE hermas2_saga)
