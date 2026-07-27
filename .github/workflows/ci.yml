@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+
+  c-sanitizers:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p herma2
+      - run: tools/generate_test_fixtures.sh
+      - run: tools/configure_gate_build.sh build-${{ matrix.compiler }} ${{ matrix.compiler }} target/gate-fixtures
+      - run: cmake --build build-${{ matrix.compiler }} -j2
+      - run: ctest --test-dir build-${{ matrix.compiler }} --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - if: matrix.compiler == 'clang'
+        run: python3 tests/check_image_parity.py target/debug/herma2 build-clang/hermas2_image_check target/gate-fixtures/*.h2gi
+
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: tools/quickstart.sh build-quickstart
+      - run: tools/test_order_total.sh build-order-total
+
+  static-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang-tools
+      - run: scan-build --status-bugs cmake -S . -B build-analyze -DCMAKE_C_COMPILER=clang -DBUILD_TESTING=OFF
+      - run: scan-build --status-bugs cmake --build build-analyze -j2
+
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit

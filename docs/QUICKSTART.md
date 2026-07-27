@@ -38,3 +38,17 @@ cargo install --path compiler/herma2
 `hermas2_run CONTROL_SOCKET EXECUTION_ID --image IMAGE [INPUT_HEX]` derives
 the nominal workflow input Type from the independently validated image.
 Advanced callers may still pass an explicit Type ID.
+
+## Independent architecture check
+
+Run `tools/test_order_total.sh` to compile and execute a second, unrelated
+workflow. It accepts a caller-provided 10,000-cent subtotal, invokes discount,
+tax, and receipt Actions, and prints:
+
+```text
+Order total: 9900 cents
+```
+
+This test has its own HSchema2 contracts, HScript2 graph, C processes, durable
+state, and restart proof. It guards against accidentally specializing the
+runtime or tooling to the Grade Pipeline.

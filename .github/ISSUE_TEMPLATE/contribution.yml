@@ -1,0 +1,30 @@
+name: Contribution proposal
+description: Propose diagnostics, docs, corpora, Actions, bindings, or tooling
+title: "[proposal] "
+labels: ["proposal"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Diagnostics
+        - Documentation
+        - Test corpora
+        - Ecosystem Action
+        - Language binding
+        - Tooling
+        - Runtime semantics
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and proposed scope
+    validations:
+      required: true
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Invariant and compatibility impact
+      description: Required for runtime-semantic or format changes.

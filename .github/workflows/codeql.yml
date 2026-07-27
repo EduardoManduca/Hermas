@@ -1,0 +1,24 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 3"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+      - run: cmake -S . -B build-codeql -DBUILD_TESTING=OFF
+      - run: cmake --build build-codeql -j2
+      - uses: github/codeql-action/analyze@v3
