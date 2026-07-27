@@ -76,7 +76,8 @@ if(UNIX)
             -fsanitize=address,undefined)
     endif()
     add_library(hermas2_daemon STATIC src/daemon_linux.c)
-    target_sources(hermas2_daemon PRIVATE src/loop_linux.c)
+    target_sources(hermas2_daemon PRIVATE
+        src/loop_linux.c src/registration_linux.c)
     target_include_directories(hermas2_daemon PUBLIC include)
     target_link_libraries(hermas2_daemon PUBLIC
         hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
@@ -321,6 +322,25 @@ if(BUILD_TESTING)
                 -fsanitize=address,undefined)
         endif()
         add_test(NAME hermas2_client_tests COMMAND hermas2_client_tests)
+        add_executable(hermas2_registration_server_tests
+                       tests/test_registration_server_linux.c)
+        target_link_libraries(hermas2_registration_server_tests PRIVATE
+            hermas2_daemon)
+        target_compile_options(hermas2_registration_server_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS2_SANITIZE)
+            target_compile_options(
+                hermas2_registration_server_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(
+                hermas2_registration_server_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+        if(DEFINED HERMAS2_TEST_SAGA_IMAGE)
+            add_test(NAME hermas2_registration_server_tests
+                     COMMAND hermas2_registration_server_tests
+                             "${HERMAS2_TEST_SAGA_IMAGE}")
+        endif()
         if(DEFINED HERMAS2_TEST_IMAGE)
             add_executable(hermas2_loop_tests tests/test_loop_linux.c)
             target_link_libraries(hermas2_loop_tests PRIVATE hermas2_daemon)

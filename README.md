@@ -199,6 +199,9 @@ attempts, and caller-visible terminal values remain separate authorities.
 
 The caller boundary is now executable end to end:
 
+- A fixed-capacity nonblocking registration owner prevents a connected but
+  silent app from stalling other registrations or workflow execution, and
+  publishes an app socket only after its exact contract is acknowledged.
 - A narrow control adapter admits one validated `EXECUTE` frame into the
   bounded daemon loop and exposes only terminal `EXECUTION_RESULT` frames.
 - A Linux control server owns at most 16 one-execution caller connections,

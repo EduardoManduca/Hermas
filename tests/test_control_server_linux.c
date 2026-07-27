@@ -242,6 +242,14 @@ int main(int argc, char **argv) {
     }
     close(caller[1]);
     close(app[1]);
+    hermas2_control_server_close(server);
+    hermas2_control_server_close(server);
+    for (size_t index = 0u;
+         index < HERMAS2_CONTROL_MAX_CLIENTS; ++index) {
+        if (server->clients[index].file_descriptor != -1) {
+            return fail("control close did not preserve descriptor sentinels");
+        }
+    }
     hermas2_daemon_registry_close(&registry);
     free(server);
     free(loop);

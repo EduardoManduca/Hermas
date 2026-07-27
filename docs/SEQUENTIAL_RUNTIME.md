@@ -47,9 +47,15 @@ listed in the loaded image, requires its exact fingerprint, rejects duplicate
 connections, and acknowledges the app before exposing its descriptor for
 dispatch.
 
-The current accept operation is a blocking primitive intended to be called
-when the listener is ready. A later bounded event-loop layer will own readiness
-polling; it will not change registration or execution semantics.
+The original accept operation remains a blocking primitive for focused
+integration fixtures. Production composition uses
+`hermas2_registration_server`: a fixed 64-slot owner for accepted but not yet
+registered app connections. It polls every pending descriptor without heap
+allocation, validates one complete registration packet, rejects malformed,
+unknown, mismatched, and duplicate apps independently, and publishes an app
+descriptor to the registry only after the complete `REGISTER_OK` packet has
+been sent. A connected client that sends nothing cannot block another app or
+the execution loop.
 
 The end-to-end test runs the orchestrator and three independently built app
 executables over `AF_UNIX` `SOCK_SEQPACKET`. Grade List returns

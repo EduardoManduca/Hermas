@@ -307,6 +307,10 @@ void hermas2_control_server_close(
         close_descriptor(&server->clients[index]);
     }
     memset(server, 0, sizeof(*server));
+    for (size_t index = 0u;
+         index < HERMAS2_CONTROL_MAX_CLIENTS; ++index) {
+        server->clients[index].file_descriptor = -1;
+    }
 }
 
 const char *hermas2_control_server_result_name(
