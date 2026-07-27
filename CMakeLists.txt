@@ -81,15 +81,23 @@ if(UNIX)
     target_link_libraries(hermas2_daemon PUBLIC
         hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
         hermas2_compensation hermas2_result hermas2_saga)
+    add_library(hermas2_control STATIC src/control.c)
+    target_include_directories(hermas2_control PUBLIC include)
+    target_link_libraries(hermas2_control PUBLIC
+        hermas2_daemon hermas2_protocol)
     add_library(hermas2_edge STATIC src/edge_linux.c)
     target_include_directories(hermas2_edge PUBLIC include)
     target_link_libraries(hermas2_edge PUBLIC hermas2_protocol)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas2_daemon PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(hermas2_control PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(hermas2_edge PRIVATE -Wall -Wextra -Wpedantic -Werror)
         if(HERMAS2_SANITIZE)
             target_compile_options(hermas2_daemon PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_compile_options(hermas2_control PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_compile_options(hermas2_edge PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -339,6 +347,22 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME hermas2_saga_loop_tests
                      COMMAND hermas2_saga_loop_tests
+                             "${HERMAS2_TEST_SAGA_IMAGE}")
+            add_executable(hermas2_control_tests
+                           tests/test_control_linux.c)
+            target_link_libraries(hermas2_control_tests PRIVATE
+                hermas2_control)
+            target_compile_options(hermas2_control_tests PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+            if(HERMAS2_SANITIZE)
+                target_compile_options(hermas2_control_tests PRIVATE
+                    -fsanitize=address,undefined
+                    -fno-omit-frame-pointer)
+                target_link_options(hermas2_control_tests PRIVATE
+                    -fsanitize=address,undefined)
+            endif()
+            add_test(NAME hermas2_control_tests
+                     COMMAND hermas2_control_tests
                              "${HERMAS2_TEST_SAGA_IMAGE}")
         endif()
     endif()
