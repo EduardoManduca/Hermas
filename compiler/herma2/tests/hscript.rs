@@ -15,6 +15,20 @@ fn grade_catalog() -> Catalog {
 }
 
 #[test]
+fn hash_is_the_only_line_comment_syntax() {
+    let catalog = grade_catalog();
+    let body = "\
+workflow print(input: printer::PrintInput) -> printer::Printed
+errors { printer::PrintError }
+{ return input |> printer/print() }";
+    let with_hash = format!("# workflow comment\n{body}");
+    let with_double_slash = format!("// workflow comment\n{body}");
+
+    assert!(compile_hscript(&catalog, "hash.hscript2", &with_hash).is_ok());
+    assert!(compile_hscript(&catalog, "double-slash.hscript2", &with_double_slash).is_err());
+}
+
+#[test]
 fn real_grade_pipeline_is_compiled_with_complete_provenance() {
     let (catalog, graph) = build_grade_pipeline().expect("real pipeline compiles");
     assert!(graph.has_complete_source_map());

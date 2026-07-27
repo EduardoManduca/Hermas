@@ -158,7 +158,7 @@ fn lex(file: &str, source: &str) -> Result<Vec<Token>, SchemaDiagnostic> {
             column = 1;
             continue;
         }
-        if byte == b'#' || (byte == b'/' && bytes.get(offset + 1) == Some(&b'/')) {
+        if byte == b'#' {
             while offset < bytes.len() && bytes[offset] != b'\n' {
                 offset += 1;
                 column += 1;

@@ -40,9 +40,9 @@ action reserve {
 }
 ```
 
-Commas and semicolons are optional separators. `#` and `//` begin line
-comments. Declarations and record or variant members may be reordered without
-changing the contract fingerprint.
+Commas and semicolons are optional separators. `#` begins a line comment.
+`//` is not comment syntax. Declarations and record or variant members may be
+reordered without changing the contract fingerprint.
 
 ## Representations
 

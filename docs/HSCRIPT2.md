@@ -93,8 +93,9 @@ match-case    := "case" identifier identifier "{"
 ```
 
 The final pipeline may omit the `return` keyword when it is the only or last
-body expression. Commas and semicolons are optional separators. `#` and `//`
-begin line comments.
+body expression. Commas and semicolons are optional separators. `#` begins a
+line comment. `//` is not comment syntax; `/` remains reserved for
+`app/action` paths.
 
 Workflow names must be unique within a module. A source containing multiple
 workflows must begin with a stable module declaration:

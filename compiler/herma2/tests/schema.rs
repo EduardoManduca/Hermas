@@ -33,6 +33,17 @@ action reserve {
 "#;
 
 #[test]
+fn hash_is_the_only_line_comment_syntax() {
+    let source = format!("# schema comment\n{COMPLETE_SCHEMA}");
+    let mut catalog = Catalog::new();
+    assert!(compile_schema(&mut catalog, "hash.hschema2", &source).is_ok());
+
+    let mut rejected_catalog = Catalog::new();
+    let rejected = format!("// schema comment\n{COMPLETE_SCHEMA}");
+    assert!(compile_schema(&mut rejected_catalog, "double-slash.hschema2", &rejected).is_err());
+}
+
+#[test]
 fn compiles_closed_contracts_and_reversible_actions() {
     let mut catalog = Catalog::new();
     let contract =
