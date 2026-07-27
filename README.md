@@ -190,6 +190,27 @@ exact-token lookup capability implemented by both memory logs and the Linux
 file store. It revalidates all durable enrollments and image routes before
 exposing the first compensation.
 
+Terminal workflow values now have their own durable result store. Its
+canonical append-only records bind a Success or AppError value to exact
+execution, workflow, and image identity; restart recovery restores an exact
+application failure only after revalidating that identity, outcome, failed
+edge type, and canonical payload. Journal facts, compensation tokens, saga
+attempts, and caller-visible terminal values remain separate authorities.
+
+The caller boundary is now executable end to end:
+
+- A narrow control adapter admits one validated `EXECUTE` frame into the
+  bounded daemon loop and exposes only terminal `EXECUTION_RESULT` frames.
+- A Linux control server owns at most 16 one-execution caller connections,
+  preserves work after caller disconnect, and releases execution storage only
+  after a complete atomic result send or terminal abandonment.
+- A caller-owned C client ABI connects over `AF_UNIX` `SOCK_SEQPACKET`, sends
+  one typed workflow input, and validates the matching terminal result without
+  assigning identities, retrying execution, or interpreting business values.
+- A real socket integration test drives caller, daemon, and app boundaries and
+  proves that an exact app failure returns to the caller with all connection
+  and execution slots released.
+
 ## Build and Inspect
 
 From this directory:
