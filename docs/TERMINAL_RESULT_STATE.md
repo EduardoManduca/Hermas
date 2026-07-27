@@ -40,3 +40,18 @@ current user, creates it with mode `0600`, and holds an exclusive nonblocking
 writer lock. Startup maps and validates the complete log before initializing
 the next sequence. Every append is fully written and followed by `fdatasync`;
 exact lookup maps only for the duration of the copy into caller-owned memory.
+
+## Daemon integration
+
+`hermas2_daemon_loop_attach_results` installs the writer and lookup capability
+as a pair before any execution is admitted. For a known terminal result, the
+loop appends the value after the final Action fact and before
+`ExecutionFinished`. A live saga continues to retain the same in-memory result
+while compensating.
+
+On safe saga restart, the daemon accepts a stored `AppError` only when its
+identity and outcome match the recovered forward facts, its nominal Type IDs
+match the immutable failed Action edge, and its payload validates canonically
+as both source and destination types. A configured store with a missing or
+inconsistent value is a recovery error. Without a configured store, legacy
+restart remains conservative and exposes `Unknown`.

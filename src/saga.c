@@ -246,6 +246,7 @@ hermas2_saga_result hermas2_saga_recover(
     if (!started || !finished || largest_request == UINT64_MAX) {
         return HERMAS2_SAGA_INCONSISTENT_HISTORY;
     }
+    execution->completed_steps = execution->remaining;
     if (execution->original_outcome == HERMAS2_OUTCOME_UNKNOWN) {
         execution->state = HERMAS2_SAGA_BLOCKED;
         return HERMAS2_SAGA_UNSAFE_HISTORY;
@@ -318,6 +319,7 @@ hermas2_saga_result hermas2_saga_begin_live(
         return HERMAS2_SAGA_NOT_SAGA;
     }
     execution->remaining = completed_steps;
+    execution->completed_steps = completed_steps;
     for (uint8_t index = 0u; index < completed_steps; ++index) {
         if (forward_request_ids[index] == 0u ||
             forward_request_ids[index] >= next_request_id) {

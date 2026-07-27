@@ -64,6 +64,7 @@ typedef struct hermas2_saga_execution {
     uint16_t original_outcome;
     uint16_t compensation_outcome;
     uint8_t step_count;
+    uint8_t completed_steps;
     uint8_t remaining;
     hermas2_saga_state state;
     hermas2_saga_step steps[HERMAS2_SAGA_MAX_STEPS];

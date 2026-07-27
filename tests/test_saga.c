@@ -368,6 +368,7 @@ static void test_durable_reconciliation(fixture *value) {
                 HERMAS2_SAGA_OK &&
                 hermas2_saga_reconcile(&execution, log, size) ==
                     HERMAS2_SAGA_OK &&
+                execution.completed_steps == 2u &&
                 execution.remaining == 1u &&
                 execution.state == HERMAS2_SAGA_READY,
             "durable reverse success was not skipped");

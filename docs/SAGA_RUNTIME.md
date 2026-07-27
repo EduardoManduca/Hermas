@@ -123,14 +123,19 @@ lookup capability and starts the driver in resume mode, so no second `Started`
 record is emitted. Durable reverse successes are skipped and only the next
 uncompensated ordinal is delivered.
 
-The execution journal deliberately contains no business payloads. Therefore a
-restarted loop cannot recreate the original domain-error value even though it
-can prove the original outcome and finish rollback. Its eventual client result
-is conservatively `Unknown` with no value. This is distinct from delivery
-uncertainty: compensation itself may be fully proven, while the pre-crash
-terminal value remains unavailable. Exact known-failure replay requires a
-future durable terminal-value authority; the daemon never fabricates it from
-journal metadata.
+The execution journal deliberately contains no business payloads. When the
+terminal-result authority is attached, the daemon synchronizes a validated
+known terminal value before `ExecutionFinished`. Restart then requires the
+exact execution/workflow/image key, original outcome, failed saga edge Type
+IDs, and canonical payload before restoring the original `AppError`.
+
+Without that authority, a restarted loop still finishes safe compensation but
+its eventual client result is conservatively `Unknown` with no value. If the
+authority is configured and the required value is missing or inconsistent,
+resume fails instead of silently degrading. This is distinct from delivery
+uncertainty: compensation itself may be fully proven while the pre-crash
+terminal value is unavailable. The daemon never fabricates it from journal
+metadata.
 
 On Linux, `hermas2_saga_recover_files` performs this recovery directly from
 the three already-open, exclusively locked durable files. It maps them

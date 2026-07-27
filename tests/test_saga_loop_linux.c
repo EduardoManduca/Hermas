@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "hermas2/daemon.h"
+#include "hermas2/result_linux.h"
 #include "hermas2/saga_linux.h"
 
 #include <poll.h>
@@ -17,17 +18,24 @@
     (32u * HERMAS2_SAGA_LOG_RECORD_SIZE)
 #define JOURNAL_STORE_CAPACITY \
     (64u * HERMAS2_JOURNAL_RECORD_SIZE)
+#define RESULT_STORE_CAPACITY \
+    (HERMAS2_DAEMON_MAX_EXECUTIONS * \
+     (HERMAS2_RESULT_HEADER_SIZE + 8u))
 
 typedef struct durable_probe {
     unsigned order;
     unsigned last_token_order;
     unsigned last_success_order;
+    unsigned last_result_order;
+    unsigned last_finished_order;
     uint8_t journal[JOURNAL_STORE_CAPACITY];
     size_t journal_bytes;
     uint8_t tokens[TOKEN_STORE_CAPACITY];
     size_t token_bytes;
     uint8_t saga[SAGA_STORE_CAPACITY];
     size_t saga_bytes;
+    uint8_t results[RESULT_STORE_CAPACITY];
+    size_t result_bytes;
 } durable_probe;
 
 typedef struct app_channel {
@@ -47,9 +55,11 @@ typedef struct durable_files {
     char journal_path[96];
     char token_path[96];
     char saga_path[96];
+    char result_path[96];
     hermas2_journal_file journal;
     hermas2_compensation_file compensation;
     hermas2_saga_log_file saga;
+    hermas2_result_file results;
 } durable_files;
 
 static hermas2_journal_result write_journal(
@@ -68,8 +78,53 @@ static hermas2_journal_result write_journal(
     ++probe->order;
     if (decoded.kind == HERMAS2_JOURNAL_ACTION_SUCCEEDED) {
         probe->last_success_order = probe->order;
+    } else if (decoded.kind == HERMAS2_JOURNAL_EXECUTION_FINISHED) {
+        probe->last_finished_order = probe->order;
     }
     return HERMAS2_JOURNAL_OK;
+}
+
+static hermas2_result_store_result write_result_value(
+    void *context,
+    const uint8_t *record,
+    size_t size) {
+    durable_probe *probe = context;
+    if (size > sizeof(probe->results) - probe->result_bytes) {
+        return HERMAS2_RESULT_STORE_WRITE_ERROR;
+    }
+    memcpy(probe->results + probe->result_bytes, record, size);
+    probe->result_bytes += size;
+    probe->last_result_order = ++probe->order;
+    return HERMAS2_RESULT_STORE_OK;
+}
+
+static hermas2_result_store_result lookup_result_value(
+    void *context,
+    hermas2_result_key key,
+    hermas2_result_record *record,
+    uint8_t *value,
+    size_t value_capacity,
+    int *found) {
+    const durable_probe *probe = context;
+    return hermas2_result_find(
+        probe->results, probe->result_bytes, key, record,
+        value, value_capacity, found);
+}
+
+static hermas2_result_store_result lookup_missing_result(
+    void *context,
+    hermas2_result_key key,
+    hermas2_result_record *record,
+    uint8_t *value,
+    size_t value_capacity,
+    int *found) {
+    (void)context;
+    (void)key;
+    (void)record;
+    (void)value;
+    (void)value_capacity;
+    *found = 0;
+    return HERMAS2_RESULT_STORE_OK;
 }
 
 static hermas2_compensation_result write_token(
@@ -325,12 +380,16 @@ static int open_durable_files(
             "%s/tokens.h2comp", files->directory) <= 0 ||
         snprintf(
             files->saga_path, sizeof(files->saga_path),
-            "%s/attempts.h2saga", files->directory) <= 0) {
+            "%s/attempts.h2saga", files->directory) <= 0 ||
+        snprintf(
+            files->result_path, sizeof(files->result_path),
+            "%s/results.h2result", files->directory) <= 0) {
         return 0;
     }
     hermas2_journal_summary journal_summary;
     hermas2_compensation_summary token_summary;
     hermas2_saga_log_summary saga_summary;
+    hermas2_result_summary result_summary;
     if (hermas2_journal_file_open(
             &files->journal, files->journal_path,
             &journal_summary) != HERMAS2_JOURNAL_OK ||
@@ -339,7 +398,10 @@ static int open_durable_files(
             &token_summary) != HERMAS2_COMPENSATION_OK ||
         hermas2_saga_log_file_open(
             &files->saga, files->saga_path,
-            &saga_summary) != HERMAS2_SAGA_LOG_OK) {
+            &saga_summary) != HERMAS2_SAGA_LOG_OK ||
+        hermas2_result_file_open(
+            &files->results, files->result_path,
+            &result_summary) != HERMAS2_RESULT_STORE_OK) {
         return 0;
     }
     size_t journal_count =
@@ -376,6 +438,23 @@ static int open_durable_files(
         }
         token_offset += record_size;
     }
+    size_t result_offset = 0u;
+    while (result_offset < probe->result_bytes) {
+        hermas2_result_record record;
+        size_t record_size = 0u;
+        if (hermas2_result_decode(
+                probe->results + result_offset,
+                probe->result_bytes - result_offset,
+                &record, &record_size) !=
+                HERMAS2_RESULT_STORE_OK ||
+            hermas2_result_writer_append(
+                &files->results.writer, record,
+                scratch, sizeof(scratch)) !=
+                HERMAS2_RESULT_STORE_OK) {
+            return 0;
+        }
+        result_offset += record_size;
+    }
     size_t saga_count =
         probe->saga_bytes / HERMAS2_SAGA_LOG_RECORD_SIZE;
     for (size_t index = 0u; index < saga_count; ++index) {
@@ -395,12 +474,14 @@ static int open_durable_files(
 }
 
 static void close_durable_files(durable_files *files) {
+    hermas2_result_file_close(&files->results);
     hermas2_saga_log_file_close(&files->saga);
     hermas2_compensation_file_close(&files->compensation);
     hermas2_journal_file_close(&files->journal);
     (void)unlink(files->saga_path);
     (void)unlink(files->token_path);
     (void)unlink(files->journal_path);
+    (void)unlink(files->result_path);
     (void)rmdir(files->directory);
 }
 
@@ -443,6 +524,7 @@ int main(int argc, char **argv) {
     hermas2_journal_writer journal;
     hermas2_compensation_writer compensation;
     hermas2_saga_log_writer saga_log;
+    hermas2_result_writer results;
     hermas2_daemon_loop loop;
     if (hermas2_journal_writer_init(
             &journal, write_journal, &probe, 1u) !=
@@ -453,10 +535,16 @@ int main(int argc, char **argv) {
         hermas2_saga_log_writer_init(
             &saga_log, write_saga, &probe, 1u) !=
             HERMAS2_SAGA_LOG_OK ||
+        hermas2_result_writer_init(
+            &results, write_result_value, &probe, 1u) !=
+            HERMAS2_RESULT_STORE_OK ||
         hermas2_daemon_loop_init(
             &loop, &registry, image, image_size) !=
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_journal(&loop, &journal, 7u) !=
+            HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_results(
+            &loop, &results, lookup_result_value, &probe) !=
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
             &loop, &compensation, lookup_token, &probe,
@@ -517,6 +605,8 @@ int main(int argc, char **argv) {
         final_result.payload_length == 0u &&
         probe.last_token_order != 0u &&
         probe.last_success_order > probe.last_token_order &&
+        probe.last_result_order != 0u &&
+        probe.last_finished_order > probe.last_result_order &&
         hermas2_compensation_scan(
             probe.tokens, probe.token_bytes, NULL, NULL,
             &token_summary) == HERMAS2_COMPENSATION_OK &&
@@ -562,6 +652,7 @@ int main(int argc, char **argv) {
             &files.saga, 42u, 7u) !=
             HERMAS2_SAGA_OK ||
         recovered.state != HERMAS2_SAGA_READY ||
+        recovered.completed_steps != 2u ||
         recovered.remaining != 1u) {
         fputs("durable saga recovery failed\n", stderr);
         return 1;
@@ -573,6 +664,30 @@ int main(int argc, char **argv) {
         hermas2_daemon_loop_attach_journal(
             &loop, &files.journal.writer, 7u) !=
             HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_results(
+            &loop, &files.results.writer,
+            lookup_missing_result, NULL) != HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_saga(
+            &loop, &files.compensation.writer,
+            hermas2_compensation_file_lookup,
+            &files.compensation, &files.saga.writer) !=
+            HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_resume_saga(
+            &loop, &recovered) != HERMAS2_LOOP_RESULT_ERROR) {
+        fputs("missing configured terminal result was accepted\n", stderr);
+        return 1;
+    }
+
+    if (hermas2_daemon_loop_init(
+            &loop, &registry, image, image_size) !=
+            HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_journal(
+            &loop, &files.journal.writer, 7u) !=
+            HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_results(
+            &loop, &files.results.writer,
+            hermas2_result_file_lookup,
+            &files.results) != HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
             &loop, &files.compensation.writer,
             hermas2_compensation_file_lookup,
@@ -605,7 +720,7 @@ int main(int argc, char **argv) {
         hermas2_daemon_loop_result(
             &loop, 42u, &restarted_result) ==
             HERMAS2_LOOP_OK &&
-        restarted_result.outcome == HERMAS2_OUTCOME_UNKNOWN &&
+        restarted_result.outcome == HERMAS2_OUTCOME_APP_ERROR &&
         restarted_result.payload_length == 0u &&
         hermas2_saga_log_file_scan(
             &files.saga, &saga_summary) ==
@@ -626,6 +741,10 @@ int main(int argc, char **argv) {
         hermas2_daemon_loop_attach_journal(
             &loop, &files.journal.writer, 7u) !=
             HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_results(
+            &loop, &files.results.writer,
+            hermas2_result_file_lookup,
+            &files.results) != HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
             &loop, &files.compensation.writer,
             hermas2_compensation_file_lookup,
@@ -660,6 +779,10 @@ int main(int argc, char **argv) {
         hermas2_daemon_loop_attach_journal(
             &loop, &files.journal.writer, 7u) !=
             HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_attach_results(
+            &loop, &files.results.writer,
+            hermas2_result_file_lookup,
+            &files.results) != HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_saga(
             &loop, &files.compensation.writer,
             hermas2_compensation_file_lookup,

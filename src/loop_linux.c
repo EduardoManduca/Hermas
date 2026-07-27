@@ -102,6 +102,43 @@ static hermas2_loop_result append_finished_if_complete(
     return result;
 }
 
+static hermas2_loop_result append_result_if_complete(
+    hermas2_daemon_loop *loop,
+    hermas2_loop_slot *slot) {
+    if (slot->execution.state != HERMAS2_EXECUTION_COMPLETE ||
+        slot->result_stored ||
+        (slot->execution.terminal_outcome !=
+             HERMAS2_OUTCOME_SUCCESS &&
+         slot->execution.terminal_outcome !=
+             HERMAS2_OUTCOME_APP_ERROR)) {
+        return HERMAS2_LOOP_OK;
+    }
+    if (loop->results == NULL) {
+        return HERMAS2_LOOP_OK;
+    }
+    hermas2_result_record record = {
+        .key = {
+            .execution_id = slot->execution.execution_id,
+            .workflow_id = loop->workflow_id,
+            .image_fingerprint = loop->image_fingerprint
+        },
+        .outcome = slot->execution.terminal_outcome,
+        .source_type = slot->execution.value_source_type,
+        .destination_type =
+            slot->execution.value_destination_type,
+        .value = slot->execution.value_buffer,
+        .value_length = (uint32_t)slot->execution.value_length
+    };
+    if (hermas2_result_writer_append(
+            loop->results, record, loop->compensation_scratch,
+            sizeof(loop->compensation_scratch)) !=
+        HERMAS2_RESULT_STORE_OK) {
+        return HERMAS2_LOOP_RESULT_ERROR;
+    }
+    slot->result_stored = true;
+    return HERMAS2_LOOP_OK;
+}
+
 typedef struct saga_route {
     uint16_t compensation_app;
     uint16_t compensation_action;
@@ -145,6 +182,42 @@ static bool find_saga_route(
                     ((uint16_t)loop->image[offset + 13u] << 8u)
             };
             return true;
+        }
+    }
+    return false;
+}
+
+static bool recovered_failure_matches(
+    const hermas2_daemon_loop *loop,
+    const hermas2_saga_execution *execution,
+    const hermas2_result_record *result) {
+    if (execution->completed_steps >= execution->step_count) {
+        return false;
+    }
+    uint16_t node =
+        execution->steps[execution->completed_steps].forward_node;
+    uint16_t edge_count =
+        (uint16_t)loop->image[32] |
+        ((uint16_t)loop->image[33] << 8u);
+    size_t edges =
+        (size_t)loop->image[52] |
+        ((size_t)loop->image[53] << 8u) |
+        ((size_t)loop->image[54] << 16u) |
+        ((size_t)loop->image[55] << 24u);
+    for (uint16_t index = 0u; index < edge_count; ++index) {
+        size_t offset = edges + (size_t)index * 16u;
+        uint16_t source_node =
+            (uint16_t)loop->image[offset + 4u] |
+            ((uint16_t)loop->image[offset + 5u] << 8u);
+        if (loop->image[offset] == 2u && source_node == node) {
+            uint16_t source_type =
+                (uint16_t)loop->image[offset + 8u] |
+                ((uint16_t)loop->image[offset + 9u] << 8u);
+            uint16_t destination_type =
+                (uint16_t)loop->image[offset + 10u] |
+                ((uint16_t)loop->image[offset + 11u] << 8u);
+            return result->source_type == source_type &&
+                   result->destination_type == destination_type;
         }
     }
     return false;
@@ -557,6 +630,11 @@ static hermas2_loop_result receive_result(
         drop_app(loop->registry, slot->app_id);
     }
     slot->owns_app = false;
+    hermas2_loop_result stored =
+        append_result_if_complete(loop, slot);
+    if (stored != HERMAS2_LOOP_OK) {
+        return stored;
+    }
     hermas2_loop_result finished =
         append_finished_if_complete(loop, slot);
     if (finished != HERMAS2_LOOP_OK) {
@@ -620,6 +698,23 @@ hermas2_loop_result hermas2_daemon_loop_attach_compensation(
     return HERMAS2_LOOP_OK;
 }
 
+hermas2_loop_result hermas2_daemon_loop_attach_results(
+    hermas2_daemon_loop *loop,
+    hermas2_result_writer *results,
+    hermas2_result_lookup result_lookup,
+    void *result_lookup_context) {
+    if (loop == NULL || results == NULL ||
+        results->write == NULL || result_lookup == NULL ||
+        loop->image == NULL ||
+        hermas2_daemon_loop_active(loop) != 0u) {
+        return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    loop->results = results;
+    loop->result_lookup = result_lookup;
+    loop->result_lookup_context = result_lookup_context;
+    return HERMAS2_LOOP_OK;
+}
+
 hermas2_loop_result hermas2_daemon_loop_attach_saga(
     hermas2_daemon_loop *loop,
     hermas2_compensation_writer *compensation,
@@ -676,17 +771,68 @@ hermas2_loop_result hermas2_daemon_loop_resume_saga(
             memset(slot, 0, sizeof(*slot));
             return HERMAS2_LOOP_COMPENSATION_ERROR;
         }
+        uint16_t terminal_outcome = HERMAS2_OUTCOME_UNKNOWN;
+        uint16_t source_type = 0u;
+        uint16_t destination_type = 0u;
+        size_t value_length = 0u;
+        if (loop->result_lookup != NULL &&
+            execution->original_outcome ==
+                HERMAS2_OUTCOME_APP_ERROR) {
+            hermas2_result_record result;
+            int found = 0;
+            hermas2_result_store_result looked_up =
+                loop->result_lookup(
+                    loop->result_lookup_context,
+                    (hermas2_result_key){
+                        .execution_id = execution->execution_id,
+                        .workflow_id = execution->workflow_id,
+                        .image_fingerprint =
+                            execution->image_fingerprint
+                    },
+                    &result, slot->value, sizeof(slot->value),
+                    &found);
+            if (looked_up != HERMAS2_RESULT_STORE_OK ||
+                found == 0 ||
+                result.key.execution_id !=
+                    execution->execution_id ||
+                result.key.workflow_id != execution->workflow_id ||
+                result.key.image_fingerprint !=
+                    execution->image_fingerprint ||
+                result.outcome != execution->original_outcome ||
+                !recovered_failure_matches(
+                    loop, execution, &result) ||
+                hermas2_image_validate_value(
+                    loop->image, loop->image_size,
+                    result.source_type, slot->value,
+                    result.value_length) != HERMAS2_IMAGE_OK ||
+                hermas2_image_validate_value(
+                    loop->image, loop->image_size,
+                    result.destination_type, slot->value,
+                    result.value_length) != HERMAS2_IMAGE_OK) {
+                memset(slot, 0, sizeof(*slot));
+                return HERMAS2_LOOP_RESULT_ERROR;
+            }
+            terminal_outcome = result.outcome;
+            source_type = result.source_type;
+            destination_type = result.destination_type;
+            value_length = result.value_length;
+        }
         slot->execution = (hermas2_execution){
             .image = loop->image,
             .image_size = loop->image_size,
             .value_buffer = slot->value,
             .value_capacity = sizeof(slot->value),
+            .value_length = value_length,
             .execution_id = execution->execution_id,
-            .terminal_outcome = HERMAS2_OUTCOME_UNKNOWN,
+            .value_source_type = source_type,
+            .value_destination_type = destination_type,
+            .terminal_outcome = terminal_outcome,
             .state = HERMAS2_EXECUTION_COMPLETE
         };
         slot->active = true;
         slot->journal_finished = true;
+        slot->result_stored =
+            terminal_outcome != HERMAS2_OUTCOME_UNKNOWN;
         slot->compensating = true;
         return HERMAS2_LOOP_OK;
     }
@@ -852,7 +998,7 @@ const char *hermas2_loop_result_name(hermas2_loop_result result) {
         "ok", "invalid-argument", "invalid-image", "capacity-exhausted",
         "duplicate-execution", "unknown-execution", "execution-active",
         "poll-error", "runtime-error", "protocol-error", "journal-error",
-        "compensation-error"
+        "compensation-error", "result-error"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0]) ? names[index] : "unknown";

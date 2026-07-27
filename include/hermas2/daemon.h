@@ -4,6 +4,7 @@
 #include "hermas2/runtime.h"
 #include "hermas2/journal.h"
 #include "hermas2/compensation.h"
+#include "hermas2/result.h"
 #include "hermas2/saga.h"
 
 #include <stdbool.h>
@@ -69,7 +70,8 @@ typedef enum hermas2_loop_result {
     HERMAS2_LOOP_RUNTIME_ERROR,
     HERMAS2_LOOP_PROTOCOL_ERROR,
     HERMAS2_LOOP_JOURNAL_ERROR,
-    HERMAS2_LOOP_COMPENSATION_ERROR
+    HERMAS2_LOOP_COMPENSATION_ERROR,
+    HERMAS2_LOOP_RESULT_ERROR
 } hermas2_loop_result;
 
 typedef struct hermas2_loop_slot {
@@ -84,6 +86,7 @@ typedef struct hermas2_loop_slot {
     bool active;
     bool owns_app;
     bool journal_finished;
+    bool result_stored;
     bool compensating;
     uint8_t saga_success_count;
     uint64_t saga_forward_requests[HERMAS2_SAGA_MAX_STEPS];
@@ -97,6 +100,9 @@ typedef struct hermas2_daemon_loop {
     hermas2_loop_slot executions[HERMAS2_DAEMON_MAX_EXECUTIONS];
     size_t scheduler_cursor;
     hermas2_journal_writer *journal;
+    hermas2_result_writer *results;
+    hermas2_result_lookup result_lookup;
+    void *result_lookup_context;
     hermas2_compensation_writer *compensation;
     hermas2_compensation_lookup compensation_lookup;
     void *compensation_lookup_context;
@@ -129,6 +135,12 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
 hermas2_loop_result hermas2_daemon_loop_attach_compensation(
     hermas2_daemon_loop *loop,
     hermas2_compensation_writer *compensation);
+
+hermas2_loop_result hermas2_daemon_loop_attach_results(
+    hermas2_daemon_loop *loop,
+    hermas2_result_writer *results,
+    hermas2_result_lookup result_lookup,
+    void *result_lookup_context);
 
 hermas2_loop_result hermas2_daemon_loop_attach_saga(
     hermas2_daemon_loop *loop,

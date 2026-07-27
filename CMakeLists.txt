@@ -80,7 +80,7 @@ if(UNIX)
     target_include_directories(hermas2_daemon PUBLIC include)
     target_link_libraries(hermas2_daemon PUBLIC
         hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
-        hermas2_compensation hermas2_saga)
+        hermas2_compensation hermas2_result hermas2_saga)
     add_library(hermas2_edge STATIC src/edge_linux.c)
     target_include_directories(hermas2_edge PUBLIC include)
     target_link_libraries(hermas2_edge PUBLIC hermas2_protocol)
