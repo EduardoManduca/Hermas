@@ -82,6 +82,7 @@ if(UNIX)
         hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
         hermas2_compensation hermas2_result hermas2_saga)
     add_library(hermas2_control STATIC src/control.c)
+    target_sources(hermas2_control PRIVATE src/control_linux.c)
     target_include_directories(hermas2_control PUBLIC include)
     target_link_libraries(hermas2_control PUBLIC
         hermas2_daemon hermas2_protocol)
@@ -363,6 +364,24 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME hermas2_control_tests
                      COMMAND hermas2_control_tests
+                             "${HERMAS2_TEST_SAGA_IMAGE}")
+            add_executable(hermas2_control_server_tests
+                           tests/test_control_server_linux.c)
+            target_link_libraries(hermas2_control_server_tests PRIVATE
+                hermas2_control)
+            target_compile_options(hermas2_control_server_tests PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+            if(HERMAS2_SANITIZE)
+                target_compile_options(
+                    hermas2_control_server_tests PRIVATE
+                    -fsanitize=address,undefined
+                    -fno-omit-frame-pointer)
+                target_link_options(
+                    hermas2_control_server_tests PRIVATE
+                    -fsanitize=address,undefined)
+            endif()
+            add_test(NAME hermas2_control_server_tests
+                     COMMAND hermas2_control_server_tests
                              "${HERMAS2_TEST_SAGA_IMAGE}")
         endif()
     endif()

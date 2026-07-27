@@ -20,3 +20,21 @@ value bytes across nonblocking send retries.
 
 The adapter allocates no memory and retains no client state. Linux connection
 ownership and multiplexing are a separate layer built on these operations.
+
+## Linux connection ownership
+
+`hermas2_control_server` owns at most 16 caller connections, matching the
+daemon execution bound. Each connection may submit exactly one `EXECUTE`.
+Malformed frames receive a best-effort `PROTOCOL_ERROR` and are closed.
+
+Results use nonblocking atomic `SOCK_SEQPACKET` sends. The execution slot is
+released only after the complete `EXECUTION_RESULT` packet is sent. If a
+caller disconnects first, its execution remains tracked without a descriptor;
+the server lets already-admitted work reach a terminal state and then releases
+it without attempting delivery. Extra caller traffic after admission detaches
+the caller rather than altering execution.
+
+The current server composes its client poll set with the existing app loop
+through a fixed 10-millisecond active quantum. This bounds result latency
+without merging client connections into Action-delivery state. No correctness
+decision depends on the quantum.
