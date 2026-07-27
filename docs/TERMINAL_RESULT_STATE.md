@@ -32,3 +32,11 @@ A result record without the matching terminal journal fact is an orphan and
 does not authorize a client result. A terminal known-value fact without
 exactly one matching result record is incomplete recovery state. Neither case
 permits reconstructing or guessing application bytes.
+
+## Linux storage
+
+The Linux implementation accepts only a non-symlink regular file owned by the
+current user, creates it with mode `0600`, and holds an exclusive nonblocking
+writer lock. Startup maps and validates the complete log before initializing
+the next sequence. Every append is fully written and followed by `fdatasync`;
+exact lookup maps only for the duration of the copy into caller-owned memory.

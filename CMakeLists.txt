@@ -62,6 +62,7 @@ if(UNIX)
     target_sources(hermas2_journal PRIVATE src/journal_linux.c)
     target_sources(hermas2_compensation PRIVATE
                    src/compensation_linux.c)
+    target_sources(hermas2_result PRIVATE src/result_linux.c)
     target_sources(hermas2_saga_log PRIVATE src/saga_log_linux.c)
     target_sources(hermas2_saga PRIVATE src/saga_linux.c)
     add_executable(hermas2_history tools/hermas2_history.c)
@@ -237,6 +238,20 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME hermas2_compensation_linux_tests
                  COMMAND hermas2_compensation_linux_tests)
+        add_executable(hermas2_result_linux_tests
+                       tests/test_result_linux.c)
+        target_link_libraries(hermas2_result_linux_tests
+                              PRIVATE hermas2_result)
+        target_compile_options(hermas2_result_linux_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS2_SANITIZE)
+            target_compile_options(hermas2_result_linux_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2_result_linux_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+        add_test(NAME hermas2_result_linux_tests
+                 COMMAND hermas2_result_linux_tests)
         add_executable(hermas2_journal_linux_tests
                        tests/test_journal_linux.c)
         target_link_libraries(hermas2_journal_linux_tests
