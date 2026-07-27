@@ -9,5 +9,5 @@ action get {
     input Empty
     success GradeList
     error GradeError
-    kind irreversible
+    compensation none
 }

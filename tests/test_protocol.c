@@ -34,9 +34,9 @@ int main(void) {
     uint8_t fingerprint[32] = {1u};
     uint8_t payload[16] = {2u, 3u, 5u, 7u};
     hermas2_frame frames[] = {
-        {HERMAS2_FRAME_REGISTER_APP, 0u, 0u, 1u, 0u, 0u, 0u,
+        {HERMAS2_FRAME_REGISTER_APP, 0u, 0u, 1u, 2u, 0u, 0u,
          HERMAS2_OUTCOME_NONE, fingerprint, sizeof(fingerprint)},
-        {HERMAS2_FRAME_REGISTER_OK, 0u, 0u, 1u, 0u, 0u, 0u,
+        {HERMAS2_FRAME_REGISTER_OK, 0u, 0u, 1u, 2u, 0u, 0u,
          HERMAS2_OUTCOME_NONE, NULL, 0u},
         {HERMAS2_FRAME_INVOKE, 10u, 20u, 1u, 2u, 3u, 4u,
          HERMAS2_OUTCOME_NONE, payload, sizeof(payload)},

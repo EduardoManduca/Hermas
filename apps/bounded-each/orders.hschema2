@@ -9,5 +9,5 @@ action list {
     input Trigger
     success Orders
     error OrdersError
-    kind irreversible
+    compensation none
 }

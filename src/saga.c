@@ -6,12 +6,6 @@
 #include <string.h>
 
 #define HEADER_NODE_COUNT 30u
-#define HEADER_REGION_COUNT 68u
-#define HEADER_NODES_OFFSET 48u
-#define HEADER_REGIONS_OFFSET 72u
-#define NODE_RECORD_SIZE 8u
-#define REGION_RECORD_SIZE 16u
-
 static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
     return (uint16_t)bytes[offset] |
            ((uint16_t)bytes[offset + 1u] << 8u);
@@ -26,10 +20,14 @@ static uint32_t read_u32(const uint8_t *bytes, size_t offset) {
 }
 
 static bool load_steps(hermas2_saga_execution *execution) {
-    uint16_t regions = read_u16(execution->image, HEADER_REGION_COUNT);
-    size_t base = read_u32(execution->image, HEADER_REGIONS_OFFSET);
+    uint16_t regions = read_u16(
+        execution->image, HERMAS2_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t base = read_u32(
+        execution->image, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
     for (uint16_t index = 0u; index < regions; ++index) {
-        size_t offset = base + (size_t)index * REGION_RECORD_SIZE;
+        size_t offset =
+            base + (size_t)index *
+                       HERMAS2_IMAGE_REGION_RECORD_SIZE;
         if (execution->image[offset] != 3u) {
             continue;
         }
@@ -38,7 +36,7 @@ static bool load_steps(hermas2_saga_execution *execution) {
             index + 1u >= regions) {
             return false;
         }
-        size_t outcome = offset + REGION_RECORD_SIZE;
+        size_t outcome = offset + HERMAS2_IMAGE_REGION_RECORD_SIZE;
         if (execution->image[outcome] != 4u ||
             read_u16(execution->image, outcome + 2u) !=
                 read_u16(execution->image, offset + 2u)) {
@@ -76,9 +74,11 @@ static bool forward_route_matches(
     const hermas2_saga_execution *execution,
     const hermas2_saga_step *step,
     const hermas2_journal_record *record) {
-    size_t nodes = read_u32(execution->image, HEADER_NODES_OFFSET);
+    size_t nodes = read_u32(
+        execution->image, HERMAS2_IMAGE_HEADER_NODES_OFFSET);
     size_t node = nodes +
-                  ((size_t)step->forward_node - 1u) * NODE_RECORD_SIZE;
+                  ((size_t)step->forward_node - 1u) *
+                      HERMAS2_IMAGE_NODE_RECORD_SIZE;
     return record->app_id == read_u16(execution->image, node + 4u) &&
            record->action_id == read_u16(execution->image, node + 2u);
 }

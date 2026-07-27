@@ -2,9 +2,11 @@
 
 Status: implemented language contract for Milestone 2.
 
-HSchema2 describes one application's identity, nominal boundary types, Action
-ports, and effect classification. It contains no workflow, transport,
-deployment, handler, or business-logic configuration.
+The standard source form is exactly one HSchema2 file per application. That
+file describes the application's identity, shared nominal boundary types,
+Action ports, and public compensation capabilities. It contains no workflow,
+transport, deployment, handler, business-logic configuration, or claim that a
+compensation restores an application's internal state.
 
 ## Contract shape
 
@@ -29,20 +31,20 @@ action release {
     input Receipt
     success Empty
     error Failure
-    kind irreversible
+    compensation none
 }
 
 action reserve {
     input Request
     success Receipt
     error Failure
-    kind reversible compensate release
+    compensation release
 }
 ```
 
 Commas and semicolons are optional separators. `#` begins a line comment.
 `//` is not comment syntax. Declarations and record or variant members may be
-reordered without changing the contract fingerprint.
+reordered without changing semantic fingerprints.
 
 ## Representations
 
@@ -92,32 +94,48 @@ an Action.
 Each Action declares exactly one input, success, and app-error nominal type.
 All three types must be declared by the same app.
 
-The `kind` clause is mandatory:
+The `compensation` clause is mandatory:
 
-- `kind irreversible` declares an Action for which Hermas2 has no automatic
-  compensation relationship.
-- `kind reversible compensate NAME` declares that the Action's successful
-  value is a compensation token accepted by the named Action.
+- `compensation none` declares that the contract publishes no automatic
+  compensation relationship for this Action.
+- `compensation NAME` publishes the named Action as a compensation capability.
+  The first Action's successful value is the token accepted by `NAME`.
 
-The compensation must be a distinct Action in the same contract. The
-reversible Action's success representation must fit the compensation Action's
-input representation. Compensation remains an ordinary forward Action;
-Hermas2 does not infer an undo operation.
+The named compensation must be a distinct Action in the same contract. The
+source Action's success representation must fit the compensation Action's
+input representation. Compensation remains an ordinary forward Action.
+HSchema2 does not claim literal reversibility, prove business-level recovery,
+or infer an undo operation. The app developer owns those semantics; HScript2
+decides whether a workflow enrolls the capability in an explicit saga.
 
 Delivery uncertainty is not an HSchema2 app-error type. Every invocation
 acquires a separate delivery-`Unknown` graph port from the execution model.
 
-## Contract fingerprints
+## Schema and Action fingerprints
 
-`herma2` canonicalizes nominal declarations while preserving named type
-references, orders nominal types, Actions, record fields, and variant cases by
-name, and serializes the result with the versioned `hermas2-contract-v1`
-canonical form. The contract fingerprint is the SHA-256 digest of that
-canonical form.
+`herma2` emits two related identities:
 
-Whitespace, comments, separators, and declaration order therefore do not
-change identity. Nominal names, representations, Action ports, effect kinds,
-and compensation relationships do.
+- The schema fingerprint covers the complete app file through the versioned
+  `hermas2-contract-v2` canonical form. It is useful for catalog inspection.
+- Each Action fingerprint covers one Action's name, ports, compensation
+  declaration, and only the transitive closure of nominal types used by those
+  declarations through `hermas2-action-v1`. Graph images and daemon
+  registration use this narrower identity.
+
+Both are SHA-256 digests of canonical descriptive bytes. SHA-256 is used as a
+stable content identifier, not for encryption, authentication, secrecy, or
+trust. Hermas2 has no cryptographic key dependency.
+
+Whitespace, comments, separators, and declaration order do not change either
+identity. Adding an unrelated type or Action changes the schema fingerprint
+but leaves existing Action fingerprints unchanged. Changing a referenced
+nominal name or representation, an Action port, or its compensation capability
+changes that Action's fingerprint.
+
+An app may declare many Actions in its one file. At deployment, each Action
+registers as its own endpoint. Numeric Action IDs remain catalog-local: the
+daemon matches `(app identity, Action fingerprint)` and translates between the
+graph image's Action ID and the app's current local Action ID.
 
 ## Checking contracts
 

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define HERMAS2_REGISTRATION_MAX_PENDING HERMAS2_DAEMON_MAX_APPS
+#define HERMAS2_REGISTRATION_MAX_PENDING HERMAS2_DAEMON_MAX_ACTIONS
 
 typedef enum hermas2_registration_server_result {
     HERMAS2_REGISTRATION_SERVER_OK = 0,
@@ -19,7 +19,8 @@ typedef enum hermas2_registration_server_result {
 
 typedef struct hermas2_registration_client {
     int file_descriptor;
-    size_t app_index;
+    size_t action_index;
+    uint16_t registered_action_id;
     bool active;
     bool validated;
 } hermas2_registration_client;

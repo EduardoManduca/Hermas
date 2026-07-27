@@ -49,6 +49,6 @@ static int get_grades(
 int main(int argc, char **argv) {
     uint8_t result[32];
     return hermas2_example_app_run_once(
-        argc, argv, GRADE_LIST_APP_ID, get_grades,
+        argc, argv, GRADE_LIST_APP_ID, GET_ACTION_ID, get_grades,
         result, sizeof(result));
 }

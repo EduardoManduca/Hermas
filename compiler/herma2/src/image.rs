@@ -9,9 +9,10 @@ use crate::graph::{
 };
 
 const MAGIC: &[u8; 4] = b"H2GI";
-const VERSION: u16 = 1;
+const VERSION: u16 = 2;
 const HEADER_SIZE: usize = 80;
-const APP_RECORD_SIZE: usize = 36;
+const ACTION_CONTRACT_RECORD_SIZE: usize = 36;
+const MAX_ACTION_CONTRACTS: usize = MAX_GRAPH_NODES + 16;
 const TYPE_RECORD_SIZE: usize = 8;
 const NODE_RECORD_SIZE: usize = 8;
 const EDGE_RECORD_SIZE: usize = 16;
@@ -74,7 +75,7 @@ pub struct DecodedImage {
     pub input_type: u16,
     pub success_type: u16,
     pub error_count: usize,
-    pub app_count: usize,
+    pub action_contract_count: usize,
     pub type_count: usize,
     pub node_count: usize,
     pub edge_count: usize,
@@ -131,33 +132,33 @@ fn encode_representation(representation: &Representation, output: &mut Vec<u8>) 
 
 pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Vec<u8>, ImageError> {
     let view = graph.image_view(catalog);
-    let required_apps = view
+    let required_actions = view
         .nodes
         .iter()
         .filter_map(|node| match node {
-            ImageNode::Action(action) => catalog.action(*action).map(|item| item.app),
+            ImageNode::Action(action) => Some(*action),
             ImageNode::Dispatch(_) | ImageNode::Fork(_, _) | ImageNode::Join(_) => None,
             ImageNode::Terminal(_) => None,
         })
-        .chain(
-            view.saga_steps
-                .iter()
-                .filter_map(|step| catalog.action(step.compensation).map(|action| action.app)),
-        )
+        .chain(view.saga_steps.iter().map(|step| step.compensation))
         .collect::<BTreeSet<_>>();
-    let apps = required_apps
+    let action_contracts = required_actions
         .iter()
-        .map(|app_id| {
-            let app = catalog
-                .app(*app_id)
-                .expect("verified Action has a known app");
-            app.fingerprint
-                .map(|fingerprint| (*app_id, fingerprint))
+        .map(|action_id| {
+            let action = catalog
+                .action(*action_id)
+                .expect("verified graph Action exists");
+            action
+                .fingerprint
+                .map(|fingerprint| (action.app, *action_id, fingerprint))
                 .ok_or_else(|| {
                     ImageError::new(
                         ImageErrorCode::MissingFingerprint,
                         None,
-                        format!("app `{}` has no compiled contract fingerprint", app.name),
+                        format!(
+                            "Action `{}` has no compiled contract fingerprint",
+                            catalog.action_name(*action_id)
+                        ),
                     )
                 })
         })
@@ -193,13 +194,13 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
         })
         .collect::<Vec<_>>();
     let errors_offset = HEADER_SIZE;
-    let apps_offset = align4(
+    let action_contracts_offset = align4(
         errors_offset
             .checked_add(view.errors.len() * 2)
             .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?,
     )?;
-    let types_offset = apps_offset
-        .checked_add(apps.len() * APP_RECORD_SIZE)
+    let types_offset = action_contracts_offset
+        .checked_add(action_contracts.len() * ACTION_CONTRACT_RECORD_SIZE)
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
     let nodes_offset = types_offset
         .checked_add(types.len() * TYPE_RECORD_SIZE)
@@ -240,12 +241,12 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
     put_u16(&mut output, view.input.raw());
     put_u16(&mut output, view.success.raw());
     put_u16(&mut output, view.errors.len() as u16);
-    put_u16(&mut output, apps.len() as u16);
+    put_u16(&mut output, action_contracts.len() as u16);
     put_u16(&mut output, view.nodes.len() as u16);
     put_u16(&mut output, view.edges.len() as u16);
     put_u16(&mut output, types.len() as u16);
     put_u32(&mut output, u32_size(errors_offset)?);
-    put_u32(&mut output, u32_size(apps_offset)?);
+    put_u32(&mut output, u32_size(action_contracts_offset)?);
     put_u32(&mut output, u32_size(types_offset)?);
     put_u32(&mut output, u32_size(nodes_offset)?);
     put_u32(&mut output, u32_size(edges_offset)?);
@@ -260,10 +261,10 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
     for error in &view.errors {
         put_u16(&mut output, error.raw());
     }
-    pad_to(&mut output, apps_offset);
-    for (app, fingerprint) in &apps {
+    pad_to(&mut output, action_contracts_offset);
+    for (app, action, fingerprint) in &action_contracts {
         put_u16(&mut output, app.raw());
-        put_u16(&mut output, 0);
+        put_u16(&mut output, action.raw());
         output.extend_from_slice(fingerprint);
     }
     for (type_id, relative_offset) in &type_representations {
@@ -535,7 +536,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     let input_type = read_u16(bytes, 22)?;
     let success_type = read_u16(bytes, 24)?;
     let error_count = read_u16(bytes, 26)? as usize;
-    let app_count = read_u16(bytes, 28)? as usize;
+    let action_contract_count = read_u16(bytes, 28)? as usize;
     let node_count = read_u16(bytes, 30)? as usize;
     let edge_count = read_u16(bytes, 32)? as usize;
     let type_count = read_u16(bytes, 34)? as usize;
@@ -544,8 +545,8 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         || success_type == 0
         || error_count == 0
         || error_count > MAX_IMAGE_ERRORS
-        || app_count == 0
-        || app_count > MAX_GRAPH_NODES
+        || action_contract_count == 0
+        || action_contract_count > MAX_ACTION_CONTRACTS
         || type_count == 0
         || type_count > MAX_IMAGE_ERRORS
         || node_count > MAX_GRAPH_NODES
@@ -559,7 +560,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         ));
     }
     let errors_offset = read_u32(bytes, 36)? as usize;
-    let apps_offset = read_u32(bytes, 40)? as usize;
+    let action_contracts_offset = read_u32(bytes, 40)? as usize;
     let types_offset = read_u32(bytes, 44)? as usize;
     let nodes_offset = read_u32(bytes, 48)? as usize;
     let edges_offset = read_u32(bytes, 52)? as usize;
@@ -567,8 +568,9 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     let strings_offset = read_u32(bytes, 60)? as usize;
     let representations_length = read_u32(bytes, 64)? as usize;
     let regions_offset = read_u32(bytes, 72)? as usize;
-    let expected_apps = align4(HEADER_SIZE + error_count * 2)?;
-    let expected_types = expected_apps + app_count * APP_RECORD_SIZE;
+    let expected_action_contracts = align4(HEADER_SIZE + error_count * 2)?;
+    let expected_types =
+        expected_action_contracts + action_contract_count * ACTION_CONTRACT_RECORD_SIZE;
     let expected_nodes = expected_types + type_count * TYPE_RECORD_SIZE;
     let expected_edges = expected_nodes + node_count * NODE_RECORD_SIZE;
     let expected_regions = expected_edges + edge_count * EDGE_RECORD_SIZE;
@@ -577,7 +579,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         .checked_add(representations_length)
         .ok_or_else(|| ImageError::new(ImageErrorCode::InvalidOffset, None, "size overflow"))?;
     if errors_offset != HEADER_SIZE
-        || apps_offset != expected_apps
+        || action_contracts_offset != expected_action_contracts
         || types_offset != expected_types
         || nodes_offset != expected_nodes
         || edges_offset != expected_edges
@@ -615,15 +617,16 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
             "workflow error IDs must be unique and nonzero",
         ));
     }
-    let mut apps = BTreeSet::new();
-    for index in 0..app_count {
-        let offset = apps_offset + index * APP_RECORD_SIZE;
+    let mut action_contracts = BTreeSet::new();
+    for index in 0..action_contract_count {
+        let offset = action_contracts_offset + index * ACTION_CONTRACT_RECORD_SIZE;
         let app = read_u16(bytes, offset)?;
-        if app == 0 || read_u16(bytes, offset + 2)? != 0 || !apps.insert(app) {
+        let action = read_u16(bytes, offset + 2)?;
+        if app == 0 || action == 0 || !action_contracts.insert((app, action)) {
             return Err(ImageError::new(
                 ImageErrorCode::InvalidRecord,
                 Some(offset),
-                "invalid or duplicate app record",
+                "invalid or duplicate Action contract record",
             ));
         }
     }
@@ -676,7 +679,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         let reserved = read_u16(bytes, offset + 6)?;
         let node_id = u16::try_from(index + 1).expect("node count is bounded");
         match kind {
-            1 if subtype == 0 && action != 0 && apps.contains(&app) && reserved == 0 => {
+            1 if subtype == 0 && action_contracts.contains(&(app, action)) && reserved == 0 => {
                 action_nodes.insert(node_id);
             }
             3 if subtype == 0
@@ -873,7 +876,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                     || !action_nodes.contains(&forward)
                     || compensation_app == 0
                     || compensation_action == 0
-                    || !apps.contains(&compensation_app)
+                    || !action_contracts.contains(&(compensation_app, compensation_action))
                     || ordinal != u16::try_from(saga_steps.len() + 1).expect("region count fits")
                     || !compatible
                     || read_u16(bytes, offset + 14)? != 0
@@ -1195,7 +1198,7 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
         input_type,
         success_type,
         error_count,
-        app_count,
+        action_contract_count,
         type_count,
         node_count,
         edge_count,

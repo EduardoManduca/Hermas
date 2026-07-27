@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt;
 
-use crate::catalog::{ActionId, ActionKind, Catalog, TypeId};
+use crate::catalog::{ActionId, Catalog, Compensation, TypeId};
 
 pub const MAX_GRAPH_NODES: usize = 64;
 pub const MAX_GRAPH_EDGES: usize = 192;
@@ -535,7 +535,7 @@ impl VerifiedGraph {
                 .filter_map(|(index, node)| match node {
                     NodeKind::Action(action_id) => {
                         let action = catalog.action(*action_id)?;
-                        let ActionKind::Reversible { compensation } = action.kind else {
+                        let Compensation::Action(compensation) = action.compensation else {
                             return None;
                         };
                         let compensation_action = catalog.action(compensation)?;
@@ -812,12 +812,12 @@ fn verify(graph: &GraphBuilder, catalog: &Catalog) -> Result<(), GraphError> {
                         format!("unknown Action ID {}", action_id.raw()),
                     )
                 })?;
-                if !matches!(action.kind, ActionKind::Reversible { .. }) {
+                if !matches!(action.compensation, Compensation::Action(_)) {
                     return Err(GraphError::node(
                         GraphErrorCode::InvalidRoute,
                         node_id(index),
                         format!(
-                            "Action {} is irreversible and cannot enter a saga",
+                            "Action {} declares no compensation and cannot enter a saga",
                             catalog.action_name(*action_id)
                         ),
                     ));

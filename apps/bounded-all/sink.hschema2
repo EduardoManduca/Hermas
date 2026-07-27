@@ -8,5 +8,5 @@ action use {
     input Input
     success Done
     error SinkError
-    kind irreversible
+    compensation none
 }

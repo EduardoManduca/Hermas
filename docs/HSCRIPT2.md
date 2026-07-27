@@ -278,13 +278,13 @@ compensated in reverse order:
 }
 ```
 
-Every forward Action must be declared `reversible` in HSchema2 and name a
-valid compensation Action. The initial bounded slice admits 1 through 16
-Actions and excludes `all`, `each`, and variant dispatch. Compilation records
-each forward node, compensation app and Action, forward success token type,
-compensation input/success/error types, and dense forward ordinal. This
-metadata is sufficient for strict reverse runtime scheduling without loading
-the compiler catalog.
+Every forward Action must publish a named compensation in HSchema2; an Action
+declaring `compensation none` cannot enter a saga. The initial bounded slice
+admits 1 through 16 Actions and excludes `all`, `each`, and variant dispatch.
+Compilation records each forward node, compensation app and Action, forward
+success token type, compensation input/success/error types, and dense forward
+ordinal. This metadata is sufficient for strict reverse runtime scheduling
+without loading the compiler catalog.
 
 ## Source provenance
 

@@ -11,7 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define HERMAS2_DAEMON_MAX_APPS 64u
+#define HERMAS2_DAEMON_MAX_ACTIONS 80u
 #define HERMAS2_DAEMON_MAX_EXECUTIONS 16u
 
 typedef enum hermas2_daemon_result {
@@ -28,15 +28,17 @@ typedef enum hermas2_daemon_result {
     HERMAS2_DAEMON_SEND_ERROR
 } hermas2_daemon_result;
 
-typedef struct hermas2_daemon_app {
+typedef struct hermas2_daemon_action {
     uint16_t app_id;
+    uint16_t action_id;
+    uint16_t registered_action_id;
     int file_descriptor;
     uint8_t contract_fingerprint[32];
-} hermas2_daemon_app;
+} hermas2_daemon_action;
 
 typedef struct hermas2_daemon_registry {
-    hermas2_daemon_app apps[HERMAS2_DAEMON_MAX_APPS];
-    size_t app_count;
+    hermas2_daemon_action actions[HERMAS2_DAEMON_MAX_ACTIONS];
+    size_t action_count;
 } hermas2_daemon_registry;
 
 hermas2_daemon_result hermas2_daemon_registry_init(
@@ -50,9 +52,11 @@ hermas2_daemon_result hermas2_daemon_registry_accept(
     uint8_t *packet_buffer,
     size_t packet_capacity);
 
-int hermas2_daemon_registry_find(
+int hermas2_daemon_registry_find_action(
     const hermas2_daemon_registry *registry,
-    uint16_t app_id);
+    uint16_t app_id,
+    uint16_t action_id,
+    uint16_t *registered_action_id);
 
 void hermas2_daemon_registry_close(hermas2_daemon_registry *registry);
 
@@ -84,7 +88,7 @@ typedef struct hermas2_loop_slot {
     uint16_t app_id;
     uint16_t action_id;
     bool active;
-    bool owns_app;
+    bool owns_action;
     bool journal_finished;
     bool result_stored;
     bool compensating;

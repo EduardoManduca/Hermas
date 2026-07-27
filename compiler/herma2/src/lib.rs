@@ -5,8 +5,8 @@ pub mod image;
 pub mod schema;
 
 pub use catalog::{
-    ActionDeclaration, ActionDef, ActionId, ActionKind, ActionKindDeclaration, AppDef, AppId,
-    Catalog, CatalogError, NominalType, Representation, TypeId,
+    ActionDeclaration, ActionDef, ActionId, AppDef, AppId, Catalog, CatalogError, Compensation,
+    CompensationDeclaration, NominalType, Representation, TypeId,
 };
 pub use graph::{
     EdgeSource, EdgeTarget, GraphBuilder, GraphError, GraphErrorCode, NodeId, ResourceSummary,

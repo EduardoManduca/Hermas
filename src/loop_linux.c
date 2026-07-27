@@ -8,6 +8,22 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+static uint16_t image_u16(
+    const uint8_t *image,
+    size_t offset) {
+    return (uint16_t)image[offset] |
+           ((uint16_t)image[offset + 1u] << 8u);
+}
+
+static size_t image_u32(
+    const uint8_t *image,
+    size_t offset) {
+    return (size_t)image[offset] |
+           ((size_t)image[offset + 1u] << 8u) |
+           ((size_t)image[offset + 2u] << 16u) |
+           ((size_t)image[offset + 3u] << 24u);
+}
+
 static hermas2_loop_slot *find_execution(
     hermas2_daemon_loop *loop,
     uint64_t execution_id) {
@@ -32,10 +48,13 @@ static const hermas2_loop_slot *find_const_execution(
     return NULL;
 }
 
-static void drop_app(hermas2_daemon_registry *registry, uint16_t app_id) {
-    for (size_t index = 0u; index < registry->app_count; ++index) {
-        hermas2_daemon_app *app = &registry->apps[index];
-        if (app->app_id == app_id) {
+static void drop_action(
+    hermas2_daemon_registry *registry,
+    uint16_t app_id,
+    uint16_t action_id) {
+    for (size_t index = 0u; index < registry->action_count; ++index) {
+        hermas2_daemon_action *app = &registry->actions[index];
+        if (app->app_id == app_id && app->action_id == action_id) {
             if (app->file_descriptor >= 0) {
                 close(app->file_descriptor);
                 app->file_descriptor = -1;
@@ -45,13 +64,14 @@ static void drop_app(hermas2_daemon_registry *registry, uint16_t app_id) {
     }
 }
 
-static bool app_owned_by_other(
+static bool action_owned_by_other(
     const hermas2_daemon_loop *loop,
     const hermas2_loop_slot *candidate) {
     for (size_t index = 0u; index < HERMAS2_DAEMON_MAX_EXECUTIONS; ++index) {
         const hermas2_loop_slot *slot = &loop->executions[index];
-        if (slot != candidate && slot->active && slot->owns_app &&
-            slot->app_id == candidate->app_id) {
+        if (slot != candidate && slot->active && slot->owns_action &&
+            slot->app_id == candidate->app_id &&
+            slot->action_id == candidate->action_id) {
             return true;
         }
     }
@@ -151,35 +171,28 @@ static bool find_saga_route(
     const hermas2_daemon_loop *loop,
     uint16_t node,
     saga_route *route) {
-    uint16_t regions = (uint16_t)loop->image[68] |
-                       ((uint16_t)loop->image[69] << 8u);
-    size_t base =
-        (size_t)loop->image[72] |
-        ((size_t)loop->image[73] << 8u) |
-        ((size_t)loop->image[74] << 16u) |
-        ((size_t)loop->image[75] << 24u);
+    uint16_t regions = image_u16(
+        loop->image, HERMAS2_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t base = image_u32(
+        loop->image, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
     for (uint16_t index = 0u; index < regions; ++index) {
-        size_t offset = base + (size_t)index * 16u;
+        size_t offset =
+            base + (size_t)index *
+                       HERMAS2_IMAGE_REGION_RECORD_SIZE;
         uint16_t forward =
-            (uint16_t)loop->image[offset + 2u] |
-            ((uint16_t)loop->image[offset + 3u] << 8u);
+            image_u16(loop->image, offset + 2u);
         if (loop->image[offset] == 3u && forward == node) {
             *route = (saga_route){
                 .compensation_app =
-                    (uint16_t)loop->image[offset + 4u] |
-                    ((uint16_t)loop->image[offset + 5u] << 8u),
+                    image_u16(loop->image, offset + 4u),
                 .compensation_action =
-                    (uint16_t)loop->image[offset + 6u] |
-                    ((uint16_t)loop->image[offset + 7u] << 8u),
+                    image_u16(loop->image, offset + 6u),
                 .source_type =
-                    (uint16_t)loop->image[offset + 8u] |
-                    ((uint16_t)loop->image[offset + 9u] << 8u),
+                    image_u16(loop->image, offset + 8u),
                 .destination_type =
-                    (uint16_t)loop->image[offset + 10u] |
-                    ((uint16_t)loop->image[offset + 11u] << 8u),
+                    image_u16(loop->image, offset + 10u),
                 .ordinal =
-                    (uint16_t)loop->image[offset + 12u] |
-                    ((uint16_t)loop->image[offset + 13u] << 8u)
+                    image_u16(loop->image, offset + 12u)
             };
             return true;
         }
@@ -196,26 +209,21 @@ static bool recovered_failure_matches(
     }
     uint16_t node =
         execution->steps[execution->completed_steps].forward_node;
-    uint16_t edge_count =
-        (uint16_t)loop->image[32] |
-        ((uint16_t)loop->image[33] << 8u);
-    size_t edges =
-        (size_t)loop->image[52] |
-        ((size_t)loop->image[53] << 8u) |
-        ((size_t)loop->image[54] << 16u) |
-        ((size_t)loop->image[55] << 24u);
+    uint16_t edge_count = image_u16(
+        loop->image, HERMAS2_IMAGE_HEADER_EDGE_COUNT_OFFSET);
+    size_t edges = image_u32(
+        loop->image, HERMAS2_IMAGE_HEADER_EDGES_OFFSET);
     for (uint16_t index = 0u; index < edge_count; ++index) {
-        size_t offset = edges + (size_t)index * 16u;
+        size_t offset =
+            edges + (size_t)index *
+                        HERMAS2_IMAGE_EDGE_RECORD_SIZE;
         uint16_t source_node =
-            (uint16_t)loop->image[offset + 4u] |
-            ((uint16_t)loop->image[offset + 5u] << 8u);
+            image_u16(loop->image, offset + 4u);
         if (loop->image[offset] == 2u && source_node == node) {
             uint16_t source_type =
-                (uint16_t)loop->image[offset + 8u] |
-                ((uint16_t)loop->image[offset + 9u] << 8u);
+                image_u16(loop->image, offset + 8u);
             uint16_t destination_type =
-                (uint16_t)loop->image[offset + 10u] |
-                ((uint16_t)loop->image[offset + 11u] << 8u);
+                image_u16(loop->image, offset + 10u);
             return result->source_type == source_type &&
                    result->destination_type == destination_type;
         }
@@ -386,31 +394,33 @@ static hermas2_loop_result prepare_ready(
     return HERMAS2_LOOP_OK;
 }
 
-static void assign_available_apps(hermas2_daemon_loop *loop) {
+static void assign_available_actions(hermas2_daemon_loop *loop) {
     for (size_t step = 0u; step < HERMAS2_DAEMON_MAX_EXECUTIONS; ++step) {
         size_t index =
             (loop->scheduler_cursor + step) % HERMAS2_DAEMON_MAX_EXECUTIONS;
         hermas2_loop_slot *slot = &loop->executions[index];
-        if (!slot->active || slot->owns_app ||
+        if (!slot->active || slot->owns_action ||
             !slot_prepared(slot) ||
-            hermas2_daemon_registry_find(loop->registry, slot->app_id) < 0 ||
-            app_owned_by_other(loop, slot)) {
+            hermas2_daemon_registry_find_action(
+                loop->registry, slot->app_id, slot->action_id, NULL) < 0 ||
+            action_owned_by_other(loop, slot)) {
             continue;
         }
-        slot->owns_app = true;
+        slot->owns_action = true;
     }
 }
 
-static hermas2_loop_result reconcile_missing_apps(
+static hermas2_loop_result reconcile_missing_actions(
     hermas2_daemon_loop *loop,
     size_t *progress_count) {
     for (size_t index = 0u; index < HERMAS2_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas2_loop_slot *slot = &loop->executions[index];
-        if (!slot->active || !slot->owns_app ||
-            hermas2_daemon_registry_find(loop->registry, slot->app_id) >= 0) {
+        if (!slot->active || !slot->owns_action ||
+            hermas2_daemon_registry_find_action(
+                loop->registry, slot->app_id, slot->action_id, NULL) >= 0) {
             continue;
         }
-        slot->owns_app = false;
+        slot->owns_action = false;
         if (slot_sent(slot)) {
             if (slot->compensating) {
                 if (hermas2_saga_driver_mark_unknown(&slot->saga) !=
@@ -445,12 +455,16 @@ static hermas2_loop_result send_invocation(
     hermas2_daemon_loop *loop,
     hermas2_loop_slot *slot,
     size_t *progress_count) {
-    int descriptor =
-        hermas2_daemon_registry_find(loop->registry, slot->app_id);
+    uint16_t registered_action_id = 0u;
+    int descriptor = hermas2_daemon_registry_find_action(
+        loop->registry, slot->app_id, slot->action_id,
+        &registered_action_id);
     if (descriptor < 0) {
-        slot->owns_app = false;
+        slot->owns_action = false;
         return HERMAS2_LOOP_OK;
     }
+    slot->packet[34] = (uint8_t)(registered_action_id & 0xffu);
+    slot->packet[35] = (uint8_t)(registered_action_id >> 8u);
     ssize_t sent = send(descriptor, slot->packet, slot->packet_size,
                         MSG_DONTWAIT | MSG_NOSIGNAL);
     if (sent == (ssize_t)slot->packet_size) {
@@ -484,8 +498,8 @@ static hermas2_loop_result send_invocation(
             HERMAS2_SAGA_OK) {
             return HERMAS2_LOOP_COMPENSATION_ERROR;
         }
-        slot->owns_app = false;
-        drop_app(loop->registry, slot->app_id);
+        slot->owns_action = false;
+        drop_action(loop->registry, slot->app_id, slot->action_id);
         fail_compensation(slot, HERMAS2_OUTCOME_NOT_SENT);
         ++*progress_count;
         return HERMAS2_LOOP_OK;
@@ -500,8 +514,8 @@ static hermas2_loop_result send_invocation(
         HERMAS2_RUNTIME_OK) {
         return HERMAS2_LOOP_RUNTIME_ERROR;
     }
-    slot->owns_app = false;
-    drop_app(loop->registry, slot->app_id);
+    slot->owns_action = false;
+    drop_action(loop->registry, slot->app_id, slot->action_id);
     journaled = append_finished_if_complete(loop, slot);
     if (journaled != HERMAS2_LOOP_OK) {
         return journaled;
@@ -519,15 +533,17 @@ static hermas2_loop_result receive_result(
     hermas2_daemon_loop *loop,
     hermas2_loop_slot *slot,
     size_t *progress_count) {
-    int descriptor =
-        hermas2_daemon_registry_find(loop->registry, slot->app_id);
+    uint16_t registered_action_id = 0u;
+    int descriptor = hermas2_daemon_registry_find_action(
+        loop->registry, slot->app_id, slot->action_id,
+        &registered_action_id);
     if (descriptor < 0) {
         if (slot->compensating) {
             if (hermas2_saga_driver_mark_unknown(&slot->saga) !=
                 HERMAS2_SAGA_OK) {
                 return HERMAS2_LOOP_COMPENSATION_ERROR;
             }
-            slot->owns_app = false;
+            slot->owns_action = false;
             fail_compensation(slot, HERMAS2_OUTCOME_UNKNOWN);
             ++*progress_count;
             return HERMAS2_LOOP_OK;
@@ -542,7 +558,7 @@ static hermas2_loop_result receive_result(
             HERMAS2_RUNTIME_OK) {
             return HERMAS2_LOOP_RUNTIME_ERROR;
         }
-        slot->owns_app = false;
+        slot->owns_action = false;
         journaled = append_finished_if_complete(loop, slot);
         if (journaled != HERMAS2_LOOP_OK) {
             return journaled;
@@ -570,6 +586,13 @@ static hermas2_loop_result receive_result(
         !transport_failed &&
         hermas2_protocol_decode(slot->packet, (size_t)received, &result) ==
             HERMAS2_PROTOCOL_OK;
+    if (decoded) {
+        if (result.action_id != registered_action_id) {
+            decoded = false;
+        } else {
+            result.action_id = slot->action_id;
+        }
+    }
     if (slot->compensating) {
         bool accepted =
             decoded &&
@@ -580,7 +603,7 @@ static hermas2_loop_result receive_result(
                 HERMAS2_SAGA_OK) {
                 return HERMAS2_LOOP_COMPENSATION_ERROR;
             }
-            drop_app(loop->registry, slot->app_id);
+            drop_action(loop->registry, slot->app_id, slot->action_id);
             fail_compensation(slot, HERMAS2_OUTCOME_UNKNOWN);
         } else if (slot->saga.execution.state ==
                    HERMAS2_SAGA_COMPLETE) {
@@ -590,7 +613,7 @@ static hermas2_loop_result receive_result(
             fail_compensation(
                 slot, slot->saga.execution.compensation_outcome);
         }
-        slot->owns_app = false;
+        slot->owns_action = false;
         ++*progress_count;
         return HERMAS2_LOOP_OK;
     }
@@ -627,9 +650,9 @@ static hermas2_loop_result receive_result(
             HERMAS2_RUNTIME_OK) {
             return HERMAS2_LOOP_RUNTIME_ERROR;
         }
-        drop_app(loop->registry, slot->app_id);
+        drop_action(loop->registry, slot->app_id, slot->action_id);
     }
-    slot->owns_app = false;
+    slot->owns_action = false;
     hermas2_loop_result stored =
         append_result_if_complete(loop, slot);
     if (stored != HERMAS2_LOOP_OK) {
@@ -909,21 +932,22 @@ hermas2_loop_result hermas2_daemon_loop_poll(
         return prepared;
     }
     hermas2_loop_result reconciled =
-        reconcile_missing_apps(loop, progress_count);
+        reconcile_missing_actions(loop, progress_count);
     if (reconciled != HERMAS2_LOOP_OK) {
         return reconciled;
     }
-    assign_available_apps(loop);
+    assign_available_actions(loop);
     struct pollfd poll_items[HERMAS2_DAEMON_MAX_EXECUTIONS];
     hermas2_loop_slot *owners[HERMAS2_DAEMON_MAX_EXECUTIONS];
     size_t poll_count = 0u;
     for (size_t index = 0u; index < HERMAS2_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas2_loop_slot *slot = &loop->executions[index];
-        if (!slot->active || !slot->owns_app) {
+        if (!slot->active || !slot->owns_action) {
             continue;
         }
         int descriptor =
-            hermas2_daemon_registry_find(loop->registry, slot->app_id);
+            hermas2_daemon_registry_find_action(
+                loop->registry, slot->app_id, slot->action_id, NULL);
         if (descriptor < 0) {
             continue;
         }

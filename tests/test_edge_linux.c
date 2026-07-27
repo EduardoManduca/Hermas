@@ -51,12 +51,14 @@ static int server(int listener) {
     if (client < 0 || size <= 0 ||
         hermas2_protocol_decode(packet, (size_t)size, &frame) !=
             HERMAS2_PROTOCOL_OK ||
-        frame.kind != HERMAS2_FRAME_REGISTER_APP || frame.app_id != 1u) {
+        frame.kind != HERMAS2_FRAME_REGISTER_APP || frame.app_id != 1u ||
+        frame.action_id != 7u) {
         return 1;
     }
     hermas2_frame acknowledged = {
         .kind = HERMAS2_FRAME_REGISTER_OK,
         .app_id = 1u,
+        .action_id = 7u,
         .outcome = HERMAS2_OUTCOME_NONE
     };
     if (!send_encoded(client, &acknowledged)) {
@@ -117,7 +119,7 @@ int main(void) {
     uint8_t packet[128];
     uint8_t result[16];
     int valid =
-        hermas2_edge_connect(&edge, path, 1u, fingerprint) == HERMAS2_EDGE_OK &&
+        hermas2_edge_connect(&edge, path, 1u, 7u, fingerprint) == HERMAS2_EDGE_OK &&
         hermas2_edge_serve_once(&edge, packet, sizeof(packet), result,
                                 sizeof(result), handler, NULL) ==
             HERMAS2_EDGE_OK &&

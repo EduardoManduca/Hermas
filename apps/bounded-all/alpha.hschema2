@@ -8,5 +8,5 @@ action run {
     input Input
     success Output
     error AlphaError
-    kind irreversible
+    compensation none
 }

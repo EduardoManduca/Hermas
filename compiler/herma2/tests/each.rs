@@ -15,7 +15,7 @@ action list {
     input Trigger
     success Orders
     error OrdersError
-    kind irreversible
+    compensation none
 }
 "#,
         ),
@@ -32,7 +32,7 @@ action create {
     input Input
     success Report
     error ReportError
-    kind irreversible
+    compensation none
 }
 "#,
         ),
@@ -48,7 +48,7 @@ action store {
     input Reports
     success Done
     error ArchiveError
-    kind irreversible
+    compensation none
 }
 "#,
         ),

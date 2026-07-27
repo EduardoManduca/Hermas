@@ -14,7 +14,7 @@ action get {
     input Trigger
     success Item
     error SourceError
-    kind irreversible
+    compensation none
 }
 "#,
         ),
@@ -29,7 +29,7 @@ action run {
     input Input
     success Output
     error AlphaError
-    kind irreversible
+    compensation none
 }
 "#,
         ),
@@ -44,7 +44,7 @@ action run {
     input Input
     success Output
     error BetaError
-    kind irreversible
+    compensation none
 }
 "#,
         ),
@@ -59,7 +59,7 @@ action use {
     input Input
     success Done
     error SinkError
-    kind irreversible
+    compensation none
 }
 "#,
         ),

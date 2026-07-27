@@ -169,9 +169,9 @@ HSchema2 defines:
 - Statically bounded lists.
 - Named typed variants.
 - Action input, success, and app-error ports.
-- A mandatory Action kind: `reversible` or `irreversible`.
-- For every reversible Action, a declared compensating Action whose input
-  representation accepts the reversible Action's success output.
+- A mandatory public compensation capability: `none` or a named Action.
+- For every named compensation capability, a declared Action whose input
+  representation accepts the source Action's success output.
 
 An Action is conceptually:
 
@@ -182,13 +182,14 @@ InputType -> Action -> SuccessType | AppErrorType
 Delivery uncertainty is not an app-owned HSchema2 error case. It belongs to
 the Hermas2 execution protocol.
 
-The classification is part of the Action contract even before saga execution
-is implemented. An irreversible Action has no compensation declaration. A
-reversible Action names a different app-owned Action, and its successful output
-is the compensation token containing every value the app needs to compensate
-the effect. Compensation remains an ordinary forward Action, not an undo
-primitive, and invoking it as compensation does not recursively enroll it for
-automatic compensation.
+The capability declaration is part of the Action contract even before saga
+execution is implemented. `compensation none` publishes no automatic
+compensation relationship. A named capability references a different
+app-owned Action, and the source Action's successful output is the compensation
+token containing every value the app needs to compensate the effect.
+Compensation remains an ordinary forward Action, not an undo primitive, and
+invoking it as compensation does not recursively enroll it for automatic
+compensation.
 
 ### 6.2 HScript2
 
@@ -574,8 +575,8 @@ constructing dynamic dependency objects.
 Hermas2 concurrency is graph concurrency:
 
 - Independent ready nodes may progress concurrently.
-- One app connection is single-flight unless a future app contract explicitly
-  advertises a bounded higher capacity.
+- One Action connection is single-flight. Different Actions of the same app
+  may use independent endpoints and progress concurrently.
 - `all` creates a fixed fork and join.
 - `each` admits at most its declared concurrency ceiling.
 - Two independent workflows may progress simultaneously.
@@ -883,7 +884,7 @@ These are intentionally deferred:
 - Whether presentation retains the word `as`.
 - Whether graph-image source maps ship in production images.
 - Whether typed `match` joins enter the first choice milestone.
-- Whether app connections may advertise capacity above one.
+- Whether Action connections may advertise capacity above one.
 - Exact journal persistence strategy.
 - Package format and remote registry.
 

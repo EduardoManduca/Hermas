@@ -21,19 +21,19 @@ action decide {
     input Trigger
     success Decision
     error DecisionError
-    kind irreversible
+    compensation none
 }
 action accept {
     input Approved
     success Done
     error DecisionError
-    kind irreversible
+    compensation none
 }
 action reject {
     input Rejected
     success Done
     error DecisionError
-    kind irreversible
+    compensation none
 }
 "#;
     let mut catalog = Catalog::new();

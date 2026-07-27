@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         return fail("valid Rust image was rejected");
     }
     if (summary.node_count != 7u || summary.edge_count != 13u ||
-        summary.app_count != 3u || summary.type_count != 9u ||
+        summary.action_contract_count != 3u || summary.type_count != 9u ||
         summary.workflow_name_length != 14u ||
         memcmp(summary.workflow_name, "grade_pipeline", 14u) != 0) {
         return fail("decoded summary differs");
@@ -191,11 +191,11 @@ int main(int argc, char **argv) {
         return fail("node offset mutation was accepted");
     }
     bytes[44] = original;
-    size_t apps_offset = read_u32(bytes, 40u);
+    size_t action_contracts_offset = read_u32(bytes, 40u);
     size_t nodes_offset = read_u32(bytes, 48u);
     size_t edges_offset = read_u32(bytes, 52u);
     const size_t record_mutations[] = {
-        apps_offset + 2u,
+        action_contracts_offset + 2u,
         nodes_offset,
         edges_offset,
         edges_offset + 3u,

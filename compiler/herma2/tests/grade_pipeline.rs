@@ -1,8 +1,8 @@
 mod support;
 
 use herma2::{
-    ActionId, ActionKindDeclaration, Catalog, EdgeSource, EdgeTarget, GraphBuilder, GraphErrorCode,
-    Representation, TerminalKind,
+    ActionId, Catalog, CompensationDeclaration, EdgeSource, EdgeTarget, GraphBuilder,
+    GraphErrorCode, Representation, TerminalKind,
 };
 use support::{build_grade_pipeline, declare_grade_list, declare_mean_calculator, declare_printer};
 
@@ -328,7 +328,7 @@ fn cycles_are_rejected_before_port_cardinality() {
             token,
             token,
             error_type,
-            ActionKindDeclaration::Irreversible,
+            CompensationDeclaration::None,
         )
         .expect("step Action");
     let mut graph = GraphBuilder::new("cycle", token, token, vec![error_type]);

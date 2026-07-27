@@ -38,21 +38,21 @@ checks both presentation edges, and covers success, known app error,
 `NotSent`, `Unknown`, malformed values, and illegal state transitions under
 ASan and UBSan.
 
-## Required-app registry
+## Required-Action registry
 
-The Linux daemon registry is also caller-owned and bounded to the graph-image
-limit of 64 required apps. Initialization copies only app IDs and 32-byte
-contract fingerprints into fixed slots. Registration accepts only an app
-listed in the loaded image, requires its exact fingerprint, rejects duplicate
-connections, and acknowledges the app before exposing its descriptor for
-dispatch.
+The Linux daemon registry is also caller-owned and bounded to 80 required
+Actions. Initialization copies each referenced `(app ID, Action ID,
+fingerprint)` into a fixed slot. Registration accepts only a matching app and
+Action fingerprint, rejects duplicate Action connections, records the
+endpoint's current local Action ID, and acknowledges it before exposing its
+descriptor for dispatch.
 
 The original accept operation remains a blocking primitive for focused
 integration fixtures. Production composition uses
-`hermas2_registration_server`: a fixed 64-slot owner for accepted but not yet
-registered app connections. It polls every pending descriptor without heap
+`hermas2_registration_server`: a fixed 80-slot owner for accepted but not yet
+registered Action connections. It polls every pending descriptor without heap
 allocation, validates one complete registration packet, rejects malformed,
-unknown, mismatched, and duplicate apps independently, and publishes an app
+unknown, mismatched, and duplicate Actions independently, and publishes an Action
 descriptor to the registry only after the complete `REGISTER_OK` packet has
 been sent. A connected client that sends nothing cannot block another app or
 the execution loop.
@@ -80,23 +80,24 @@ Admission beyond 16 active executions fails with `capacity-exhausted`.
 Completed executions retain their result until the caller explicitly releases
 the slot.
 
-Ready executions are prepared in rotating order. An unavailable app leaves
+Ready executions are prepared in rotating order. An unavailable Action leaves
 the prepared invocation waiting without claiming delivery. Each registered
-app descriptor can be owned by only one execution at a time, so multiple
-workflows targeting one app are serialized while workflows targeting
-different apps may progress independently.
+Action descriptor can be owned by only one execution at a time, so multiple
+workflows targeting one Action are serialized while different Actions,
+including Actions owned by the same app, may progress independently when they
+have separate registered endpoints.
 
 Every send and receive uses nonblocking socket operations:
 
 - A complete `SOCK_SEQPACKET` send advances `Prepared` to `Sent`.
-- A failed send follows `NotSent`, drops the failed app connection, and never
+- A failed send follows `NotSent`, drops the failed Action connection, and never
   retries.
 - A disconnect, truncated packet, malformed result, or metadata/value
-  mismatch after `Sent` follows `Unknown` and drops the app connection.
-- A valid result releases the app before the graph successor is scheduled.
+  mismatch after `Sent` follows `Unknown` and drops the Action connection.
+- A valid result releases the Action before the graph successor is scheduled.
 
 The transport suite uses real socket pairs to prove pre-delivery `NotSent`,
-post-delivery `Unknown`, and same-app single-flight behavior. The Grade
+post-delivery `Unknown`, and same-Action single-flight behavior. The Grade
 Pipeline integration runs through this same poll loop rather than a separate
 test-only orchestrator.
 
@@ -107,8 +108,8 @@ caller-owned flow slots. Fork copies the immutable canonical input into fixed
 branch buffers; Join retains each result under its dense field tag and does
 not expose used fields until every branch has completed.
 
-The engine enforces one prepared or sent request per app within an execution.
-Independent apps can be completely delivered concurrently. After a failure,
+The engine enforces one prepared or sent request per Action within an
+execution. Independent Actions can be completely delivered concurrently. After a failure,
 undelivered work is cut off while sent work is awaited. Deterministic outcome
 precedence is `Unknown`, known app failure, `NotSent`, then success.
 

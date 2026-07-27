@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
-use crate::catalog::{ActionId, ActionKind, Catalog, TypeId};
+use crate::catalog::{ActionId, Catalog, Compensation, TypeId};
 use crate::graph::{
     EachRegion, EdgeSource, EdgeTarget, GraphBuilder, MAX_ALL_BRANCHES, SourceLocation,
     TerminalKind, VerifiedGraph,
@@ -1777,14 +1777,14 @@ fn compile_workflow(
             let action = catalog
                 .action(step.action)
                 .expect("resolved workflow Action exists");
-            if !matches!(action.kind, ActionKind::Reversible { .. }) {
+            if !matches!(action.compensation, Compensation::Action(_)) {
                 return Err(HScriptDiagnostic::new(
                     file,
                     "workflow",
-                    "irreversible-saga-action",
+                    "missing-saga-compensation",
                     step.invocation_span,
                     format!(
-                        "Action {} is irreversible and cannot enter a saga",
+                        "Action {} declares no compensation and cannot enter a saga",
                         catalog.action_name(step.action)
                     ),
                 ));

@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 #define HERMAS2_HEADER_APPS_OFFSET 40u
-#define HERMAS2_APP_RECORD_SIZE 36u
+#define HERMAS2_ACTION_CONTRACT_RECORD_SIZE 36u
 
 static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
     return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1u] << 8u);
@@ -57,18 +57,22 @@ hermas2_daemon_result hermas2_daemon_registry_init(
     hermas2_image_summary summary;
     if (hermas2_image_validate(image, image_size, &summary) !=
             HERMAS2_IMAGE_OK ||
-        summary.app_count > HERMAS2_DAEMON_MAX_APPS) {
+        summary.action_contract_count > HERMAS2_DAEMON_MAX_ACTIONS) {
         return HERMAS2_DAEMON_INVALID_IMAGE;
     }
     hermas2_daemon_registry fresh;
     memset(&fresh, 0, sizeof(fresh));
-    fresh.app_count = summary.app_count;
+    fresh.action_count = summary.action_contract_count;
     size_t apps_offset = read_u32(image, HERMAS2_HEADER_APPS_OFFSET);
-    for (size_t index = 0u; index < fresh.app_count; ++index) {
-        size_t offset = apps_offset + index * HERMAS2_APP_RECORD_SIZE;
-        fresh.apps[index].app_id = read_u16(image, offset);
-        fresh.apps[index].file_descriptor = -1;
-        memcpy(fresh.apps[index].contract_fingerprint,
+    for (size_t index = 0u; index < fresh.action_count; ++index) {
+        size_t offset =
+            apps_offset + index * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+        fresh.actions[index].app_id = read_u16(image, offset);
+        fresh.actions[index].action_id = read_u16(image, offset + 2u);
+        fresh.actions[index].registered_action_id =
+            fresh.actions[index].action_id;
+        fresh.actions[index].file_descriptor = -1;
+        memcpy(fresh.actions[index].contract_fingerprint,
                image + offset + 4u, 32u);
     }
     *registry = fresh;
@@ -106,28 +110,32 @@ hermas2_daemon_result hermas2_daemon_registry_accept(
         close(connection);
         return HERMAS2_DAEMON_PROTOCOL_ERROR;
     }
-    hermas2_daemon_app *slot = NULL;
-    for (size_t index = 0u; index < registry->app_count; ++index) {
-        if (registry->apps[index].app_id == registration.app_id) {
-            slot = &registry->apps[index];
+    hermas2_daemon_action *slot = NULL;
+    bool app_expected = false;
+    for (size_t index = 0u; index < registry->action_count; ++index) {
+        if (registry->actions[index].app_id == registration.app_id) {
+            app_expected = true;
+        }
+        if (registry->actions[index].app_id == registration.app_id &&
+            memcmp(registry->actions[index].contract_fingerprint,
+                   registration.payload, 32u) == 0) {
+            slot = &registry->actions[index];
             break;
         }
     }
     if (slot == NULL) {
         close(connection);
-        return HERMAS2_DAEMON_UNEXPECTED_APP;
+        return app_expected ? HERMAS2_DAEMON_CONTRACT_MISMATCH
+                            : HERMAS2_DAEMON_UNEXPECTED_APP;
     }
     if (slot->file_descriptor >= 0) {
         close(connection);
         return HERMAS2_DAEMON_DUPLICATE_APP;
     }
-    if (memcmp(slot->contract_fingerprint, registration.payload, 32u) != 0) {
-        close(connection);
-        return HERMAS2_DAEMON_CONTRACT_MISMATCH;
-    }
     hermas2_frame acknowledgement = {
         .kind = HERMAS2_FRAME_REGISTER_OK,
         .app_id = registration.app_id,
+        .action_id = registration.action_id,
         .outcome = HERMAS2_OUTCOME_NONE
     };
     size_t response_size = 0u;
@@ -140,18 +148,25 @@ hermas2_daemon_result hermas2_daemon_registry_accept(
         return HERMAS2_DAEMON_SEND_ERROR;
     }
     slot->file_descriptor = connection;
+    slot->registered_action_id = registration.action_id;
     return HERMAS2_DAEMON_OK;
 }
 
-int hermas2_daemon_registry_find(
+int hermas2_daemon_registry_find_action(
     const hermas2_daemon_registry *registry,
-    uint16_t app_id) {
-    if (registry == NULL || app_id == 0u) {
+    uint16_t app_id,
+    uint16_t action_id,
+    uint16_t *registered_action_id) {
+    if (registry == NULL || app_id == 0u || action_id == 0u) {
         return -1;
     }
-    for (size_t index = 0u; index < registry->app_count; ++index) {
-        if (registry->apps[index].app_id == app_id) {
-            return registry->apps[index].file_descriptor;
+    for (size_t index = 0u; index < registry->action_count; ++index) {
+        const hermas2_daemon_action *slot = &registry->actions[index];
+        if (slot->app_id == app_id && slot->action_id == action_id) {
+            if (registered_action_id != NULL) {
+                *registered_action_id = slot->registered_action_id;
+            }
+            return slot->file_descriptor;
         }
     }
     return -1;
@@ -161,9 +176,9 @@ void hermas2_daemon_registry_close(hermas2_daemon_registry *registry) {
     if (registry == NULL) {
         return;
     }
-    for (size_t index = 0u; index < registry->app_count; ++index) {
-        if (registry->apps[index].file_descriptor >= 0) {
-            close(registry->apps[index].file_descriptor);
+    for (size_t index = 0u; index < registry->action_count; ++index) {
+        if (registry->actions[index].file_descriptor >= 0) {
+            close(registry->actions[index].file_descriptor);
         }
     }
     memset(registry, 0, sizeof(*registry));

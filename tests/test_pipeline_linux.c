@@ -59,7 +59,7 @@ static void run_bad_registration(
     wrong[0] ^= 0xffu;
     hermas2_edge edge;
     hermas2_edge_result result =
-        hermas2_edge_connect(&edge, socket_path, 1u, wrong);
+        hermas2_edge_connect(&edge, socket_path, 1u, 1u, wrong);
     if (result == HERMAS2_EDGE_OK) {
         hermas2_edge_disconnect(&edge);
         _exit(1);
@@ -157,9 +157,9 @@ int main(int argc, char **argv) {
     }
     uint8_t fingerprints[4][32] = {{0u}};
     char fingerprint_text[4][65] = {{0}};
-    size_t app_count = read_u16(image, 28u);
+    size_t action_contract_count = read_u16(image, 28u);
     size_t apps_offset = read_u32(image, 40u);
-    for (size_t index = 0u; index < app_count; ++index) {
+    for (size_t index = 0u; index < action_contract_count; ++index) {
         size_t offset = apps_offset + index * 36u;
         uint16_t app_id = read_u16(image, offset);
         if (app_id == 0u || app_id > 3u) {

@@ -38,11 +38,13 @@ static uint8_t *read_file(const char *path, size_t *size) {
 static int send_registration(
     int descriptor,
     uint16_t app_id,
+    uint16_t action_id,
     const uint8_t fingerprint[32]) {
     uint8_t packet[HERMAS2_PROTOCOL_HEADER_SIZE + 32u];
     hermas2_frame registration = {
         .kind = HERMAS2_FRAME_REGISTER_APP,
         .app_id = app_id,
+        .action_id = action_id,
         .outcome = HERMAS2_OUTCOME_NONE,
         .payload = fingerprint,
         .payload_length = 32u
@@ -76,7 +78,7 @@ int main(int argc, char **argv) {
     if (image == NULL ||
         hermas2_image_validate(image, image_size, &summary) !=
             HERMAS2_IMAGE_OK ||
-        summary.app_count < 2u) {
+        summary.action_contract_count < 2u) {
         free(image);
         return fail("could not load multi-app image");
     }
@@ -107,15 +109,18 @@ int main(int argc, char **argv) {
         hermas2_registration_server_pending(&server) != 2u) {
         return fail("idle registration step was not nonblocking");
     }
-    uint16_t first_id = registry.apps[0].app_id;
+    uint16_t first_id = registry.actions[0].app_id;
+    uint16_t local_action_id = 77u;
     if (!send_registration(
-            ready[0], first_id,
-            registry.apps[0].contract_fingerprint) ||
+            ready[0], first_id, local_action_id,
+            registry.actions[0].contract_fingerprint) ||
         hermas2_registration_server_step(&server, 0, &progress) !=
             HERMAS2_REGISTRATION_SERVER_OK ||
         progress != 2u ||
         hermas2_registration_server_pending(&server) != 1u ||
-        hermas2_daemon_registry_find(&registry, first_id) < 0 ||
+        hermas2_daemon_registry_find_action(
+            &registry, first_id, registry.actions[0].action_id, NULL) < 0 ||
+        registry.actions[0].registered_action_id != local_action_id ||
         !receive_kind(ready[0], HERMAS2_FRAME_REGISTER_OK)) {
         return fail("ready app was blocked by idle peer");
     }
@@ -124,19 +129,21 @@ int main(int argc, char **argv) {
     int wrong[2];
     uint8_t wrong_fingerprint[32];
     memcpy(
-        wrong_fingerprint, registry.apps[1].contract_fingerprint,
+        wrong_fingerprint, registry.actions[1].contract_fingerprint,
         sizeof(wrong_fingerprint));
     wrong_fingerprint[0] ^= 0xffu;
     if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, wrong) != 0 ||
         hermas2_registration_server_attach(&server, wrong[1]) !=
             HERMAS2_REGISTRATION_SERVER_OK ||
         !send_registration(
-            wrong[0], registry.apps[1].app_id, wrong_fingerprint) ||
+            wrong[0], registry.actions[1].app_id,
+            registry.actions[1].action_id, wrong_fingerprint) ||
         hermas2_registration_server_step(&server, 0, &progress) !=
             HERMAS2_REGISTRATION_SERVER_OK ||
         progress != 1u ||
-        hermas2_daemon_registry_find(
-            &registry, registry.apps[1].app_id) >= 0 ||
+        hermas2_daemon_registry_find_action(
+            &registry, registry.actions[1].app_id,
+            registry.actions[1].action_id, NULL) >= 0 ||
         !receive_kind(wrong[0], HERMAS2_FRAME_PROTOCOL_ERROR)) {
         return fail("contract mismatch was not isolated");
     }
@@ -147,8 +154,8 @@ int main(int argc, char **argv) {
         hermas2_registration_server_attach(&server, duplicate[1]) !=
             HERMAS2_REGISTRATION_SERVER_OK ||
         !send_registration(
-            duplicate[0], first_id,
-            registry.apps[0].contract_fingerprint) ||
+            duplicate[0], first_id, registry.actions[0].action_id,
+            registry.actions[0].contract_fingerprint) ||
         hermas2_registration_server_step(&server, 0, &progress) !=
             HERMAS2_REGISTRATION_SERVER_OK ||
         progress != 1u ||

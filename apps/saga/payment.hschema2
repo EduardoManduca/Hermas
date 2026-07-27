@@ -9,12 +9,12 @@ action release {
     input Token
     success Empty
     error Failure
-    kind irreversible
+    compensation none
 }
 
 action reserve {
     input Request
     success Token
     error Failure
-    kind reversible compensate release
+    compensation release
 }

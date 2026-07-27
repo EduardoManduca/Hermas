@@ -49,19 +49,22 @@ static bool valid_outcome(uint16_t outcome) {
 }
 
 static hermas2_protocol_result validate_semantics(const hermas2_frame *frame) {
-    bool no_route_ids = frame->execution_id == 0u && frame->request_id == 0u &&
-                        frame->action_id == 0u && frame->source_type == 0u &&
+    bool no_execution_ids =
+        frame->execution_id == 0u && frame->request_id == 0u &&
+        frame->source_type == 0u &&
                         frame->destination_type == 0u;
     bool routed = frame->execution_id != 0u && frame->request_id != 0u;
     switch (frame->kind) {
         case HERMAS2_FRAME_REGISTER_APP:
-            return no_route_ids && frame->app_id != 0u &&
+            return no_execution_ids && frame->app_id != 0u &&
+                           frame->action_id != 0u &&
                            frame->outcome == HERMAS2_OUTCOME_NONE &&
                            frame->payload_length == 32u
                        ? HERMAS2_PROTOCOL_OK
                        : HERMAS2_PROTOCOL_INVALID_PAYLOAD;
         case HERMAS2_FRAME_REGISTER_OK:
-            return no_route_ids && frame->app_id != 0u &&
+            return no_execution_ids && frame->app_id != 0u &&
+                           frame->action_id != 0u &&
                            frame->outcome == HERMAS2_OUTCOME_NONE &&
                            frame->payload_length == 0u
                        ? HERMAS2_PROTOCOL_OK

@@ -38,6 +38,7 @@ int hermas2_example_app_run_once(
     int argc,
     char **argv,
     uint16_t app_id,
+    uint16_t action_id,
     hermas2_action_handler handler,
     uint8_t *result,
     size_t result_capacity) {
@@ -52,7 +53,8 @@ int hermas2_example_app_run_once(
     }
     hermas2_edge edge;
     if (hermas2_edge_connect(
-            &edge, argv[1], app_id, fingerprint) != HERMAS2_EDGE_OK) {
+            &edge, argv[1], app_id, action_id, fingerprint) !=
+        HERMAS2_EDGE_OK) {
         return 1;
     }
     uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];

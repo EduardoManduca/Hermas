@@ -9,10 +9,12 @@
 #define HERMAS2_HEADER_SUCCESS_TYPE 24u
 #define HERMAS2_HEADER_NODE_COUNT 30u
 #define HERMAS2_HEADER_EDGE_COUNT 32u
-#define HERMAS2_HEADER_NODES_OFFSET 48u
-#define HERMAS2_HEADER_EDGES_OFFSET 52u
-#define HERMAS2_NODE_RECORD_SIZE 8u
-#define HERMAS2_EDGE_RECORD_SIZE 16u
+#define HERMAS2_HEADER_NODES_OFFSET \
+    HERMAS2_IMAGE_HEADER_NODES_OFFSET
+#define HERMAS2_HEADER_EDGES_OFFSET \
+    HERMAS2_IMAGE_HEADER_EDGES_OFFSET
+#define HERMAS2_NODE_RECORD_SIZE HERMAS2_IMAGE_NODE_RECORD_SIZE
+#define HERMAS2_EDGE_RECORD_SIZE HERMAS2_IMAGE_EDGE_RECORD_SIZE
 
 static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
     return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1u] << 8u);
@@ -856,10 +858,14 @@ hermas2_runtime_result hermas2_group_start(
     execution->execution_id = execution_id;
     execution->next_request_id = 1u;
     execution->value_stride = value_stride;
-    uint16_t image_region_count = read_u16(image, 68u);
-    size_t regions = read_u32(image, 72u);
+    uint16_t image_region_count = read_u16(
+        image, HERMAS2_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t regions =
+        read_u32(image, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
     for (uint16_t index = 0u; index < image_region_count; ++index) {
-        size_t region = regions + (size_t)index * 16u;
+        size_t region =
+            regions + (size_t)index *
+                          HERMAS2_IMAGE_REGION_RECORD_SIZE;
         if (image[region] == 1u) {
             uint8_t deadline = execution->region_count++;
             execution->region_deadlines_ms[deadline] =
@@ -932,6 +938,7 @@ hermas2_runtime_result hermas2_group_prepare(
         return HERMAS2_RUNTIME_INVALID_IMAGE;
     }
     uint16_t app_id = read_u16(execution->image, offset + 4u);
+    uint16_t action_id = read_u16(execution->image, offset + 2u);
     for (size_t index = 0u; index < HERMAS2_RUNTIME_MAX_FLOWS; ++index) {
         const hermas2_flow *other = &execution->flows[index];
         if (index == flow_index || other->active == 0u ||
@@ -946,7 +953,8 @@ hermas2_runtime_result hermas2_group_prepare(
         if (execution->image[other_node] != 1u) {
             return HERMAS2_RUNTIME_INVALID_IMAGE;
         }
-        if (read_u16(execution->image, other_node + 4u) == app_id) {
+        if (read_u16(execution->image, other_node + 4u) == app_id &&
+            read_u16(execution->image, other_node + 2u) == action_id) {
             return HERMAS2_RUNTIME_INVALID_STATE;
         }
     }
@@ -956,7 +964,7 @@ hermas2_runtime_result hermas2_group_prepare(
         .execution_id = execution->execution_id,
         .request_id = flow->request_id,
         .app_id = app_id,
-        .action_id = read_u16(execution->image, offset + 2u),
+        .action_id = action_id,
         .source_type = flow->value_source_type,
         .destination_type = flow->value_destination_type,
         .outcome = HERMAS2_OUTCOME_NONE,

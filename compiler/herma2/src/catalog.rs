@@ -255,19 +255,20 @@ pub struct ActionDef {
     pub input: TypeId,
     pub success: TypeId,
     pub error: TypeId,
-    pub kind: ActionKind,
+    pub compensation: Compensation,
+    pub fingerprint: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ActionKind {
-    Irreversible,
-    Reversible { compensation: ActionId },
+pub enum Compensation {
+    None,
+    Action(ActionId),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ActionKindDeclaration {
-    Irreversible,
-    Reversible { compensation: String },
+pub enum CompensationDeclaration {
+    None,
+    Action(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -276,7 +277,7 @@ pub struct ActionDeclaration {
     pub input: TypeId,
     pub success: TypeId,
     pub error: TypeId,
-    pub kind: ActionKindDeclaration,
+    pub compensation: CompensationDeclaration,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -294,6 +295,7 @@ pub enum CatalogError {
     },
     UnknownApp(AppId),
     UnknownType(TypeId),
+    UnknownAction(ActionId),
     ForeignActionType {
         app: String,
         type_name: String,
@@ -326,6 +328,9 @@ impl fmt::Display for CatalogError {
             Self::UnknownType(type_id) => {
                 write!(formatter, "unknown type ID {}", type_id.raw())
             }
+            Self::UnknownAction(action) => {
+                write!(formatter, "unknown Action ID {}", action.raw())
+            }
             Self::ForeignActionType { app, type_name } => write!(
                 formatter,
                 "action owned by `{app}` cannot declare foreign type `{type_name}`"
@@ -335,7 +340,7 @@ impl fmt::Display for CatalogError {
                 compensation,
             } => write!(
                 formatter,
-                "reversible action `{action}` names unknown compensation `{compensation}`"
+                "action `{action}` names unknown compensation `{compensation}`"
             ),
             Self::SelfCompensation(action) => {
                 write!(formatter, "action `{action}` cannot compensate itself")
@@ -390,6 +395,24 @@ impl Catalog {
             ))
             .ok_or(CatalogError::UnknownApp(app))?;
         app_def.fingerprint = Some(fingerprint);
+        Ok(())
+    }
+
+    pub fn set_action_fingerprint(
+        &mut self,
+        action: ActionId,
+        fingerprint: [u8; 32],
+    ) -> Result<(), CatalogError> {
+        let action_def = self
+            .actions
+            .get_mut(usize::from(
+                action
+                    .raw()
+                    .checked_sub(1)
+                    .ok_or(CatalogError::UnknownAction(action))?,
+            ))
+            .ok_or(CatalogError::UnknownAction(action))?;
+        action_def.fingerprint = Some(fingerprint);
         Ok(())
     }
 
@@ -529,7 +552,7 @@ impl Catalog {
         input: TypeId,
         success: TypeId,
         error: TypeId,
-        kind: ActionKindDeclaration,
+        compensation: CompensationDeclaration,
     ) -> Result<ActionId, CatalogError> {
         let ids = self.declare_actions(
             app,
@@ -538,7 +561,7 @@ impl Catalog {
                 input,
                 success,
                 error,
-                kind,
+                compensation,
             }],
         )?;
         Ok(ids[0])
@@ -591,9 +614,9 @@ impl Catalog {
             .collect::<Result<Vec<_>, _>>()?;
         let mut resolved = Vec::with_capacity(declarations.len());
         for (index, declaration) in declarations.iter().enumerate() {
-            let kind = match &declaration.kind {
-                ActionKindDeclaration::Irreversible => ActionKind::Irreversible,
-                ActionKindDeclaration::Reversible { compensation } => {
+            let compensation = match &declaration.compensation {
+                CompensationDeclaration::None => Compensation::None,
+                CompensationDeclaration::Action(compensation) => {
                     if compensation == &declaration.name {
                         return Err(CatalogError::SelfCompensation(declaration.name.clone()));
                     }
@@ -615,9 +638,7 @@ impl Catalog {
                             reason,
                         }
                     })?;
-                    ActionKind::Reversible {
-                        compensation: ids[compensation_offset],
-                    }
+                    Compensation::Action(ids[compensation_offset])
                 }
             };
             resolved.push(ActionDef {
@@ -627,7 +648,8 @@ impl Catalog {
                 input: declaration.input,
                 success: declaration.success,
                 error: declaration.error,
-                kind,
+                compensation,
+                fingerprint: None,
             });
         }
         self.actions.extend(resolved);

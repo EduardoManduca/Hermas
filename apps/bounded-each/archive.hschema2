@@ -9,5 +9,5 @@ action store {
     input Reports
     success Done
     error ArchiveError
-    kind irreversible
+    compensation none
 }

@@ -9,12 +9,12 @@ action cancel {
     input Token
     success Empty
     error Failure
-    kind irreversible
+    compensation none
 }
 
 action book {
     input Request
     success Token
     error Failure
-    kind reversible compensate cancel
+    compensation cancel
 }

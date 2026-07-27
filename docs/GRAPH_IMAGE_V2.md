@@ -1,4 +1,4 @@
-# Hermas2 Graph Image Version 1
+# Hermas2 Graph Image Version 2
 
 Status: implemented Rust encoder and structural decoder plus an independent,
 allocation-free C17 decoder. Both accept the Rust-produced Grade Pipeline
@@ -14,7 +14,7 @@ the beginning of the image.
 header (80 bytes)
 workflow error Type IDs (u16[])
 zero padding to four-byte alignment
-required app records (36 bytes each)
+required Action-contract records (36 bytes each)
 type records (8 bytes each)
 node records (8 bytes each)
 edge records (16 bytes each)
@@ -24,7 +24,7 @@ UTF-8 workflow name
 ```
 
 There are no trailing bytes. Every table offset must equal the canonical
-offset calculated from preceding counts. Version 1 contains no source map;
+offset calculated from preceding counts. Version 2 contains no source map;
 source provenance remains compiler-side data under the current open decision.
 
 ## Header
@@ -32,7 +32,7 @@ source provenance remains compiler-side data under the current open decision.
 | Offset | Size | Field |
 | ---: | ---: | --- |
 | 0 | 4 | ASCII magic `H2GI` |
-| 4 | 2 | Version, `1` |
+| 4 | 2 | Version, `2` |
 | 6 | 2 | Header size, `80` |
 | 8 | 4 | Exact total image size |
 | 12 | 4 | Flags, zero |
@@ -41,12 +41,12 @@ source provenance remains compiler-side data under the current open decision.
 | 22 | 2 | Workflow input Type ID |
 | 24 | 2 | Workflow success Type ID |
 | 26 | 2 | Error count |
-| 28 | 2 | Required-app count |
+| 28 | 2 | Required-Action-contract count |
 | 30 | 2 | Node count |
 | 32 | 2 | Edge count |
 | 34 | 2 | Type count |
 | 36 | 4 | Error-table offset |
-| 40 | 4 | App-table offset |
+| 40 | 4 | Action-contract-table offset |
 | 44 | 4 | Type-table offset |
 | 48 | 4 | Node-table offset |
 | 52 | 4 | Edge-table offset |
@@ -61,18 +61,21 @@ source provenance remains compiler-side data under the current open decision.
 IDs are nonzero. Workflow errors are unique. Counts must fit the graph
 kernel's configured limits.
 
-## Required apps
+## Required Action contracts
 
-Each app record contains:
+Each record contains:
 
 ```text
 u16 app_id
-u16 reserved_zero
-u8  semantic_contract_sha256[32]
+u16 action_id
+u8  semantic_action_contract_sha256[32]
 ```
 
-Only apps referenced by Action nodes occur, ordered by App ID. Encoding fails
-if an app was not installed from a fingerprinted HSchema2 contract.
+Only Actions referenced by forward nodes or saga compensation records occur,
+ordered by App ID and Action ID. Encoding fails if an Action was not installed
+from a fingerprinted HSchema2 contract. The digest covers that Action's name,
+ports, compensation declaration, and transitively referenced nominal types;
+unrelated declarations in the same app do not change it.
 
 ## Types and representations
 
@@ -93,8 +96,8 @@ u16 app_id           // Action only
 u16 reserved_zero
 ```
 
-Exactly one terminal of every subtype must occur. Action app IDs must occur in
-the required-app table.
+Exactly one terminal of every subtype must occur. Every Action `(app_id,
+action_id)` pair must occur in the required-Action-contract table.
 
 ## Edges
 
@@ -187,8 +190,8 @@ u64 reserved_zero
 ```
 
 Saga pairs follow Deadline and Each records. If any occur, every Action node
-has exactly one pair, ordinals are dense, the compensation app is required by
-the image, and the two token representations are structurally equal. The
+has exactly one pair, ordinals are dense, the compensation Action is required
+by the image, and the two token representations are structurally equal. The
 forward node's Success edge must carry `source_token_type`. Outcome Type IDs
 let the runtime validate both successful and app-error compensation results.
 
@@ -202,7 +205,7 @@ The decoder rejects:
 - Noncanonical, overlapping, misaligned, or overflowing offsets.
 - Zero, duplicate, or excessive counts and IDs.
 - Invalid UTF-8 or an empty workflow name.
-- Duplicate app records, errors, nodes, or edges.
+- Duplicate Action-contract records, errors, nodes, or edges.
 - Unknown record tags and invalid endpoint kinds.
 - Missing or multiply connected Action input/success/error/NotSent/Unknown
   ports.

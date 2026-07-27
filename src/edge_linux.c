@@ -54,9 +54,11 @@ hermas2_edge_result hermas2_edge_connect(
     hermas2_edge *edge,
     const char *socket_path,
     uint16_t app_id,
+    uint16_t action_id,
     const uint8_t contract_fingerprint[32]) {
     if (edge == NULL || socket_path == NULL ||
-        contract_fingerprint == NULL || app_id == 0u) {
+        contract_fingerprint == NULL || app_id == 0u ||
+        action_id == 0u) {
         return HERMAS2_EDGE_INVALID_ARGUMENT;
     }
     size_t path_length = strlen(socket_path);
@@ -82,6 +84,7 @@ hermas2_edge_result hermas2_edge_connect(
     hermas2_frame registration = {
         .kind = HERMAS2_FRAME_REGISTER_APP,
         .app_id = app_id,
+        .action_id = action_id,
         .outcome = HERMAS2_OUTCOME_NONE,
         .payload = contract_fingerprint,
         .payload_length = 32u
@@ -100,7 +103,9 @@ hermas2_edge_result hermas2_edge_connect(
          response.kind != HERMAS2_FRAME_REGISTER_OK)) {
         result = HERMAS2_EDGE_PROTOCOL_ERROR;
     }
-    if (result == HERMAS2_EDGE_OK && response.app_id != app_id) {
+    if (result == HERMAS2_EDGE_OK &&
+        (response.app_id != app_id ||
+         response.action_id != action_id)) {
         result = HERMAS2_EDGE_WRONG_APP;
     }
     if (result != HERMAS2_EDGE_OK) {
@@ -109,6 +114,7 @@ hermas2_edge_result hermas2_edge_connect(
     }
     edge->file_descriptor = file_descriptor;
     edge->app_id = app_id;
+    edge->action_id = action_id;
     memcpy(edge->contract_fingerprint, contract_fingerprint, 32u);
     return HERMAS2_EDGE_OK;
 }

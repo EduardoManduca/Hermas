@@ -42,9 +42,9 @@ static void reject_client(
     close_client(client);
 }
 
-static bool app_is_pending(
+static bool action_is_pending(
     const hermas2_registration_server *server,
-    size_t app_index,
+    size_t action_index,
     const hermas2_registration_client *except) {
     for (size_t index = 0u;
          index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
@@ -52,7 +52,7 @@ static bool app_is_pending(
             &server->clients[index];
         if (candidate != except && candidate->active &&
             candidate->validated &&
-            candidate->app_index == app_index) {
+            candidate->action_index == action_index) {
             return true;
         }
     }
@@ -92,26 +92,27 @@ static void receive_registration(
         ++*progress_count;
         return;
     }
-    size_t app_index = server->registry->app_count;
+    size_t action_index = server->registry->action_count;
     for (size_t index = 0u;
-         index < server->registry->app_count; ++index) {
-        if (server->registry->apps[index].app_id ==
-            registration.app_id) {
-            app_index = index;
+         index < server->registry->action_count; ++index) {
+        if (server->registry->actions[index].app_id ==
+                registration.app_id &&
+            memcmp(
+                server->registry->actions[index].contract_fingerprint,
+                registration.payload, 32u) == 0) {
+            action_index = index;
             break;
         }
     }
-    if (app_index == server->registry->app_count ||
-        server->registry->apps[app_index].file_descriptor >= 0 ||
-        app_is_pending(server, app_index, client) ||
-        memcmp(
-            server->registry->apps[app_index].contract_fingerprint,
-            registration.payload, 32u) != 0) {
+    if (action_index == server->registry->action_count ||
+        server->registry->actions[action_index].file_descriptor >= 0 ||
+        action_is_pending(server, action_index, client)) {
         reject_client(server, client);
         ++*progress_count;
         return;
     }
-    client->app_index = app_index;
+    client->action_index = action_index;
+    client->registered_action_id = registration.action_id;
     client->validated = true;
     ++*progress_count;
 }
@@ -126,15 +127,16 @@ static hermas2_registration_server_result flush_acknowledgements(
         if (!client->active || !client->validated) {
             continue;
         }
-        if (client->app_index >= server->registry->app_count ||
-            server->registry->apps[client->app_index]
+        if (client->action_index >= server->registry->action_count ||
+            server->registry->actions[client->action_index]
                     .file_descriptor >= 0) {
             return HERMAS2_REGISTRATION_SERVER_STATE_ERROR;
         }
         hermas2_frame acknowledgement = {
             .kind = HERMAS2_FRAME_REGISTER_OK,
             .app_id =
-                server->registry->apps[client->app_index].app_id,
+                server->registry->actions[client->action_index].app_id,
+            .action_id = client->registered_action_id,
             .outcome = HERMAS2_OUTCOME_NONE
         };
         size_t packet_size = 0u;
@@ -157,8 +159,10 @@ static hermas2_registration_server_result flush_acknowledgements(
             ++*progress_count;
             continue;
         }
-        server->registry->apps[client->app_index].file_descriptor =
+        server->registry->actions[client->action_index].file_descriptor =
             client->file_descriptor;
+        server->registry->actions[client->action_index]
+            .registered_action_id = client->registered_action_id;
         release_client(client);
         ++*progress_count;
     }
@@ -169,7 +173,7 @@ hermas2_registration_server_result hermas2_registration_server_init(
     hermas2_registration_server *server,
     hermas2_daemon_registry *registry) {
     if (server == NULL || registry == NULL ||
-        registry->app_count > HERMAS2_DAEMON_MAX_APPS) {
+        registry->action_count > HERMAS2_DAEMON_MAX_ACTIONS) {
         return HERMAS2_REGISTRATION_SERVER_INVALID_ARGUMENT;
     }
     memset(server, 0, sizeof(*server));

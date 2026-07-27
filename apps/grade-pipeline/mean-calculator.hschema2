@@ -9,5 +9,5 @@ action calculate {
     input MeanInput
     success Mean
     error MeanError
-    kind irreversible
+    compensation none
 }

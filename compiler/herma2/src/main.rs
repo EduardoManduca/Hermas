@@ -36,11 +36,16 @@ fn schema_command(arguments: &[String]) -> ExitCode {
             }
         };
         match compile_schema(&mut catalog, path, &source) {
-            Ok(contract) => println!(
-                "valid: {} fingerprint={}",
-                catalog.app_name(contract.app),
-                contract.fingerprint
-            ),
+            Ok(contract) => {
+                println!(
+                    "valid: {} schema-fingerprint={}",
+                    catalog.app_name(contract.app),
+                    contract.fingerprint
+                );
+                for (action, fingerprint) in &contract.action_fingerprints {
+                    println!("action: {action} fingerprint={fingerprint}");
+                }
+            }
             Err(error) => {
                 eprintln!("{error}");
                 return ExitCode::FAILURE;
@@ -177,8 +182,11 @@ fn image_command(arguments: &[String]) -> ExitCode {
     match decode_graph_image(&bytes) {
         Ok(image) => {
             println!(
-                "valid: {} apps={} nodes={} edges={}",
-                image.workflow_name, image.app_count, image.node_count, image.edge_count
+                "valid: {} action-contracts={} nodes={} edges={}",
+                image.workflow_name,
+                image.action_contract_count,
+                image.node_count,
+                image.edge_count
             );
             ExitCode::SUCCESS
         }

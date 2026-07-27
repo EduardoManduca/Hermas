@@ -40,6 +40,7 @@ typedef struct durable_probe {
 
 typedef struct app_channel {
     uint16_t app_id;
+    uint16_t action_id;
     int peer;
 } app_channel;
 
@@ -237,7 +238,7 @@ static int receive_invocation(
             HERMAS2_LOOP_OK) {
             return 0;
         }
-        struct pollfd items[HERMAS2_DAEMON_MAX_APPS];
+        struct pollfd items[HERMAS2_DAEMON_MAX_ACTIONS];
         for (size_t index = 0u; index < channel_count; ++index) {
             items[index] = (struct pollfd){
                 .fd = channels[index].peer,
@@ -260,7 +261,8 @@ static int receive_invocation(
                        packet, (size_t)received, invocation) ==
                        HERMAS2_PROTOCOL_OK &&
                    invocation->kind == HERMAS2_FRAME_INVOKE &&
-                   invocation->app_id == channels[index].app_id;
+                   invocation->app_id == channels[index].app_id &&
+                   invocation->action_id == channels[index].action_id;
         }
     }
     return 0;
@@ -277,7 +279,8 @@ static int send_result(
     uint8_t *packet) {
     int peer = -1;
     for (size_t index = 0u; index < channel_count; ++index) {
-        if (channels[index].app_id == invocation->app_id) {
+        if (channels[index].app_id == invocation->app_id &&
+            channels[index].action_id == invocation->action_id) {
             peer = channels[index].peer;
             break;
         }
@@ -504,17 +507,18 @@ int main(int argc, char **argv) {
         fputs("registry initialization failed\n", stderr);
         return 1;
     }
-    app_channel channels[HERMAS2_DAEMON_MAX_APPS];
+    app_channel channels[HERMAS2_DAEMON_MAX_ACTIONS];
     memset(channels, 0, sizeof(channels));
-    for (size_t index = 0u; index < registry.app_count; ++index) {
+    for (size_t index = 0u; index < registry.action_count; ++index) {
         int sockets[2];
         if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
             fputs("socketpair creation failed\n", stderr);
             return 1;
         }
-        registry.apps[index].file_descriptor = sockets[0];
+        registry.actions[index].file_descriptor = sockets[0];
         channels[index] = (app_channel){
-            .app_id = registry.apps[index].app_id,
+            .app_id = registry.actions[index].app_id,
+            .action_id = registry.actions[index].action_id,
             .peer = sockets[1]
         };
     }
@@ -557,7 +561,7 @@ int main(int argc, char **argv) {
     hermas2_frame invocation;
     if (!drive_forward_failure(
             &loop, 41u, image, routes, channels,
-            registry.app_count, packet)) {
+            registry.action_count, packet)) {
         fputs("forward failure fixture failed\n", stderr);
         return 1;
     }
@@ -576,14 +580,14 @@ int main(int argc, char **argv) {
     for (size_t reverse = 0u; reverse < 2u; ++reverse) {
         size_t ordinal = 1u - reverse;
         if (!receive_invocation(
-                &loop, channels, registry.app_count,
+                &loop, channels, registry.action_count,
                 packet, &invocation) ||
             invocation.app_id != routes[ordinal].app_id ||
             invocation.action_id != routes[ordinal].action_id ||
             invocation.payload_length != 8u ||
             invocation.payload[0] != (uint8_t)(11u * (ordinal + 1u)) ||
             !send_result(
-                channels, registry.app_count, &invocation,
+                channels, registry.action_count, &invocation,
                 HERMAS2_OUTCOME_SUCCESS, routes[ordinal].success_type,
                 NULL, 0u, packet)) {
             fputs("reverse compensation order failed\n", stderr);
@@ -625,16 +629,16 @@ int main(int argc, char **argv) {
 
     if (!drive_forward_failure(
             &loop, 42u, image, routes, channels,
-            registry.app_count, packet) ||
+            registry.action_count, packet) ||
         hermas2_daemon_loop_poll(&loop, 100, &progress) !=
             HERMAS2_LOOP_OK ||
         !receive_invocation(
-            &loop, channels, registry.app_count,
+            &loop, channels, registry.action_count,
             packet, &invocation) ||
         invocation.app_id != routes[1].app_id ||
         invocation.action_id != routes[1].action_id ||
         !send_result(
-            channels, registry.app_count, &invocation,
+            channels, registry.action_count, &invocation,
             HERMAS2_OUTCOME_SUCCESS, routes[1].success_type,
             NULL, 0u, packet) ||
         hermas2_daemon_loop_poll(&loop, 100, &progress) !=
@@ -699,14 +703,14 @@ int main(int argc, char **argv) {
             &loop, 42u, &early_result) !=
             HERMAS2_LOOP_EXECUTION_ACTIVE ||
         !receive_invocation(
-            &loop, channels, registry.app_count,
+            &loop, channels, registry.action_count,
             packet, &invocation) ||
         invocation.app_id != routes[0].app_id ||
         invocation.action_id != routes[0].action_id ||
         invocation.payload_length != 8u ||
         invocation.payload[0] != 11u ||
         !send_result(
-            channels, registry.app_count, &invocation,
+            channels, registry.action_count, &invocation,
             HERMAS2_OUTCOME_SUCCESS, routes[0].success_type,
             NULL, 0u, packet) ||
         hermas2_daemon_loop_poll(
@@ -752,11 +756,11 @@ int main(int argc, char **argv) {
             HERMAS2_LOOP_OK ||
         !drive_forward_failure(
             &loop, 43u, image, routes, channels,
-            registry.app_count, packet) ||
+            registry.action_count, packet) ||
         hermas2_daemon_loop_poll(
             &loop, 100, &progress) != HERMAS2_LOOP_OK ||
         !receive_invocation(
-            &loop, channels, registry.app_count,
+            &loop, channels, registry.action_count,
             packet, &invocation)) {
         fputs("uncertain delivery fixture failed\n", stderr);
         return 1;
@@ -794,7 +798,7 @@ int main(int argc, char **argv) {
         fputs("uncertain compensation was replayable\n", stderr);
         return 1;
     }
-    for (size_t index = 0u; index < registry.app_count; ++index) {
+    for (size_t index = 0u; index < registry.action_count; ++index) {
         close(channels[index].peer);
     }
     hermas2_daemon_registry_close(&registry);

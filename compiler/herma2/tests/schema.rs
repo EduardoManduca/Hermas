@@ -1,4 +1,4 @@
-use herma2::{ActionKind, Catalog, Representation, compile_schema};
+use herma2::{Catalog, Compensation, Representation, compile_schema};
 
 const COMPLETE_SCHEMA: &str = r#"
 app warehouse
@@ -21,14 +21,14 @@ action release {
     input Receipt
     success Empty
     error Failure
-    kind irreversible
+    compensation none
 }
 
 action reserve {
     input Request
     success Receipt
     error Failure
-    kind reversible compensate release
+    compensation release
 }
 "#;
 
@@ -44,7 +44,7 @@ fn hash_is_the_only_line_comment_syntax() {
 }
 
 #[test]
-fn compiles_closed_contracts_and_reversible_actions() {
+fn compiles_closed_contracts_and_compensation_capabilities() {
     let mut catalog = Catalog::new();
     let contract =
         compile_schema(&mut catalog, "warehouse.hschema2", COMPLETE_SCHEMA).expect("valid schema");
@@ -58,10 +58,8 @@ fn compiles_closed_contracts_and_reversible_actions() {
         .action(contract.action_id("reserve").expect("reserve ID"))
         .expect("reserve Action");
     assert_eq!(
-        reserve.kind,
-        ActionKind::Reversible {
-            compensation: contract.action_id("release").expect("release ID")
-        }
+        reserve.compensation,
+        Compensation::Action(contract.action_id("release").expect("release ID"))
     );
 }
 
@@ -76,14 +74,59 @@ fn fingerprint_is_semantic_and_ignores_layout_and_declaration_order() {
         type Quantity=Integer
         type ItemId=String<32>
         type Empty=record{}
-        action reserve{input Request success Receipt error Failure kind reversible compensate release}
-        action release{input Receipt success Empty error Failure kind irreversible}
+        action reserve{input Request success Receipt error Failure compensation release}
+        action release{input Receipt success Empty error Failure compensation none}
     "#;
     let mut first_catalog = Catalog::new();
     let first = compile_schema(&mut first_catalog, "first.hschema2", COMPLETE_SCHEMA).unwrap();
     let mut second_catalog = Catalog::new();
     let second = compile_schema(&mut second_catalog, "second.hschema2", reordered).unwrap();
     assert_eq!(first.fingerprint, second.fingerprint);
+    assert_eq!(first.action_fingerprints, second.action_fingerprints);
+}
+
+#[test]
+fn action_fingerprint_ignores_unreferenced_types_and_actions() {
+    let baseline = r#"
+        app modular
+        type Input = Integer
+        type Output = String<16>
+        type Failure = Unit
+        action run {
+            input Input
+            success Output
+            error Failure
+            compensation none
+        }
+    "#;
+    let extended = r#"
+        app modular
+        type Input = Integer
+        type Output = String<16>
+        type Failure = Unit
+        type Unused = Bytes<128>
+        action run {
+            input Input
+            success Output
+            error Failure
+            compensation none
+        }
+        action report {
+            input Unused
+            success Unused
+            error Failure
+            compensation none
+        }
+    "#;
+    let mut baseline_catalog = Catalog::new();
+    let baseline = compile_schema(&mut baseline_catalog, "baseline.hschema2", baseline).unwrap();
+    let mut extended_catalog = Catalog::new();
+    let extended = compile_schema(&mut extended_catalog, "extended.hschema2", extended).unwrap();
+    assert_ne!(baseline.fingerprint, extended.fingerprint);
+    assert_eq!(
+        baseline.action_fingerprint("run"),
+        extended.action_fingerprint("run")
+    );
 }
 
 #[test]
@@ -95,7 +138,7 @@ fn resolves_records_lists_and_variants_for_directional_presentation() {
         type Batch = List<Payload, 4>
         type Outcome = variant { ok: Batch }
         type Error = Unit
-        action read { input Error success Outcome error Error kind irreversible }
+        action read { input Error success Outcome error Error compensation none }
     "#;
     let destination = r#"
         app destination
@@ -104,7 +147,7 @@ fn resolves_records_lists_and_variants_for_directional_presentation() {
         type Batch = List<Payload, 8>
         type Outcome = variant { ok: Batch }
         type Error = Unit
-        action write { input Outcome success Error error Error kind irreversible }
+        action write { input Outcome success Error error Error compensation none }
     "#;
     let mut catalog = Catalog::new();
     let source = compile_schema(&mut catalog, "source.hschema2", source).unwrap();
@@ -124,7 +167,7 @@ fn reports_unknown_and_recursive_types_with_source_locations() {
         "app bad\n\
          type Request = Missing\n\
          type Error = Unit\n\
-         action run { input Request success Error error Error kind irreversible }",
+         action run { input Request success Error error Error compensation none }",
     )
     .unwrap_err();
     assert_eq!(unknown.stage, "schema");
@@ -137,16 +180,16 @@ fn reports_unknown_and_recursive_types_with_source_locations() {
         "app cycle\n\
          type Node = record { next: Node }\n\
          type Error = Unit\n\
-         action run { input Node success Error error Error kind irreversible }",
+         action run { input Node success Error error Error compensation none }",
     )
     .unwrap_err();
     assert_eq!(recursive.code, "recursive-representation");
 }
 
 #[test]
-fn requires_explicit_action_kind_and_known_local_port_types() {
+fn requires_explicit_compensation_capability_and_known_local_port_types() {
     let mut catalog = Catalog::new();
-    let missing_kind = compile_schema(
+    let missing_compensation = compile_schema(
         &mut catalog,
         "kind.hschema2",
         "app bad\n\
@@ -154,14 +197,25 @@ fn requires_explicit_action_kind_and_known_local_port_types() {
          action run { input Empty success Empty error Empty }",
     )
     .unwrap_err();
-    assert_eq!(missing_kind.stage, "syntax");
+    assert_eq!(missing_compensation.stage, "syntax");
+
+    let legacy_kind = compile_schema(
+        &mut catalog,
+        "legacy-kind.hschema2",
+        "app legacy\n\
+         type Empty = Unit\n\
+         action run { input Empty success Empty error Empty kind irreversible }",
+    )
+    .unwrap_err();
+    assert_eq!(legacy_kind.stage, "syntax");
+    assert!(legacy_kind.message.contains("`compensation`"));
 
     let unknown_port = compile_schema(
         &mut catalog,
         "port.hschema2",
         "app bad\n\
          type Empty = Unit\n\
-         action run { input Missing success Empty error Empty kind irreversible }",
+         action run { input Missing success Empty error Empty compensation none }",
     )
     .unwrap_err();
     assert_eq!(unknown_port.code, "unknown-action-type");
@@ -179,8 +233,8 @@ fn rejects_invalid_compensation_without_mutating_the_catalog() {
          type WrongToken = Boolean\n\
          type Done = Unit\n\
          type Failure = Unit\n\
-         action undo { input WrongToken success Done error Failure kind irreversible }\n\
-         action apply { input Request success Token error Failure kind reversible compensate undo }",
+         action undo { input WrongToken success Done error Failure compensation none }\n\
+         action apply { input Request success Token error Failure compensation undo }",
     )
     .unwrap_err();
     assert_eq!(error.stage, "catalog");
@@ -192,7 +246,7 @@ fn rejects_invalid_compensation_without_mutating_the_catalog() {
         "fresh.hschema2",
         "app payments\n\
          type Empty = Unit\n\
-         action check { input Empty success Empty error Empty kind irreversible }",
+         action check { input Empty success Empty error Empty compensation none }",
     );
     assert!(valid.is_ok(), "failed compilation must be transactional");
 }
@@ -201,11 +255,11 @@ fn rejects_invalid_compensation_without_mutating_the_catalog() {
 fn rejects_bad_bounds_and_empty_variants() {
     for (source, code) in [
         (
-            "app bad type Value = List<Integer, 0> action run { input Value success Value error Value kind irreversible }",
+            "app bad type Value = List<Integer, 0> action run { input Value success Value error Value compensation none }",
             "invalid-type",
         ),
         (
-            "app bad type Value = variant {} action run { input Value success Value error Value kind irreversible }",
+            "app bad type Value = variant {} action run { input Value success Value error Value compensation none }",
             "empty-variant",
         ),
     ] {

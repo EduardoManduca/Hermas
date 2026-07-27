@@ -8,5 +8,5 @@ action get {
     input Trigger
     success Item
     error SourceError
-    kind irreversible
+    compensation none
 }

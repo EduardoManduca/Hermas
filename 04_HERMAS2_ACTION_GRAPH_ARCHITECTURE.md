@@ -265,18 +265,18 @@ A saga is introduced only after durable recovery and compensation inputs are com
 
 Hermas may order app-declared compensating Actions in reverse dependency order. Apps own the meaning and implementation of compensation.
 
-Every Action contract is classified as exactly one of:
+Every Action contract publishes exactly one compensation capability:
 
-- `reversible`: names a distinct app-owned compensating Action. Its successful
-  output is the compensation token and must be representation-compatible with
-  the compensating Action's input.
-- `irreversible`: declares no compensating Action and cannot be used as a
-  reversible step in a saga.
+- `compensation NAME` names a distinct app-owned compensating Action. The
+  source Action's successful output is the compensation token and must be
+  representation-compatible with the compensating Action's input.
+- `compensation none` publishes no compensating Action and cannot be used as a
+  compensated step in a saga.
 
-This classification is mandatory contract metadata even when an Action is used
-only in an ordinary pipeline. Saga validation rejects an irreversible Action
-where compensation could be required, or a reversible Action whose
-compensation relationship or token type is invalid.
+This declaration is mandatory contract metadata even when an Action is used
+only in an ordinary pipeline. Saga validation rejects an Action with
+`compensation none` where compensation could be required, or a named
+capability whose relationship or token type is invalid.
 
 Compensation is:
 
@@ -337,11 +337,11 @@ The compiler proves:
 - Every scope fits configured resource limits.
 - No forbidden cycle or unbounded recursion exists.
 - Every workflow outcome satisfies its public contract.
-- Every Action has exactly one valid `reversible` or `irreversible`
-  classification.
-- Every reversible Action names a distinct compensating Action with a
+- Every Action has exactly one valid compensation capability declaration.
+- Every named capability references a distinct compensating Action with a
   representation-compatible token input.
-- No irreversible Action appears where a saga requires compensation.
+- No Action with `compensation none` appears where a saga requires
+  compensation.
 - Every compensation has a valid input provenance.
 
 The daemon independently validates the encoded structure before loading it.

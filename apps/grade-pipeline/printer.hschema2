@@ -8,5 +8,5 @@ action print {
     input PrintInput
     success Printed
     error PrintError
-    kind irreversible
+    compensation none
 }

@@ -4,7 +4,7 @@ Status: durable opaque compensation-token format, version 1.
 
 The execution journal records delivery facts and never stores application
 values. Explicit sagas additionally require the successful value returned by
-each reversible Action because that app-owned value is the input token for its
+each Action with a named compensation because that app-owned value is the input token for its
 declared compensating Action.
 
 Hermas2 stores those tokens in a separate append-only log. Token presence
@@ -29,7 +29,7 @@ ambiguous durable state.
 
 ## Required ordering
 
-For a successful reversible Action inside a saga:
+For a successful Action with a named compensation inside a saga:
 
 1. Validate the result and compensation route.
 2. Append and synchronize the opaque token.

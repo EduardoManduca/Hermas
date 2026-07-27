@@ -33,9 +33,9 @@ one at-most-once invocation attempt within one execution.
 
 ## Frame kinds
 
-- `REGISTER_APP` carries an app ID and its exact 32-byte HSchema2 semantic
-  contract fingerprint.
-- `REGISTER_OK` acknowledges the registered app ID.
+- `REGISTER_APP` carries an app ID, the app's current local Action ID, and
+  that Action's exact 32-byte HSchema2 semantic fingerprint.
+- `REGISTER_OK` acknowledges both registered IDs.
 - `INVOKE` carries one Action request and canonical input payload.
 - `RESULT` carries either exact app success or exact app error.
 - `PROTOCOL_ERROR` reports a rejected frame without pretending it is an app
@@ -46,6 +46,12 @@ one at-most-once invocation attempt within one execution.
 
 `Unknown` and `NotSent` execution results carry no nominal value or payload.
 They remain operational outcomes rather than HSchema2 domain values.
+
+Registration is one connection per Action, not one connection per app. The
+daemon matches the app identity and Action fingerprint against the loaded
+graph image. It may therefore accept a local Action ID different from the
+historical ID stored in that image and translates IDs at the transport
+boundary.
 
 ## Delivery rule
 

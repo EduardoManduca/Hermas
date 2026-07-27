@@ -19,7 +19,7 @@ fn grade_pipeline_round_trips_through_the_versioned_image() {
     let decoded = decode_graph_image(&bytes).expect("valid image");
     assert_eq!(decoded.workflow_name, "grade_pipeline");
     assert_eq!(decoded.error_count, 3);
-    assert_eq!(decoded.app_count, 3);
+    assert_eq!(decoded.action_contract_count, 3);
     assert_eq!(decoded.node_count, 7);
     assert_eq!(decoded.edge_count, 13);
     assert_eq!(decoded.region_count, 0);
@@ -36,7 +36,7 @@ fn graph_image_is_deterministic_with_a_golden_digest() {
     let digest = Sha256::digest(&first);
     assert_eq!(
         format!("{digest:x}"),
-        "e6723be5fb051ceaa2eb4a7279fb60f0bc4c860e39f85b62995adaa2fc09b3eb"
+        "3d629a2aa0fc00c66697c11973f13a4abb6b5f100f55bce3a0dd1ee3a2aab419"
     );
 }
 
@@ -56,7 +56,7 @@ fn rejects_header_offsets_counts_and_reserved_fields() {
     let bytes = encoded_pipeline();
     for (offset, value, code) in [
         (0, 0, ImageErrorCode::BadMagic),
-        (4, 2, ImageErrorCode::UnsupportedVersion),
+        (4, 3, ImageErrorCode::UnsupportedVersion),
         (12, 1, ImageErrorCode::InvalidHeader),
         (26, 0, ImageErrorCode::InvalidCount),
         (36, 0, ImageErrorCode::InvalidOffset),
@@ -73,13 +73,13 @@ fn rejects_header_offsets_counts_and_reserved_fields() {
 }
 
 #[test]
-fn rejects_malformed_app_node_and_edge_records() {
+fn rejects_malformed_action_contract_node_and_edge_records() {
     let bytes = encoded_pipeline();
-    let apps = read_u32(&bytes, 40);
+    let action_contracts = read_u32(&bytes, 40);
     let nodes = read_u32(&bytes, 48);
     let edges = read_u32(&bytes, 52);
     for (offset, code) in [
-        (apps + 2, ImageErrorCode::InvalidRecord),
+        (action_contracts + 2, ImageErrorCode::InvalidRecord),
         (nodes, ImageErrorCode::InvalidRecord),
         (edges, ImageErrorCode::InvalidRecord),
         (edges + 3, ImageErrorCode::InvalidRecord),

@@ -5,7 +5,7 @@ use std::fmt;
 use sha2::{Digest, Sha256};
 
 use crate::catalog::{
-    ActionDeclaration, ActionId, ActionKindDeclaration, AppId, Catalog, CatalogError,
+    ActionDeclaration, ActionId, AppId, Catalog, CatalogError, CompensationDeclaration,
     Representation, TypeId,
 };
 
@@ -95,6 +95,7 @@ pub struct SchemaContract {
     pub types: BTreeMap<String, TypeId>,
     pub actions: BTreeMap<String, ActionId>,
     pub fingerprint: ContractFingerprint,
+    pub action_fingerprints: BTreeMap<String, ContractFingerprint>,
 }
 
 impl SchemaContract {
@@ -104,6 +105,10 @@ impl SchemaContract {
 
     pub fn action_id(&self, name: &str) -> Option<ActionId> {
         self.actions.get(name).copied()
+    }
+
+    pub fn action_fingerprint(&self, name: &str) -> Option<ContractFingerprint> {
+        self.action_fingerprints.get(name).copied()
     }
 }
 
@@ -356,9 +361,9 @@ struct TypeDeclaration {
 }
 
 #[derive(Clone, Debug)]
-enum ParsedActionKind {
-    Irreversible,
-    Reversible { compensation: String },
+enum ParsedCompensation {
+    None,
+    Action(String),
 }
 
 #[derive(Clone, Debug)]
@@ -366,7 +371,7 @@ struct ParsedAction {
     input: String,
     success: String,
     error: String,
-    kind: ParsedActionKind,
+    compensation: ParsedCompensation,
     span: Span,
 }
 
@@ -471,23 +476,12 @@ fn parse_action(tokens: &mut Tokens) -> Result<(String, ParsedAction), SchemaDia
     let (success, _) = tokens.expect_identifier()?;
     tokens.expect_keyword("error")?;
     let (error, _) = tokens.expect_identifier()?;
-    tokens.expect_keyword("kind")?;
-    let (kind_name, kind_span) = tokens.expect_identifier()?;
-    let kind = match kind_name.as_str() {
-        "irreversible" => ParsedActionKind::Irreversible,
-        "reversible" => {
-            tokens.expect_keyword("compensate")?;
-            let (compensation, _) = tokens.expect_identifier()?;
-            ParsedActionKind::Reversible { compensation }
-        }
-        _ => {
-            return Err(tokens.diagnostic(
-                "schema",
-                "invalid-action-kind",
-                kind_span,
-                "Action kind must be `irreversible` or `reversible`",
-            ));
-        }
+    tokens.expect_keyword("compensation")?;
+    let (compensation_name, _) = tokens.expect_identifier()?;
+    let compensation = if compensation_name == "none" {
+        ParsedCompensation::None
+    } else {
+        ParsedCompensation::Action(compensation_name)
     };
     tokens.expect_symbol(Symbol::RightBrace)?;
     Ok((
@@ -496,7 +490,7 @@ fn parse_action(tokens: &mut Tokens) -> Result<(String, ParsedAction), SchemaDia
             input,
             success,
             error,
-            kind,
+            compensation,
             span: action_span,
         },
     ))
@@ -730,7 +724,7 @@ fn write_type_expression(output: &mut String, expression: &TypeExpression) {
 }
 
 fn fingerprint(parsed: &ParsedSchema) -> ContractFingerprint {
-    let mut canonical = format!("hermas2-contract-v1\napp:{}\n", parsed.app);
+    let mut canonical = format!("hermas2-contract-v2\napp:{}\n", parsed.app);
     for (name, declaration) in &parsed.types {
         canonical.push_str("type:");
         canonical.push_str(name);
@@ -743,15 +737,83 @@ fn fingerprint(parsed: &ParsedSchema) -> ContractFingerprint {
             "action:{name}:{}->{}!{}:",
             action.input, action.success, action.error
         ));
-        match &action.kind {
-            ParsedActionKind::Irreversible => canonical.push_str("irreversible"),
-            ParsedActionKind::Reversible { compensation } => {
-                canonical.push_str("reversible:");
+        match &action.compensation {
+            ParsedCompensation::None => canonical.push_str("compensation:none"),
+            ParsedCompensation::Action(compensation) => {
+                canonical.push_str("compensation:");
                 canonical.push_str(compensation);
             }
         }
         canonical.push('\n');
     }
+    ContractFingerprint(Sha256::digest(canonical.as_bytes()).into())
+}
+
+fn collect_reachable_type(parsed: &ParsedSchema, name: &str, reachable: &mut BTreeSet<String>) {
+    if !reachable.insert(name.to_owned()) {
+        return;
+    }
+    let Some(declaration) = parsed.types.get(name) else {
+        return;
+    };
+    collect_type_references(&declaration.expression, parsed, reachable);
+}
+
+fn collect_type_references(
+    expression: &TypeExpression,
+    parsed: &ParsedSchema,
+    reachable: &mut BTreeSet<String>,
+) {
+    match expression {
+        TypeExpression::Named(name, _) => collect_reachable_type(parsed, name, reachable),
+        TypeExpression::Record(fields) | TypeExpression::Variant(fields) => {
+            for field in fields.values() {
+                collect_type_references(field, parsed, reachable);
+            }
+        }
+        TypeExpression::List(element, _) => collect_type_references(element, parsed, reachable),
+        TypeExpression::Unit
+        | TypeExpression::Integer
+        | TypeExpression::Boolean
+        | TypeExpression::String(_)
+        | TypeExpression::Bytes(_) => {}
+    }
+}
+
+fn action_fingerprint(
+    parsed: &ParsedSchema,
+    name: &str,
+    action: &ParsedAction,
+) -> ContractFingerprint {
+    let mut reachable = BTreeSet::new();
+    for type_name in [&action.input, &action.success, &action.error] {
+        collect_reachable_type(parsed, type_name, &mut reachable);
+    }
+    let mut canonical = format!("hermas2-action-v1\napp:{}\naction:{name}\n", parsed.app);
+    for type_name in reachable {
+        canonical.push_str("type:");
+        canonical.push_str(&type_name);
+        canonical.push('=');
+        write_type_expression(
+            &mut canonical,
+            &parsed
+                .types
+                .get(&type_name)
+                .expect("reachable type exists")
+                .expression,
+        );
+        canonical.push('\n');
+    }
+    canonical.push_str(&format!(
+        "ports:{}->{}!{}\n",
+        action.input, action.success, action.error
+    ));
+    canonical.push_str("compensation:");
+    match &action.compensation {
+        ParsedCompensation::None => canonical.push_str("none"),
+        ParsedCompensation::Action(compensation) => canonical.push_str(compensation),
+    }
+    canonical.push('\n');
     ContractFingerprint(Sha256::digest(canonical.as_bytes()).into())
 }
 
@@ -855,16 +917,19 @@ pub fn compile_schema(
             input: resolve(&action.input)?,
             success: resolve(&action.success)?,
             error: resolve(&action.error)?,
-            kind: match &action.kind {
-                ParsedActionKind::Irreversible => ActionKindDeclaration::Irreversible,
-                ParsedActionKind::Reversible { compensation } => {
-                    ActionKindDeclaration::Reversible {
-                        compensation: compensation.clone(),
-                    }
+            compensation: match &action.compensation {
+                ParsedCompensation::None => CompensationDeclaration::None,
+                ParsedCompensation::Action(compensation) => {
+                    CompensationDeclaration::Action(compensation.clone())
                 }
             },
         });
     }
+    let action_fingerprints = parsed
+        .actions
+        .iter()
+        .map(|(name, action)| (name.clone(), action_fingerprint(&parsed, name, action)))
+        .collect::<BTreeMap<_, _>>();
     let action_ids = candidate
         .declare_actions(app, declarations)
         .map_err(|error| {
@@ -886,6 +951,11 @@ pub fn compile_schema(
                 error.to_string(),
             )
         })?;
+    for (name, action_id) in parsed.actions.keys().zip(action_ids.iter().copied()) {
+        candidate
+            .set_action_fingerprint(action_id, *action_fingerprints[name].as_bytes())
+            .expect("newly declared Action accepts its fingerprint");
+    }
     let actions = parsed.actions.keys().cloned().zip(action_ids).collect();
     *catalog = candidate;
     Ok(SchemaContract {
@@ -893,5 +963,6 @@ pub fn compile_schema(
         types,
         actions,
         fingerprint: contract_fingerprint,
+        action_fingerprints,
     })
 }

@@ -3,13 +3,15 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define HERMAS2_HEADER_SIZE 80u
-#define HERMAS2_APP_RECORD_SIZE 36u
-#define HERMAS2_TYPE_RECORD_SIZE 8u
-#define HERMAS2_NODE_RECORD_SIZE 8u
-#define HERMAS2_EDGE_RECORD_SIZE 16u
-#define HERMAS2_REGION_RECORD_SIZE 16u
+#define HERMAS2_HEADER_SIZE HERMAS2_IMAGE_HEADER_SIZE
+#define HERMAS2_ACTION_CONTRACT_RECORD_SIZE \
+    HERMAS2_IMAGE_ACTION_CONTRACT_RECORD_SIZE
+#define HERMAS2_TYPE_RECORD_SIZE HERMAS2_IMAGE_TYPE_RECORD_SIZE
+#define HERMAS2_NODE_RECORD_SIZE HERMAS2_IMAGE_NODE_RECORD_SIZE
+#define HERMAS2_EDGE_RECORD_SIZE HERMAS2_IMAGE_EDGE_RECORD_SIZE
+#define HERMAS2_REGION_RECORD_SIZE HERMAS2_IMAGE_REGION_RECORD_SIZE
 #define HERMAS2_MAX_NODES 64u
+#define HERMAS2_MAX_ACTION_CONTRACTS 80u
 #define HERMAS2_MAX_EDGES 192u
 #define HERMAS2_MAX_ERRORS 256u
 #define HERMAS2_MAX_ALL_BRANCHES 8u
@@ -94,6 +96,23 @@ static bool contains_u16(
     uint16_t value) {
     for (size_t index = 0u; index < count; ++index) {
         if (read_u16(bytes, offset + index * stride) == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool contains_action_contract(
+    const uint8_t *bytes,
+    size_t offset,
+    size_t count,
+    uint16_t app,
+    uint16_t action) {
+    for (size_t index = 0u; index < count; ++index) {
+        size_t record =
+            offset + index * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+        if (read_u16(bytes, record) == app &&
+            read_u16(bytes, record + 2u) == action) {
             return true;
         }
     }
@@ -327,7 +346,7 @@ hermas2_image_result hermas2_image_validate(
     if (memcmp(bytes, "H2GI", 4u) != 0) {
         return HERMAS2_IMAGE_BAD_MAGIC;
     }
-    if (read_u16(bytes, 4u) != 1u) {
+    if (read_u16(bytes, 4u) != HERMAS2_GRAPH_IMAGE_VERSION) {
         return HERMAS2_IMAGE_UNSUPPORTED_VERSION;
     }
     if (read_u16(bytes, 6u) != HERMAS2_HEADER_SIZE ||
@@ -344,21 +363,22 @@ hermas2_image_result hermas2_image_validate(
     uint16_t input_type = read_u16(bytes, 22u);
     uint16_t success_type = read_u16(bytes, 24u);
     uint16_t error_count = read_u16(bytes, 26u);
-    uint16_t app_count = read_u16(bytes, 28u);
+    uint16_t action_contract_count = read_u16(bytes, 28u);
     uint16_t node_count = read_u16(bytes, 30u);
     uint16_t edge_count = read_u16(bytes, 32u);
     uint16_t type_count = read_u16(bytes, 34u);
     uint16_t region_count = read_u16(bytes, 68u);
     if (input_type == 0u || success_type == 0u || error_count == 0u ||
-        error_count > HERMAS2_MAX_ERRORS || app_count == 0u ||
-        app_count > HERMAS2_MAX_NODES || type_count == 0u ||
+        error_count > HERMAS2_MAX_ERRORS || action_contract_count == 0u ||
+        action_contract_count > HERMAS2_MAX_ACTION_CONTRACTS ||
+        type_count == 0u ||
         type_count > HERMAS2_MAX_ERRORS || node_count > HERMAS2_MAX_NODES ||
         edge_count > HERMAS2_MAX_EDGES || region_count > 40u) {
         return HERMAS2_IMAGE_INVALID_COUNT;
     }
 
     size_t errors_offset = read_u32(bytes, 36u);
-    size_t apps_offset = read_u32(bytes, 40u);
+    size_t action_contracts_offset = read_u32(bytes, 40u);
     size_t types_offset = read_u32(bytes, 44u);
     size_t nodes_offset = read_u32(bytes, 48u);
     size_t edges_offset = read_u32(bytes, 52u);
@@ -366,20 +386,26 @@ hermas2_image_result hermas2_image_validate(
     size_t strings_offset = read_u32(bytes, 60u);
     size_t representations_length = read_u32(bytes, 64u);
     size_t regions_offset = read_u32(bytes, 72u);
-    size_t expected_apps = (HERMAS2_HEADER_SIZE + (size_t)error_count * 2u + 3u) & ~(size_t)3u;
+    size_t expected_action_contracts =
+        (HERMAS2_HEADER_SIZE + (size_t)error_count * 2u + 3u) &
+        ~(size_t)3u;
     size_t expected_types = 0u;
     size_t expected_nodes = 0u;
     size_t expected_edges = 0u;
     size_t expected_regions = 0u;
     size_t expected_strings = 0u;
-    if (!checked_table_end(expected_apps, app_count, HERMAS2_APP_RECORD_SIZE, &expected_types) ||
+    if (!checked_table_end(expected_action_contracts,
+                           action_contract_count,
+                           HERMAS2_ACTION_CONTRACT_RECORD_SIZE,
+                           &expected_types) ||
         !checked_table_end(expected_types, type_count, HERMAS2_TYPE_RECORD_SIZE, &expected_nodes) ||
         !checked_table_end(expected_nodes, node_count, HERMAS2_NODE_RECORD_SIZE, &expected_edges) ||
         !checked_table_end(expected_edges, edge_count, HERMAS2_EDGE_RECORD_SIZE, &expected_regions) ||
         !checked_table_end(expected_regions, region_count, HERMAS2_REGION_RECORD_SIZE, &expected_strings) ||
         representations_length > SIZE_MAX - expected_strings ||
         errors_offset != HERMAS2_HEADER_SIZE ||
-        apps_offset != expected_apps || types_offset != expected_types ||
+        action_contracts_offset != expected_action_contracts ||
+        types_offset != expected_types ||
         nodes_offset != expected_nodes || edges_offset != expected_edges ||
         regions_offset != expected_regions ||
         representations_offset != expected_strings ||
@@ -403,14 +429,19 @@ hermas2_image_result hermas2_image_validate(
             }
         }
     }
-    for (size_t left = 0u; left < app_count; ++left) {
-        size_t offset = apps_offset + left * HERMAS2_APP_RECORD_SIZE;
+    for (size_t left = 0u; left < action_contract_count; ++left) {
+        size_t offset = action_contracts_offset +
+                        left * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
         uint16_t app = read_u16(bytes, offset);
-        if (app == 0u || read_u16(bytes, offset + 2u) != 0u) {
+        uint16_t action = read_u16(bytes, offset + 2u);
+        if (app == 0u || action == 0u) {
             return HERMAS2_IMAGE_INVALID_RECORD;
         }
         for (size_t right = 0u; right < left; ++right) {
-            if (app == read_u16(bytes, apps_offset + right * HERMAS2_APP_RECORD_SIZE)) {
+            size_t previous = action_contracts_offset +
+                              right * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+            if (app == read_u16(bytes, previous) &&
+                action == read_u16(bytes, previous + 2u)) {
                 return HERMAS2_IMAGE_INVALID_RECORD;
             }
         }
@@ -467,7 +498,9 @@ hermas2_image_result hermas2_image_validate(
         uint16_t reserved = read_u16(bytes, offset + 6u);
         size_t node = index + 1u;
         if (kind == 1u && subtype == 0u && action != 0u && reserved == 0u &&
-            contains_u16(bytes, apps_offset, app_count, HERMAS2_APP_RECORD_SIZE, app)) {
+            contains_action_contract(
+                bytes, action_contracts_offset, action_contract_count,
+                app, action)) {
             action_nodes[node] = true;
         } else if (kind == 3u && subtype == 0u && action != 0u &&
                    app == 0u && reserved == 0u) {
@@ -633,8 +666,10 @@ hermas2_image_result hermas2_image_validate(
             if (bytes[offset + 1u] != 0u || forward == 0u ||
                 forward > node_count || !action_nodes[forward] ||
                 compensation_app == 0u || compensation_action == 0u ||
-                !contains_u16(bytes, apps_offset, app_count,
-                              HERMAS2_APP_RECORD_SIZE, compensation_app) ||
+                !contains_action_contract(
+                    bytes, action_contracts_offset,
+                    action_contract_count, compensation_app,
+                    compensation_action) ||
                 ordinal != saga_count + 1u || saga_source_type[forward] != 0u ||
                 !compatible || read_u16(bytes, offset + 14u) != 0u) {
                 return HERMAS2_IMAGE_INVALID_RECORD;
@@ -964,7 +999,7 @@ hermas2_image_result hermas2_image_validate(
         summary->input_type = input_type;
         summary->success_type = success_type;
         summary->error_count = error_count;
-        summary->app_count = app_count;
+        summary->action_contract_count = action_contract_count;
         summary->type_count = type_count;
         summary->node_count = node_count;
         summary->edge_count = edge_count;

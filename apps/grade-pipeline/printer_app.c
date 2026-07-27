@@ -47,6 +47,6 @@ static int print_mean(
 int main(int argc, char **argv) {
     uint8_t result[1];
     return hermas2_example_app_run_once(
-        argc, argv, PRINTER_APP_ID, print_mean,
+        argc, argv, PRINTER_APP_ID, PRINT_ACTION_ID, print_mean,
         result, sizeof(result));
 }

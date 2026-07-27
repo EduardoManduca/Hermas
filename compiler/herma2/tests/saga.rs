@@ -55,7 +55,7 @@ fn decoder_rejects_corrupt_saga_metadata() {
 }
 
 #[test]
-fn saga_rejects_irreversible_and_nonsequential_work() {
+fn saga_rejects_missing_compensation_and_nonsequential_work() {
     let mut catalog = Catalog::new();
     compile_schema(
         &mut catalog,
@@ -71,7 +71,7 @@ errors { payment::Failure }
 }
 "#;
     let error = compile_hscript(&catalog, "invalid.hscript2", irreversible).unwrap_err();
-    assert_eq!(error.code, "irreversible-saga-action");
+    assert_eq!(error.code, "missing-saga-compensation");
 
     let parallel = r#"
 workflow invalid(input: payment::Request) -> payment::Token

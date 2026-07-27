@@ -66,14 +66,15 @@ Applications are responsible for:
 
 Hermas must never become a hidden application framework. It does not calculate means, filter records, format reports, execute SQL, call HTTP APIs, or interpret domain values. Those behaviors belong in Actions.
 
-Every HSchema2 Action contract declares exactly one effect kind:
-`reversible` or `irreversible`. A reversible Action must name a distinct
-app-owned compensating Action, and its successful output must be
-representation-compatible with that compensating Action's input because the
-successful output is the compensation token. An irreversible Action has no
-compensation declaration. This classification is always present in contracts,
-although automatic compensation is available only inside an explicit saga
-scope after durable recovery and compensation storage have been specified.
+Every HSchema2 Action contract declares exactly one public compensation
+capability: `none` or a distinct app-owned compensating Action. When an Action
+is named, the source Action's successful output must be
+representation-compatible with that Action's input because the successful
+output is the compensation token. This declaration is always present in
+contracts, although automatic compensation is available only inside an
+explicit saga scope after durable recovery and compensation storage have been
+specified. It advertises an orchestration capability; it does not claim
+literal reversibility or disclose application internals.
 
 ## 3. The Main Components
 
@@ -177,7 +178,8 @@ the application boundary.
 It helps an application:
 
 - Connect to `hermas2d`.
-- Register its identity and contract fingerprint.
+- Register its app identity, local Action ID, and Action fingerprint on one
+  endpoint per Action.
 - Receive checked Action frames.
 - Dispatch requests to application-owned handlers.
 - Return typed successes or failures.

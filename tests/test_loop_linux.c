@@ -33,12 +33,14 @@ static uint8_t *read_fixture(const char *path, size_t *size) {
     return bytes;
 }
 
-static hermas2_daemon_app *app_slot(
+static hermas2_daemon_action *action_slot(
     hermas2_daemon_registry *registry,
-    uint16_t app_id) {
-    for (size_t index = 0u; index < registry->app_count; ++index) {
-        if (registry->apps[index].app_id == app_id) {
-            return &registry->apps[index];
+    uint16_t app_id,
+    uint16_t action_id) {
+    for (size_t index = 0u; index < registry->action_count; ++index) {
+        if (registry->actions[index].app_id == app_id &&
+            registry->actions[index].action_id == action_id) {
+            return &registry->actions[index];
         }
     }
     return NULL;
@@ -96,7 +98,7 @@ static int test_not_sent(
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_app *app = app_slot(registry, 1u);
+    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create NotSent socket pair");
@@ -128,11 +130,12 @@ static int test_unknown(
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_app *app = app_slot(registry, 1u);
+    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create Unknown socket pair");
     }
+    app->registered_action_id = 77u;
     app->file_descriptor = sockets[0];
     if (hermas2_daemon_loop_init(loop, registry, image, image_size) !=
             HERMAS2_LOOP_OK ||
@@ -143,8 +146,9 @@ static int test_unknown(
     size_t progress = 0u;
     hermas2_frame request;
     if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK ||
-        !receive_request(sockets[1], &request)) {
-        return fail("invocation was not completely delivered");
+        !receive_request(sockets[1], &request) ||
+        request.action_id != app->registered_action_id) {
+        return fail("invocation did not use the registered local Action ID");
     }
     close(sockets[1]);
     if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK) {
@@ -165,7 +169,7 @@ static int test_single_flight(
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_app *app = app_slot(registry, 1u);
+    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create single-flight socket pair");
@@ -227,7 +231,7 @@ static int test_durable_delivery_facts(
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_app *app = app_slot(registry, 1u);
+    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create durable journal socket pair");

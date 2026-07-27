@@ -184,9 +184,9 @@ int main(int argc, char **argv) {
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, caller) != 0) {
         return fail("cannot create completed-result sockets");
     }
-    for (size_t index = 0u; index < registry.app_count; ++index) {
-        registry.apps[index].file_descriptor =
-            registry.apps[index].app_id == app_id ? app[0] : -1;
+    for (size_t index = 0u; index < registry.action_count; ++index) {
+        registry.actions[index].file_descriptor =
+            registry.actions[index].app_id == app_id ? app[0] : -1;
     }
     if (hermas2_control_server_attach(server, caller[0]) !=
             HERMAS2_CONTROL_SERVER_OK ||

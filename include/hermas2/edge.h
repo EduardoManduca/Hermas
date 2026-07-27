@@ -23,6 +23,7 @@ typedef enum hermas2_edge_result {
 typedef struct hermas2_edge {
     int file_descriptor;
     uint16_t app_id;
+    uint16_t action_id;
     uint8_t contract_fingerprint[32];
     uint64_t delivered_invocations;
 } hermas2_edge;
@@ -43,6 +44,7 @@ hermas2_edge_result hermas2_edge_connect(
     hermas2_edge *edge,
     const char *socket_path,
     uint16_t app_id,
+    uint16_t action_id,
     const uint8_t contract_fingerprint[32]);
 
 hermas2_edge_result hermas2_edge_serve_once(

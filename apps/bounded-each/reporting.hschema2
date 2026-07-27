@@ -9,5 +9,5 @@ action create {
     input Input
     success Report
     error ReportError
-    kind irreversible
+    compensation none
 }

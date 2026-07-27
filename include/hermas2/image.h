@@ -1,6 +1,8 @@
 #ifndef HERMAS2_IMAGE_H
 #define HERMAS2_IMAGE_H
 
+#include "hermas2/image_format.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -25,7 +27,7 @@ typedef struct hermas2_image_summary {
     uint16_t input_type;
     uint16_t success_type;
     uint16_t error_count;
-    uint16_t app_count;
+    uint16_t action_contract_count;
     uint16_t type_count;
     uint16_t node_count;
     uint16_t edge_count;

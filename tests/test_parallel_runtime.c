@@ -31,10 +31,13 @@ static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
 static uint16_t action_success_type(
     const uint8_t *image,
     uint16_t node) {
-    size_t count = read_u16(image, 32u);
-    size_t edges = read_u32(image, 52u);
+    size_t count = read_u16(
+        image, HERMAS2_IMAGE_HEADER_EDGE_COUNT_OFFSET);
+    size_t edges = read_u32(
+        image, HERMAS2_IMAGE_HEADER_EDGES_OFFSET);
     for (size_t index = 0u; index < count; ++index) {
-        size_t edge = edges + index * 16u;
+        size_t edge =
+            edges + index * HERMAS2_IMAGE_EDGE_RECORD_SIZE;
         if (image[edge] == 1u && read_u16(image, edge + 4u) == node) {
             return read_u16(image, edge + 8u);
         }
@@ -319,13 +322,19 @@ static int test_same_app_serialization(
 static int test_deadline_regions(
     const uint8_t *image,
     size_t image_size) {
+    hermas2_image_summary summary;
+    if (hermas2_image_validate(image, image_size, &summary) !=
+        HERMAS2_IMAGE_OK) {
+        return fail("deadline image is invalid");
+    }
     uint8_t input[8] = {0u};
     uint8_t *malformed = malloc(image_size);
     if (malformed == NULL) {
         return fail("cannot allocate malformed deadline image");
     }
     memcpy(malformed, image, image_size);
-    size_t region = read_u32(malformed, 72u);
+    size_t region = read_u32(
+        malformed, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
     memset(malformed + region + 8u, 0, 8u);
     if (hermas2_image_validate(malformed, image_size, NULL) ==
         HERMAS2_IMAGE_OK) {
@@ -337,7 +346,8 @@ static int test_deadline_regions(
     hermas2_group_execution before_delivery;
     if (hermas2_group_start(
             &before_delivery, image, image_size, 305u, &storage[0][0],
-            sizeof(storage), sizeof(storage[0]), 4u, input,
+            sizeof(storage), sizeof(storage[0]), summary.input_type,
+            input,
             sizeof(input)) != HERMAS2_RUNTIME_OK ||
         hermas2_group_deadline_ms(&before_delivery) != 5000u ||
         hermas2_group_expire(&before_delivery) != HERMAS2_RUNTIME_OK) {
@@ -353,7 +363,8 @@ static int test_deadline_regions(
     hermas2_group_execution after_delivery;
     if (hermas2_group_start(
             &after_delivery, image, image_size, 306u, &storage[0][0],
-            sizeof(storage), sizeof(storage[0]), 4u, input,
+            sizeof(storage), sizeof(storage[0]), summary.input_type,
+            input,
             sizeof(input)) != HERMAS2_RUNTIME_OK) {
         return fail("post-delivery deadline could not start");
     }
@@ -449,7 +460,8 @@ static int test_bounded_each(
         return fail("cannot allocate malformed each image");
     }
     memcpy(malformed, image, image_size);
-    size_t region = read_u32(malformed, 72u);
+    size_t region = read_u32(
+        malformed, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
     malformed[region + 1u] = 0u;
     if (hermas2_image_validate(malformed, image_size, NULL) ==
         HERMAS2_IMAGE_OK) {
