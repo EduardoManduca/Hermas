@@ -1,0 +1,12 @@
+app discount
+
+type Subtotal = Integer
+type Discounted = Integer
+type DiscountError = Unit
+
+action apply {
+    input Subtotal
+    success Discounted
+    error DiscountError
+    compensation none
+}

@@ -1,0 +1,12 @@
+app tax
+
+type TaxInput = Integer
+type Total = Integer
+type TaxError = Unit
+
+action calculate {
+    input TaxInput
+    success Total
+    error TaxError
+    compensation none
+}

@@ -4,10 +4,10 @@
 #include <stdio.h>
 
 enum {
-    PRINTER_APP_ID = 3,
-    PRINT_ACTION_ID = 3,
-    PRINT_INPUT_TYPE_ID = 10,
-    PRINTED_TYPE_ID = 11
+    RECEIPT_APP_ID = 3,
+    ISSUE_ACTION_ID = 3,
+    RECEIPT_INPUT_TYPE_ID = 9,
+    ISSUED_TYPE_ID = 7
 };
 
 static int64_t read_i64(const uint8_t *bytes) {
@@ -18,7 +18,7 @@ static int64_t read_i64(const uint8_t *bytes) {
     return (int64_t)value;
 }
 
-static int print_mean(
+static int issue_receipt(
     void *user_data,
     uint16_t action_id,
     uint16_t input_type,
@@ -30,16 +30,17 @@ static int print_mean(
     size_t result_capacity,
     size_t *result_length) {
     (void)user_data;
-    if (action_id != PRINT_ACTION_ID ||
-        input_type != PRINT_INPUT_TYPE_ID ||
-        input_length != 8u || result_capacity < 1u ||
-        printf("Mean: %lld\n", (long long)read_i64(input)) < 0 ||
+    if (action_id != ISSUE_ACTION_ID ||
+        input_type != RECEIPT_INPUT_TYPE_ID || input_length != 8u ||
+        result_capacity < 1u ||
+        printf("Order total: %lld cents\n",
+               (long long)read_i64(input)) < 0 ||
         fflush(stdout) != 0) {
         return 0;
     }
     result[0] = 1u;
     *outcome = HERMAS2_OUTCOME_SUCCESS;
-    *result_type = PRINTED_TYPE_ID;
+    *result_type = ISSUED_TYPE_ID;
     *result_length = 1u;
     return 1;
 }
@@ -47,6 +48,6 @@ static int print_mean(
 int main(int argc, char **argv) {
     uint8_t result[1];
     return hermas2_example_app_run_once(
-        argc, argv, PRINTER_APP_ID, PRINT_ACTION_ID, print_mean,
+        argc, argv, RECEIPT_APP_ID, ISSUE_ACTION_ID, issue_receipt,
         result, sizeof(result));
 }

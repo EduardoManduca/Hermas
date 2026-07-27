@@ -1,4 +1,4 @@
-#include "app_common.h"
+#include "../example_app.h"
 
 #include <stdint.h>
 #include <string.h>

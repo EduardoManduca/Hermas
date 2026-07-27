@@ -1,0 +1,18 @@
+workflow order_total(subtotal: discount::Subtotal) -> receipt::Issued
+errors {
+    discount::DiscountError
+    tax::TaxError
+    receipt::ReceiptError
+}
+{
+    let discounted = subtotal
+        |> discount/apply()
+
+    let total = discounted
+        |> as tax::TaxInput
+        |> tax/calculate()
+
+    return total
+        |> as receipt::ReceiptInput
+        |> receipt/issue()
+}

@@ -3,18 +3,11 @@
 #include <stdint.h>
 
 enum {
-    MEAN_CALCULATOR_APP_ID = 2,
+    TAX_APP_ID = 2,
     CALCULATE_ACTION_ID = 2,
-    MEAN_INPUT_TYPE_ID = 8,
-    MEAN_TYPE_ID = 6
+    TAX_INPUT_TYPE_ID = 5,
+    TOTAL_TYPE_ID = 6
 };
-
-static uint32_t read_u32(const uint8_t *bytes, size_t offset) {
-    return (uint32_t)bytes[offset] |
-           ((uint32_t)bytes[offset + 1u] << 8u) |
-           ((uint32_t)bytes[offset + 2u] << 16u) |
-           ((uint32_t)bytes[offset + 3u] << 24u);
-}
 
 static int64_t read_i64(const uint8_t *bytes) {
     uint64_t value = 0u;
@@ -31,7 +24,7 @@ static void write_i64(uint8_t *bytes, int64_t value) {
     }
 }
 
-static int calculate_mean(
+static int calculate_tax(
     void *user_data,
     uint16_t action_id,
     uint16_t input_type,
@@ -44,17 +37,17 @@ static int calculate_mean(
     size_t *result_length) {
     (void)user_data;
     if (action_id != CALCULATE_ACTION_ID ||
-        input_type != MEAN_INPUT_TYPE_ID ||
-        input_length != 32u || read_u32(input, 0u) != 3u ||
-        read_u32(input, 4u) != 0u || result_capacity < 8u) {
+        input_type != TAX_INPUT_TYPE_ID || input_length != 8u ||
+        result_capacity < 8u) {
         return 0;
     }
-    int64_t total =
-        read_i64(input + 8u) + read_i64(input + 16u) +
-        read_i64(input + 24u);
-    write_i64(result, total / 3);
+    int64_t discounted = read_i64(input);
+    if (discounted < 0) {
+        return 0;
+    }
+    write_i64(result, discounted + discounted / 10);
     *outcome = HERMAS2_OUTCOME_SUCCESS;
-    *result_type = MEAN_TYPE_ID;
+    *result_type = TOTAL_TYPE_ID;
     *result_length = 8u;
     return 1;
 }
@@ -62,7 +55,6 @@ static int calculate_mean(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas2_example_app_run_once(
-        argc, argv, MEAN_CALCULATOR_APP_ID, CALCULATE_ACTION_ID,
-        calculate_mean,
+        argc, argv, TAX_APP_ID, CALCULATE_ACTION_ID, calculate_tax,
         result, sizeof(result));
 }

@@ -1,4 +1,4 @@
-#include "app_common.h"
+#include "example_app.h"
 
 #include <stdio.h>
 #include <string.h>

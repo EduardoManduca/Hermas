@@ -190,15 +190,27 @@ if(UNIX)
     add_hermas2_edge_app(
         hermas2_grade_list
         apps/grade-pipeline/grade_list_app.c
-        apps/grade-pipeline/app_common.c)
+        apps/example_app.c)
     add_hermas2_edge_app(
         hermas2_mean_calculator
         apps/grade-pipeline/mean_calculator_app.c
-        apps/grade-pipeline/app_common.c)
+        apps/example_app.c)
     add_hermas2_edge_app(
         hermas2_printer
         apps/grade-pipeline/printer_app.c
-        apps/grade-pipeline/app_common.c)
+        apps/example_app.c)
+    add_hermas2_edge_app(
+        hermas2_discount
+        apps/order-total/discount_app.c
+        apps/example_app.c)
+    add_hermas2_edge_app(
+        hermas2_tax
+        apps/order-total/tax_app.c
+        apps/example_app.c)
+    add_hermas2_edge_app(
+        hermas2_receipt
+        apps/order-total/receipt_app.c
+        apps/example_app.c)
 endif()
 
 include(CTest)
@@ -600,9 +612,10 @@ if(UNIX)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(TARGETS
             hermas2_grade_list hermas2_mean_calculator hermas2_printer
+            hermas2_discount hermas2_tax hermas2_receipt
         RUNTIME DESTINATION
             ${CMAKE_INSTALL_LIBEXECDIR}/hermas/examples)
-    install(PROGRAMS tools/quickstart.sh
+    install(PROGRAMS tools/quickstart.sh tools/test_order_total.sh
         DESTINATION ${CMAKE_INSTALL_DATADIR}/hermas)
 endif()
 

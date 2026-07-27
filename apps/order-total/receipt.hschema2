@@ -1,0 +1,12 @@
+app receipt
+
+type ReceiptInput = Integer
+type Issued = Boolean
+type ReceiptError = Unit
+
+action issue {
+    input ReceiptInput
+    success Issued
+    error ReceiptError
+    compensation none
+}
