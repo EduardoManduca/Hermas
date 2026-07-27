@@ -214,6 +214,17 @@ The caller boundary is now executable end to end:
   proves that an exact app failure returns to the caller with all connection
   and execution slots released.
 
+Hermas2 now also has a runnable Linux process boundary. `hermas2d` loads and
+independently validates one graph image, owns private app and caller sockets,
+opens the four separately locked durable stores, restores the monotonic
+execution-ID floor, waits for every required app registration before admitting
+callers, and runs the bounded event loop until SIGINT or SIGTERM. Clean
+completed history survives restart; interrupted history is explicitly refused
+as recovery-required until the recovery-host milestone composes the existing
+saga planner. `hermas2_run` provides a shell-facing typed execution client with
+exact outcome, nominal Type IDs, canonical hexadecimal values, and distinct
+domain-outcome exit statuses.
+
 ## Build and Inspect
 
 From this directory:

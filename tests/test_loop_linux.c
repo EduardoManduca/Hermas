@@ -246,6 +246,10 @@ static int test_durable_delivery_facts(
             HERMAS2_LOOP_OK ||
         hermas2_daemon_loop_attach_journal(loop, &writer, 11u) !=
             HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_set_execution_floor(loop, 205u) !=
+            HERMAS2_LOOP_OK ||
+        hermas2_daemon_loop_admit(loop, 204u, 1u, NULL, 0u) !=
+            HERMAS2_LOOP_DUPLICATE_EXECUTION ||
         hermas2_daemon_loop_admit(loop, 205u, 1u, NULL, 0u) !=
             HERMAS2_LOOP_OK) {
         close(sockets[1]);

@@ -93,6 +93,13 @@ if(UNIX)
     add_library(hermas2_client STATIC src/client_linux.c)
     target_include_directories(hermas2_client PUBLIC include)
     target_link_libraries(hermas2_client PUBLIC hermas2_protocol)
+    add_library(hermas2_host STATIC src/host_linux.c)
+    target_include_directories(hermas2_host PUBLIC include)
+    target_link_libraries(hermas2_host PUBLIC hermas2_control)
+    add_executable(hermas2d tools/hermas2d.c)
+    target_link_libraries(hermas2d PRIVATE hermas2_host)
+    add_executable(hermas2_run tools/hermas2_run.c)
+    target_link_libraries(hermas2_run PRIVATE hermas2_client)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas2_daemon PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
@@ -100,6 +107,12 @@ if(UNIX)
             -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(hermas2_edge PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(hermas2_client PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(hermas2_host PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(hermas2d PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(hermas2_run PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
         if(HERMAS2_SANITIZE)
             target_compile_options(hermas2_daemon PRIVATE
@@ -110,6 +123,16 @@ if(UNIX)
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_compile_options(hermas2_client PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_compile_options(hermas2_host PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_compile_options(hermas2d PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2d PRIVATE
+                -fsanitize=address,undefined)
+            target_compile_options(hermas2_run PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2_run PRIVATE
+                -fsanitize=address,undefined)
         endif()
     endif()
 
@@ -368,6 +391,30 @@ if(BUILD_TESTING)
             add_test(NAME hermas2_pipeline_tests
                      COMMAND hermas2_pipeline_tests
                          "${HERMAS2_TEST_IMAGE}"
+                         "$<TARGET_FILE:hermas2_grade_list>"
+                         "$<TARGET_FILE:hermas2_mean_calculator>"
+                         "$<TARGET_FILE:hermas2_printer>")
+            add_executable(hermas2d_tests
+                           tests/test_hermas2d_linux.c)
+            add_dependencies(hermas2d_tests
+                hermas2d hermas2_run hermas2_grade_list
+                hermas2_mean_calculator hermas2_printer)
+            target_link_libraries(hermas2d_tests PRIVATE
+                hermas2_client hermas2_journal)
+            target_compile_options(hermas2d_tests PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+            if(HERMAS2_SANITIZE)
+                target_compile_options(hermas2d_tests PRIVATE
+                    -fsanitize=address,undefined
+                    -fno-omit-frame-pointer)
+                target_link_options(hermas2d_tests PRIVATE
+                    -fsanitize=address,undefined)
+            endif()
+            add_test(NAME hermas2d_tests
+                     COMMAND hermas2d_tests
+                         "${HERMAS2_TEST_IMAGE}"
+                         "$<TARGET_FILE:hermas2d>"
+                         "$<TARGET_FILE:hermas2_run>"
                          "$<TARGET_FILE:hermas2_grade_list>"
                          "$<TARGET_FILE:hermas2_mean_calculator>"
                          "$<TARGET_FILE:hermas2_printer>")

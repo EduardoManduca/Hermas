@@ -686,6 +686,18 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
     return HERMAS2_LOOP_OK;
 }
 
+hermas2_loop_result hermas2_daemon_loop_set_execution_floor(
+    hermas2_daemon_loop *loop,
+    uint64_t minimum_execution_id) {
+    if (loop == NULL || loop->image == NULL ||
+        loop->journal == NULL || minimum_execution_id == 0u ||
+        hermas2_daemon_loop_active(loop) != 0u) {
+        return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    loop->minimum_execution_id = minimum_execution_id;
+    return HERMAS2_LOOP_OK;
+}
+
 hermas2_loop_result hermas2_daemon_loop_attach_compensation(
     hermas2_daemon_loop *loop,
     hermas2_compensation_writer *compensation) {
@@ -845,8 +857,13 @@ hermas2_loop_result hermas2_daemon_loop_admit(
     uint16_t input_type,
     const uint8_t *input,
     size_t input_length) {
-    if (loop == NULL || execution_id == 0u) {
+    if (loop == NULL || execution_id == 0u ||
+        execution_id == UINT64_MAX) {
         return HERMAS2_LOOP_INVALID_ARGUMENT;
+    }
+    if (loop->minimum_execution_id != 0u &&
+        execution_id < loop->minimum_execution_id) {
+        return HERMAS2_LOOP_DUPLICATE_EXECUTION;
     }
     if (find_execution(loop, execution_id) != NULL) {
         return HERMAS2_LOOP_DUPLICATE_EXECUTION;
@@ -869,6 +886,9 @@ hermas2_loop_result hermas2_daemon_loop_admit(
         if (journaled != HERMAS2_LOOP_OK) {
             memset(slot, 0, sizeof(*slot));
             return journaled;
+        }
+        if (loop->minimum_execution_id != 0u) {
+            loop->minimum_execution_id = execution_id + 1u;
         }
         slot->active = true;
         return HERMAS2_LOOP_OK;

@@ -112,6 +112,7 @@ typedef struct hermas2_daemon_loop {
         HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
     uint32_t workflow_id;
     uint64_t image_fingerprint;
+    uint64_t minimum_execution_id;
 } hermas2_daemon_loop;
 
 hermas2_loop_result hermas2_daemon_loop_init(
@@ -131,6 +132,10 @@ hermas2_loop_result hermas2_daemon_loop_attach_journal(
     hermas2_daemon_loop *loop,
     hermas2_journal_writer *journal,
     uint32_t workflow_id);
+
+hermas2_loop_result hermas2_daemon_loop_set_execution_floor(
+    hermas2_daemon_loop *loop,
+    uint64_t minimum_execution_id);
 
 hermas2_loop_result hermas2_daemon_loop_attach_compensation(
     hermas2_daemon_loop *loop,

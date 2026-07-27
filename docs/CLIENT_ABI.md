@@ -20,3 +20,17 @@ Connection lifetime and higher-level concurrency belong to the caller. A
 caller may create independent client objects when it wants parallel workflow
 executions; the daemon's bounded control server remains the capacity
 authority.
+
+## Shell runner
+
+`hermas2_run` exposes the same one-execution ABI for development and operator
+use:
+
+```text
+hermas2_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
+```
+
+It prints the exact terminal outcome, nominal source and destination Type IDs,
+and canonical value bytes in lowercase hexadecimal. Exit status is `0` for
+Success, `10` for AppError, `11` for NotSent, and `12` for Unknown. Transport,
+protocol, and argument failures remain distinct non-domain failures.
