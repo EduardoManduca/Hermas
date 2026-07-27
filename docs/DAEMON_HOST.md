@@ -1,6 +1,6 @@
 # Hermas2 Linux Daemon Host
 
-Status: runnable clean-start host.
+Status: runnable host with conservative forward closure and safe saga resume.
 
 `hermas2d` composes one independently validated graph image, the bounded app
 registry and registration server, the bounded caller control server, and four
@@ -39,11 +39,15 @@ historical ID and advances the floor after each successful admission. This
 prevents a completed execution ID from being reused and making the next
 journal scan ambiguous.
 
-The current host starts only when the execution journal has no interrupted
-execution. It returns `recovery-required` instead of replaying, discarding, or
-partially recovering unfinished work. Clean completed history is reopened and
-continued normally. A later recovery-host milestone will compose the already
-implemented saga recovery planner before relaxing this startup refusal.
+On startup, unfinished forward executions are closed as `Unknown`; the host
+never replays a prepared or sent Action. Active reverse plans from the saga
+attempt log are independently reconstructed from the terminal forward
+journal, exact compensation tokens, terminal result store, and reverse
+history. Only a planner-proven `Ready` saga is installed into the fresh
+transport loop. It waits for all required Actions, resumes at the next
+uncompensated ordinal, and is released after its durable terminal state.
+Uncertain reverse delivery returns `recovery-required`; inconsistent identity,
+tokens, results, or transitions fail startup as a state error.
 
 SIGINT and SIGTERM stop the process, close every owned descriptor and mapping,
 release state locks, and remove only socket paths successfully bound by that

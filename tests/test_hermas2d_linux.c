@@ -292,9 +292,9 @@ int main(int argc, char **argv) {
         return fail("cannot load graph image");
     }
     uint32_t apps_offset = read_u32(image, 40u);
-    uint16_t app_count = read_u16(image, 28u);
+    uint16_t action_contract_count = read_u16(image, 28u);
     uint16_t input_type = read_u16(image, 22u);
-    if (app_count != 3u || input_type == 0u ||
+    if (action_contract_count != 3u || input_type == 0u ||
         apps_offset > image_size ||
         image_size - apps_offset < 3u * 36u) {
         free(image);
@@ -392,21 +392,25 @@ int main(int argc, char **argv) {
     (void)snprintf(
         control_socket, sizeof(control_socket),
         "%s/control.sock", recovery);
-    pid_t refused = spawn_daemon(
+    pid_t recovered_forward = spawn_daemon(
         argv[2], secure_image, recovery, app_socket, control_socket);
-    int refused_status = 0;
-    if (refused <= 0 ||
-        waitpid(refused, &refused_status, 0) != refused ||
-        !WIFEXITED(refused_status) ||
-        WEXITSTATUS(refused_status) != 3 ||
-        access(app_socket, F_OK) == 0 ||
-        access(control_socket, F_OK) == 0) {
+    if (recovered_forward <= 0 ||
+        !wait_for_socket(app_socket, recovered_forward) ||
+        !wait_for_socket(control_socket, recovered_forward) ||
+        kill(recovered_forward, SIGTERM) != 0 ||
+        !wait_success(recovered_forward) ||
+        hermas2_journal_file_open(
+            &journal, journal_path, &summary) !=
+            HERMAS2_JOURNAL_OK ||
+        summary.interrupted_count != 0u ||
+        summary.record_count != 2u) {
         remove_state(recovery);
         remove_state(state);
         unlink(secure_image);
         free(image);
-        return fail("interrupted history was not safely refused");
+        return fail("interrupted forward history was not closed Unknown");
     }
+    hermas2_journal_file_close(&journal);
 
     char collision[] = "/tmp/hermas2d-collision-XXXXXX";
     if (mkdtemp(collision) == NULL) {

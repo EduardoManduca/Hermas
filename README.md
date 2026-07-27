@@ -49,11 +49,11 @@ Milestone 2 has started with an HSchema2 contract frontend. It provides:
 - App-owned nominal types and canonical structural representations.
 - Unit, integer, Boolean, bounded string/bytes, closed record, bounded list,
   and named typed variant representations.
-- Mandatory irreversible or reversible Action classification.
+- Mandatory public compensation capability (`none` or a named Action).
 - Typed compensation-contract validation.
 - Directional recursive representation compatibility.
 - Transactional catalog installation and source-located diagnostics.
-- Semantic, layout-independent SHA-256 contract fingerprints.
+- Semantic, layout-independent schema and per-Action SHA-256 fingerprints.
 - Real HSchema2 contracts for all three Grade Pipeline apps.
 
 Milestone 3 has started with a sequential HScript2 frontend. It provides:
@@ -73,10 +73,10 @@ Milestone 3 has started with a sequential HScript2 frontend. It provides:
 The Grade Pipeline graph now loads the three text contracts and its real
 HScript2 source through the same frontend exposed by the CLI.
 
-Milestone 4 has started with graph-image version 1:
+Milestone 4 has started with graph-image version 2:
 
 - Canonical little-endian header and table offsets.
-- Fingerprinted required-app records.
+- Fingerprinted required-Action records.
 - Closed node and typed-edge records.
 - Deterministic Rust encoding.
 - A raw-byte structural decoder that independently validates counts, offsets,
@@ -91,21 +91,21 @@ Milestone 5 has started with:
 - Kind-specific identifier, outcome, length, and payload validation.
 - Linux `AF_UNIX` `SOCK_SEQPACKET` transport.
 - Caller-owned, allocation-free `libhermas2edge` context and buffers.
-- Semantic contract fingerprint registration.
+- Per-Action semantic fingerprint registration with local-ID translation.
 - Exactly-once handler dispatch for each completely delivered request.
 - A caller-owned, allocation-free sequential graph executor.
-- A fixed-capacity required-app registry with exact graph-image fingerprint
+- A fixed-capacity required-Action registry with exact graph-image fingerprint
   admission.
 - A caller-owned 16-slot nonblocking `poll` scheduler with rotating admission,
-  fixed packet/value storage, and single-flight app ownership.
+  fixed packet/value storage, and single-flight Action ownership.
 - Distinct prepared-before-send `NotSent` and sent-before-loss `Unknown`
   transitions with no automatic retry.
 - Canonical input and app-result payload validation against graph-embedded
   representation descriptors.
 - A four-process Grade Pipeline integration test that prints `Mean: 80`,
-  rejects a mismatched app contract, and proves one delivery per app.
+  rejects a mismatched Action contract, and proves one delivery per Action.
 - Socket-level regression tests for pre-send `NotSent`, post-send `Unknown`,
-  execution-capacity exhaustion, and same-app serialization.
+  execution-capacity exhaustion, and same-Action serialization.
 - Cross-process tests under GCC and Clang with ASan and UBSan.
 
 Milestone 6 now provides exhaustive terminal `match`, named typed variant
@@ -118,7 +118,7 @@ nominal types, resource inspection reports maximum branch concurrency, and
 both independent image decoders validate the new topology.
 
 Its fixed eight-flow C arena now proves real socket overlap across independent
-apps, exactly-once branch delivery, same-app serialization, deterministic
+Actions, exactly-once branch delivery, same-Action serialization, deterministic
 failure/`Unknown` precedence, and cutoff of work that was never delivered.
 
 Milestone 8 now includes root and terminal nested `within` regions plus
@@ -126,7 +126,7 @@ bounded `each` and ordered `collect`. Positive millisecond/second durations,
 parented node ranges, list bounds, item types, template Actions, and explicit
 concurrency ceilings are verified in both independent image decoders. The
 fixed C runtime expires only flows inside a selected deadline region, admits
-item work to the declared ceiling, preserves same-app single-flight, and
+item work to the declared ceiling, preserves same-Action single-flight, and
 collects results in source-index order. Malformed nested parents, zero
 durations, invalid bounds, and zero concurrency are covered by executable
 negative tests.
@@ -144,7 +144,8 @@ The durable-execution-facts extension now provides:
 - Crash, lock, malformed-record, failed-write, and daemon-ordering tests.
 
 The explicit-saga foundation has started with a separate durable compensation
-token log. It stores opaque reversible-Action success values under exact
+token log. It stores opaque success values from Actions with named
+compensations under exact
 execution/request/node identity, retains distinct source and compensation
 input Type IDs, synchronizes every append, and rejects corruption, truncated
 records, sequence gaps, undersized lookup buffers, and ambiguous duplicate
@@ -152,8 +153,9 @@ tokens. Token presence is not treated as forward success; execution-journal
 facts remain authoritative.
 
 The compiler and graph-image half of explicit sagas is also present.
-Sequential `saga` blocks admit only reversible Actions, are bounded to 16
-steps, and lower to dense per-node compensation records. Both the Rust and C
+Sequential `saga` blocks admit only Actions with named compensations, are
+bounded to 16 steps, and lower to dense per-node compensation records. Both
+the Rust and C
 decoders independently verify compensation app admission, token
 representations, ordering, uniqueness, and forward Success-edge types.
 
@@ -217,11 +219,12 @@ The caller boundary is now executable end to end:
 Hermas2 now also has a runnable Linux process boundary. `hermas2d` loads and
 independently validates one graph image, owns private app and caller sockets,
 opens the four separately locked durable stores, restores the monotonic
-execution-ID floor, waits for every required app registration before admitting
+execution-ID floor, waits for every required Action registration before admitting
 callers, and runs the bounded event loop until SIGINT or SIGTERM. Clean
-completed history survives restart; interrupted history is explicitly refused
-as recovery-required until the recovery-host milestone composes the existing
-saga planner. `hermas2_run` provides a shell-facing typed execution client with
+completed history survives restart, unfinished forward work closes Unknown
+without replay, and planner-proven reverse compensation resumes from durable
+progress. Uncertain reverse delivery is explicitly refused as
+recovery-required. `hermas2_run` provides a shell-facing typed execution client with
 exact outcome, nominal Type IDs, canonical hexadecimal values, and distinct
 domain-outcome exit statuses.
 

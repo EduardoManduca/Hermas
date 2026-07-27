@@ -51,6 +51,8 @@ typedef struct hermas2_host {
     bool result_open;
     bool saga_log_open;
     uint64_t next_execution_id;
+    uint64_t recovered_execution_ids[HERMAS2_SAGA_LOG_MAX_ACTIVE];
+    uint8_t recovered_execution_count;
     hermas2_journal_file journal;
     hermas2_compensation_file compensation;
     hermas2_result_file results;

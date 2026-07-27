@@ -3,6 +3,7 @@
 #include "hermas2/host_linux.h"
 
 #include "hermas2/image.h"
+#include "hermas2/saga_linux.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -87,7 +88,9 @@ static bool state_path(
 
 static hermas2_host_result open_state(
     hermas2_host *host,
-    const hermas2_host_config *config) {
+    const hermas2_host_config *config,
+    hermas2_journal_summary *journal_summary,
+    hermas2_saga_log_summary *saga_summary) {
     if (validate_state_directory(config->state_directory) !=
         HERMAS2_HOST_OK) {
         return HERMAS2_HOST_STATE_ERROR;
@@ -107,12 +110,10 @@ static hermas2_host_result open_state(
             saga_path, config->state_directory, "saga.h2s")) {
         return HERMAS2_HOST_STATE_ERROR;
     }
-    hermas2_journal_summary journal_summary;
     hermas2_result_summary result_summary;
     hermas2_compensation_summary compensation_summary;
-    hermas2_saga_log_summary saga_summary;
     if (hermas2_journal_file_open(
-            &host->journal, journal_path, &journal_summary) !=
+            &host->journal, journal_path, journal_summary) !=
             HERMAS2_JOURNAL_OK) {
         return HERMAS2_HOST_STATE_ERROR;
     }
@@ -130,14 +131,55 @@ static hermas2_host_result open_state(
     }
     host->compensation_open = true;
     if (hermas2_saga_log_file_open(
-            &host->saga_log, saga_path, &saga_summary) !=
+            &host->saga_log, saga_path, saga_summary) !=
             HERMAS2_SAGA_LOG_OK) {
         return HERMAS2_HOST_STATE_ERROR;
     }
     host->saga_log_open = true;
-    host->next_execution_id = journal_summary.next_execution_id;
-    if (journal_summary.interrupted_count != 0u) {
-        return HERMAS2_HOST_RECOVERY_REQUIRED;
+    host->next_execution_id = journal_summary->next_execution_id;
+    return HERMAS2_HOST_OK;
+}
+
+static hermas2_host_result restore_startup_state(
+    hermas2_host *host,
+    const hermas2_host_config *config,
+    const hermas2_journal_summary *journal_summary,
+    const hermas2_saga_log_summary *saga_summary) {
+    size_t closed_count = 0u;
+    if (hermas2_journal_file_close_interrupted(
+            &host->journal, journal_summary, &closed_count) !=
+            HERMAS2_JOURNAL_OK) {
+        return HERMAS2_HOST_STATE_ERROR;
+    }
+    (void)closed_count;
+    for (uint8_t index = 0u;
+         index < saga_summary->active_count; ++index) {
+        const hermas2_saga_log_active *active =
+            &saga_summary->active[index];
+        if (active->workflow_id != config->workflow_id ||
+            active->image_fingerprint !=
+                host->loop.image_fingerprint) {
+            return HERMAS2_HOST_STATE_ERROR;
+        }
+        hermas2_saga_execution recovered;
+        hermas2_saga_result result = hermas2_saga_recover_files(
+            &recovered, host->image, host->image_size,
+            &host->journal, &host->compensation,
+            &host->saga_log, active->execution_id,
+            config->workflow_id);
+        if (result == HERMAS2_SAGA_UNSAFE_HISTORY) {
+            return HERMAS2_HOST_RECOVERY_REQUIRED;
+        }
+        if (result != HERMAS2_SAGA_OK ||
+            recovered.state != HERMAS2_SAGA_READY ||
+            recovered.remaining == 0u ||
+            hermas2_daemon_loop_resume_saga(
+                &host->loop, &recovered) != HERMAS2_LOOP_OK) {
+            return HERMAS2_HOST_STATE_ERROR;
+        }
+        host->recovered_execution_ids[
+            host->recovered_execution_count++] =
+                active->execution_id;
     }
     return HERMAS2_HOST_OK;
 }
@@ -170,7 +212,7 @@ static hermas2_host_result create_listener(
         return HERMAS2_HOST_SOCKET_ERROR;
     }
     if (chmod(path, 0600) != 0 ||
-        listen(descriptor, HERMAS2_DAEMON_MAX_APPS) != 0) {
+        listen(descriptor, HERMAS2_DAEMON_MAX_ACTIONS) != 0) {
         close(descriptor);
         (void)unlink(path);
         return HERMAS2_HOST_SOCKET_ERROR;
@@ -222,7 +264,10 @@ hermas2_host_result hermas2_host_open(
         hermas2_host_close(host);
         return HERMAS2_HOST_IMAGE_ERROR;
     }
-    result = open_state(host, config);
+    hermas2_journal_summary journal_summary;
+    hermas2_saga_log_summary saga_summary;
+    result = open_state(
+        host, config, &journal_summary, &saga_summary);
     if (result != HERMAS2_HOST_OK) {
         hermas2_host_close(host);
         return result;
@@ -240,12 +285,21 @@ hermas2_host_result hermas2_host_open(
             &host->loop, &host->compensation.writer,
             hermas2_compensation_file_lookup,
             &host->compensation, &host->saga_log.writer) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_control_server_init(
+            HERMAS2_LOOP_OK) {
+        hermas2_host_close(host);
+        return HERMAS2_HOST_STATE_ERROR;
+    }
+    result = restore_startup_state(
+        host, config, &journal_summary, &saga_summary);
+    if (result != HERMAS2_HOST_OK) {
+        hermas2_host_close(host);
+        return result;
+    }
+    if (hermas2_control_server_init(
             &host->control, &host->loop) !=
             HERMAS2_CONTROL_SERVER_OK) {
         hermas2_host_close(host);
-        return HERMAS2_HOST_STATE_ERROR;
+        return HERMAS2_HOST_CONTROL_ERROR;
     }
     host->control_initialized = true;
     result = create_listener(
@@ -262,6 +316,47 @@ hermas2_host_result hermas2_host_open(
     return result;
 }
 
+static bool all_actions_registered(const hermas2_host *host) {
+    for (size_t index = 0u;
+         index < host->registry.action_count; ++index) {
+        if (host->registry.actions[index].file_descriptor < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static hermas2_host_result reap_recovered(
+    hermas2_host *host,
+    size_t *progress_count) {
+    uint8_t index = 0u;
+    while (index < host->recovered_execution_count) {
+        uint64_t execution_id =
+            host->recovered_execution_ids[index];
+        hermas2_frame result;
+        hermas2_loop_result available =
+            hermas2_daemon_loop_result(
+                &host->loop, execution_id, &result);
+        if (available == HERMAS2_LOOP_EXECUTION_ACTIVE) {
+            ++index;
+            continue;
+        }
+        if (available != HERMAS2_LOOP_OK ||
+            hermas2_daemon_loop_release(
+                &host->loop, execution_id) != HERMAS2_LOOP_OK) {
+            return HERMAS2_HOST_STATE_ERROR;
+        }
+        --host->recovered_execution_count;
+        host->recovered_execution_ids[index] =
+            host->recovered_execution_ids[
+                host->recovered_execution_count];
+        host->recovered_execution_ids[
+            host->recovered_execution_count] = 0u;
+        ++*progress_count;
+    }
+    return HERMAS2_HOST_OK;
+}
+
 static hermas2_host_result advance_servers(
     hermas2_host *host,
     size_t *progress_count) {
@@ -272,6 +367,9 @@ static hermas2_host_result advance_servers(
         return HERMAS2_HOST_REGISTRATION_ERROR;
     }
     *progress_count += progressed;
+    if (!all_actions_registered(host)) {
+        return HERMAS2_HOST_OK;
+    }
     progressed = 0u;
     if (hermas2_control_server_step(
             &host->control, 0, &progressed) !=
@@ -280,17 +378,7 @@ static hermas2_host_result advance_servers(
     }
     host->next_execution_id = host->loop.minimum_execution_id;
     *progress_count += progressed;
-    return HERMAS2_HOST_OK;
-}
-
-static bool all_apps_registered(const hermas2_host *host) {
-    for (size_t index = 0u;
-         index < host->registry.app_count; ++index) {
-        if (host->registry.apps[index].file_descriptor < 0) {
-            return false;
-        }
-    }
-    return true;
+    return reap_recovered(host, progress_count);
 }
 
 hermas2_host_result hermas2_host_step(
@@ -319,7 +407,7 @@ hermas2_host_result hermas2_host_step(
         (wait < 0 || wait > HERMAS2_CONTROL_ACTIVE_QUANTUM_MS)) {
         wait = HERMAS2_CONTROL_ACTIVE_QUANTUM_MS;
     }
-    bool ready = all_apps_registered(host);
+    bool ready = all_actions_registered(host);
     struct pollfd listeners[2] = {
         {.fd = host->app_listener, .events = POLLIN},
         {

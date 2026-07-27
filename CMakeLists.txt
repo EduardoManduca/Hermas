@@ -420,6 +420,24 @@ if(BUILD_TESTING)
                          "$<TARGET_FILE:hermas2_printer>")
         endif()
         if(DEFINED HERMAS2_TEST_SAGA_IMAGE)
+            add_executable(hermas2_host_recovery_tests
+                           tests/test_host_recovery_linux.c)
+            target_link_libraries(hermas2_host_recovery_tests PRIVATE
+                hermas2_host)
+            target_compile_options(hermas2_host_recovery_tests PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+            if(HERMAS2_SANITIZE)
+                target_compile_options(
+                    hermas2_host_recovery_tests PRIVATE
+                    -fsanitize=address,undefined
+                    -fno-omit-frame-pointer)
+                target_link_options(
+                    hermas2_host_recovery_tests PRIVATE
+                    -fsanitize=address,undefined)
+            endif()
+            add_test(NAME hermas2_host_recovery_tests
+                     COMMAND hermas2_host_recovery_tests
+                             "${HERMAS2_TEST_SAGA_IMAGE}")
             add_executable(hermas2_saga_loop_tests
                            tests/test_saga_loop_linux.c)
             target_link_libraries(hermas2_saga_loop_tests PRIVATE
