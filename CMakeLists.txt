@@ -89,18 +89,25 @@ if(UNIX)
     add_library(hermas2_edge STATIC src/edge_linux.c)
     target_include_directories(hermas2_edge PUBLIC include)
     target_link_libraries(hermas2_edge PUBLIC hermas2_protocol)
+    add_library(hermas2_client STATIC src/client_linux.c)
+    target_include_directories(hermas2_client PUBLIC include)
+    target_link_libraries(hermas2_client PUBLIC hermas2_protocol)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas2_daemon PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(hermas2_control PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(hermas2_edge PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(hermas2_client PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
         if(HERMAS2_SANITIZE)
             target_compile_options(hermas2_daemon PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_compile_options(hermas2_control PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_compile_options(hermas2_edge PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_compile_options(hermas2_client PRIVATE
                 -fsanitize=address,undefined -fno-omit-frame-pointer)
         endif()
     endif()
@@ -302,6 +309,18 @@ if(BUILD_TESTING)
             endif()
         endif()
         add_test(NAME hermas2_edge_tests COMMAND hermas2_edge_tests)
+        add_executable(hermas2_client_tests tests/test_client_linux.c)
+        target_link_libraries(hermas2_client_tests PRIVATE
+            hermas2_client)
+        target_compile_options(hermas2_client_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS2_SANITIZE)
+            target_compile_options(hermas2_client_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas2_client_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+        add_test(NAME hermas2_client_tests COMMAND hermas2_client_tests)
         if(DEFINED HERMAS2_TEST_IMAGE)
             add_executable(hermas2_loop_tests tests/test_loop_linux.c)
             target_link_libraries(hermas2_loop_tests PRIVATE hermas2_daemon)
