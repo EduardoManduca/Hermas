@@ -288,6 +288,12 @@ static void test_refusal_paths(fixture *value) {
             "could not rebuild plan for failure test");
     uint8_t token[8];
     hermas2_frame invocation;
+    execution.next_request_id = UINT64_MAX;
+    require(hermas2_saga_prepare(
+                &execution, token, sizeof(token), &invocation) ==
+                HERMAS2_SAGA_REQUEST_ID_EXHAUSTED,
+            "exhausted compensation request ID was reused");
+    execution.next_request_id = 4u;
     require(hermas2_saga_prepare(
                 &execution, token, sizeof(token), &invocation) ==
                 HERMAS2_SAGA_OK &&

@@ -1,0 +1,33 @@
+[package]
+name = "hermas-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+herma2 = { path = "../compiler/herma2" }
+
+[[bin]]
+name = "image"
+path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "schema"
+path = "fuzz_targets/schema.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hscript"
+path = "fuzz_targets/hscript.rs"
+test = false
+doc = false
+bench = false

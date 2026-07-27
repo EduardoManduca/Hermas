@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(hermas2 C)
 
 option(HERMAS2_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(HERMAS2_BUILD_FUZZERS "Build Clang libFuzzer targets" OFF)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -27,6 +28,40 @@ target_include_directories(hermas2_saga PUBLIC include)
 target_link_libraries(hermas2_saga PUBLIC
     hermas2_image hermas2_protocol hermas2_journal hermas2_compensation
     hermas2_saga_log)
+add_executable(hermas2_image_check tools/hermas2_image_check.c)
+target_link_libraries(hermas2_image_check PRIVATE hermas2_image)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(hermas2_image_check PRIVATE
+        -Wall -Wextra -Wpedantic -Werror)
+    if(HERMAS2_SANITIZE)
+        target_compile_options(hermas2_image_check PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(hermas2_image_check PRIVATE
+            -fsanitize=address,undefined)
+    endif()
+endif()
+
+if(HERMAS2_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "HERMAS2_BUILD_FUZZERS requires Clang")
+    endif()
+    add_executable(hermas2_c_fuzz fuzz/fuzz_c_decoders.c)
+    target_link_libraries(hermas2_c_fuzz PRIVATE
+        hermas2_image hermas2_protocol hermas2_journal hermas2_result
+        hermas2_compensation hermas2_saga_log)
+    target_compile_options(hermas2_c_fuzz PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer)
+    target_link_options(hermas2_c_fuzz PRIVATE
+        -fsanitize=fuzzer,address,undefined)
+    foreach(target
+            hermas2_image hermas2_protocol hermas2_journal
+            hermas2_result hermas2_compensation hermas2_saga_log)
+        target_compile_options(${target} PRIVATE
+            -fsanitize=fuzzer-no-link)
+    endforeach()
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(hermas2_image PRIVATE -Wall -Wextra -Wpedantic -Werror)
