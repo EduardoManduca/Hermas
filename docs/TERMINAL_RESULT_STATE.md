@@ -36,8 +36,9 @@ permits reconstructing or guessing application bytes.
 ## Linux storage
 
 The Linux implementation accepts only a non-symlink regular file owned by the
-current user, creates it with mode `0600`, and holds an exclusive nonblocking
-writer lock. Startup maps and validates the complete log before initializing
+current user with no group or other permission bits, creates new files with
+mode `0600`, and holds an exclusive nonblocking writer lock. Startup maps and
+validates the complete log before initializing
 the next sequence. Every append is fully written and followed by `fdatasync`;
 exact lookup maps only for the duration of the copy into caller-owned memory.
 

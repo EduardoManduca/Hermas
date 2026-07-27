@@ -79,7 +79,8 @@ hermas2_saga_log_result hermas2_saga_log_file_open(
     struct stat status;
     if (fstat(descriptor, &status) != 0 ||
         !S_ISREG(status.st_mode) ||
-        status.st_uid != geteuid()) {
+        status.st_uid != geteuid() ||
+        (status.st_mode & 077u) != 0u) {
         (void)flock(descriptor, LOCK_UN);
         close(descriptor);
         return HERMAS2_SAGA_LOG_INVALID_RECORD;

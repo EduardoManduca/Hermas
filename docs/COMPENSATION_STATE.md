@@ -42,8 +42,10 @@ is a fatal recovery inconsistency. Neither condition permits guessing.
 
 ## Linux storage
 
-The Linux implementation uses a mode-`0600`, exclusively locked append-only
-file. Every record is fully written and followed by `fdatasync`. Startup scans
+The Linux implementation accepts only a non-symlink regular file owned by the
+current effective user with no group or other permission bits. New files use
+mode `0600` and an exclusive lock. Every record is fully written and followed
+by `fdatasync`. Startup scans
 the complete log and rejects malformed, corrupt, truncated, or noncontiguous
 records. Exact lookup copies the token into caller-owned storage.
 

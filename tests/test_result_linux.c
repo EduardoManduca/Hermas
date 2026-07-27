@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fail(const char *message) {
@@ -91,6 +92,16 @@ int main(void) {
         return fail("truncated result log was accepted");
     }
     unlink(path);
+    char exposed[] = "/tmp/hermas2-result-exposed-XXXXXX";
+    int exposed_file = mkstemp(exposed);
+    if (exposed_file < 0 || close(exposed_file) != 0 ||
+        chmod(exposed, 0644) != 0 ||
+        hermas2_result_file_open(&file, exposed, &summary) ==
+            HERMAS2_RESULT_STORE_OK) {
+        unlink(exposed);
+        return fail("non-private result log was accepted");
+    }
+    unlink(exposed);
     puts("terminal result Linux durability tests passed");
     return 0;
 }

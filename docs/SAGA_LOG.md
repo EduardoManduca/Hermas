@@ -39,7 +39,8 @@ and leaves completed logs complete across repeated restart.
 ## Linux storage
 
 `hermas2_saga_log_file_open` accepts only a non-symlink regular file owned by
-the current user, uses mode `0600`, and takes an exclusive nonblocking writer
-lock. Startup memory-maps and validates the complete history before
+the current user with no group or other permission bits, creates new files
+with mode `0600`, and takes an exclusive nonblocking writer lock. Startup
+memory-maps and validates the complete history before
 initializing the next sequence. Every append is fully written and followed by
 `fdatasync`; reopen and explicit scans observe only validated records.

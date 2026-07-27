@@ -67,13 +67,23 @@ hermas2_compensation_result hermas2_compensation_file_open(
     memset(file, 0, sizeof(*file));
     file->file_descriptor = -1;
     int descriptor = open(
-        path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+        path, O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW,
+        0600);
     if (descriptor < 0 ||
         flock(descriptor, LOCK_EX | LOCK_NB) != 0) {
         if (descriptor >= 0) {
             close(descriptor);
         }
         return HERMAS2_COMPENSATION_WRITE_ERROR;
+    }
+    struct stat status;
+    if (fstat(descriptor, &status) != 0 ||
+        !S_ISREG(status.st_mode) ||
+        status.st_uid != geteuid() ||
+        (status.st_mode & 077u) != 0u) {
+        (void)flock(descriptor, LOCK_UN);
+        close(descriptor);
+        return HERMAS2_COMPENSATION_INVALID_RECORD;
     }
     const uint8_t *bytes = NULL;
     size_t byte_count = 0u;

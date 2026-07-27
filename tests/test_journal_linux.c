@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fail(const char *message) {
@@ -125,6 +126,35 @@ int main(void) {
         return fail("truncated journal was accepted");
     }
     unlink(path);
+
+    char target[] = "/tmp/hermas2-journal-target-XXXXXX";
+    int target_file = mkstemp(target);
+    char link_path[] = "/tmp/hermas2-journal-link-XXXXXX";
+    int link_placeholder = mkstemp(link_path);
+    if (target_file < 0 || link_placeholder < 0) {
+        return fail("cannot create journal security fixture");
+    }
+    close(target_file);
+    close(link_placeholder);
+    unlink(link_path);
+    if (symlink(target, link_path) != 0 ||
+        hermas2_journal_file_open(&file, link_path, &summary) ==
+            HERMAS2_JOURNAL_OK) {
+        unlink(link_path);
+        unlink(target);
+        return fail("journal symlink was accepted");
+    }
+    unlink(link_path);
+    if (chmod(target, 0644) != 0 ||
+        hermas2_journal_file_open(&file, target, &summary) ==
+            HERMAS2_JOURNAL_OK ||
+        hermas2_journal_file_inspect(
+            target, NULL, NULL, &summary) ==
+            HERMAS2_JOURNAL_OK) {
+        unlink(target);
+        return fail("non-private journal was accepted");
+    }
+    unlink(target);
     puts("journal Linux durability tests passed");
     return 0;
 }

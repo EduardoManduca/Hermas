@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fail(const char *message) {
@@ -73,6 +74,32 @@ int main(void) {
     }
     hermas2_compensation_file_close(&file);
     unlink(path);
+
+    char target[] = "/tmp/hermas2-compensation-target-XXXXXX";
+    int target_file = mkstemp(target);
+    char link_path[] = "/tmp/hermas2-compensation-link-XXXXXX";
+    int link_placeholder = mkstemp(link_path);
+    if (target_file < 0 || link_placeholder < 0) {
+        return fail("cannot create token security fixture");
+    }
+    close(target_file);
+    close(link_placeholder);
+    unlink(link_path);
+    if (symlink(target, link_path) != 0 ||
+        hermas2_compensation_file_open(
+            &file, link_path, &summary) == HERMAS2_COMPENSATION_OK) {
+        unlink(link_path);
+        unlink(target);
+        return fail("token symlink was accepted");
+    }
+    unlink(link_path);
+    if (chmod(target, 0644) != 0 ||
+        hermas2_compensation_file_open(
+            &file, target, &summary) == HERMAS2_COMPENSATION_OK) {
+        unlink(target);
+        return fail("non-private token log was accepted");
+    }
+    unlink(target);
     puts("compensation Linux durability tests passed");
     return 0;
 }

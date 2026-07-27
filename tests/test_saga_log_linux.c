@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fail(const char *message) {
@@ -80,6 +81,16 @@ int main(void) {
         return fail("truncated saga log was accepted");
     }
     unlink(path);
+    char exposed[] = "/tmp/hermas2-saga-exposed-XXXXXX";
+    int exposed_file = mkstemp(exposed);
+    if (exposed_file < 0 || close(exposed_file) != 0 ||
+        chmod(exposed, 0644) != 0 ||
+        hermas2_saga_log_file_open(&file, exposed, &summary) ==
+            HERMAS2_SAGA_LOG_OK) {
+        unlink(exposed);
+        return fail("non-private saga log was accepted");
+    }
+    unlink(exposed);
     puts("saga log Linux durability tests passed");
     return 0;
 }

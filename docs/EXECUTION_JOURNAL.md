@@ -71,9 +71,11 @@ The next execution ID is one greater than the largest durable ID.
 
 ## Linux durability and inspection
 
-`hermas2_journal_file_open` acquires an exclusive writer lock, scans the
-existing file, and initializes the next sequence. Every append uses a complete
-record write followed by `fdatasync`.
+`hermas2_journal_file_open` accepts only a non-symlink regular file owned by
+the current effective user with no group or other permission bits. New files
+use mode `0600`. It acquires an exclusive writer lock, scans the existing file,
+and initializes the next sequence. Every append uses a complete record write
+followed by `fdatasync`. Read-only inspection enforces the same file policy.
 
 `hermas2_journal_file_inspect` provides read-only validated traversal without
 acquiring the writer lock. The `hermas2_history` executable prints one
