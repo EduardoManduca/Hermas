@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(hermas2 C)
+include(GNUInstallDirs)
 
 option(HERMAS2_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(HERMAS2_BUILD_FUZZERS "Build Clang libFuzzer targets" OFF)
@@ -134,7 +135,7 @@ if(UNIX)
     add_executable(hermas2d tools/hermas2d.c)
     target_link_libraries(hermas2d PRIVATE hermas2_host)
     add_executable(hermas2_run tools/hermas2_run.c)
-    target_link_libraries(hermas2_run PRIVATE hermas2_client)
+    target_link_libraries(hermas2_run PRIVATE hermas2_client hermas2_image)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas2_daemon PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
@@ -579,3 +580,34 @@ if(BUILD_TESTING)
                          "${HERMAS2_TEST_EACH_IMAGE}")
     endif()
 endif()
+
+install(TARGETS
+        hermas2_image hermas2_protocol hermas2_runtime hermas2_journal
+        hermas2_compensation hermas2_result hermas2_saga_log
+        hermas2_saga hermas2_image_check
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY include/hermas2
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+if(UNIX)
+    install(TARGETS
+            hermas2_daemon hermas2_control hermas2_edge hermas2_client
+            hermas2_host hermas2d hermas2_run hermas2_history
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS
+            hermas2_grade_list hermas2_mean_calculator hermas2_printer
+        RUNTIME DESTINATION
+            ${CMAKE_INSTALL_LIBEXECDIR}/hermas/examples)
+    install(PROGRAMS tools/quickstart.sh
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/hermas)
+endif()
+
+install(FILES
+        README.md docs/QUICKSTART.md docs/APP_AUTHOR_GUIDE.md
+        docs/COMPATIBILITY.md docs/THREAT_MODEL.md
+        docs/CRASH_RECOVERY_MATRIX.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR})

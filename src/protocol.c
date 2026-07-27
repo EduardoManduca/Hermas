@@ -147,7 +147,7 @@ hermas2_protocol_result hermas2_protocol_encode(
     }
     memset(destination, 0, HERMAS2_PROTOCOL_HEADER_SIZE);
     memcpy(destination, "H2P1", 4u);
-    write_u16(destination, 4u, 1u);
+    write_u16(destination, 4u, HERMAS2_PROTOCOL_VERSION);
     write_u16(destination, 6u, frame->kind);
     write_u32(destination, 8u, 0u);
     write_u32(destination, 12u, HERMAS2_PROTOCOL_HEADER_SIZE);
@@ -182,7 +182,7 @@ hermas2_protocol_result hermas2_protocol_decode(
     if (memcmp(packet, "H2P1", 4u) != 0) {
         return HERMAS2_PROTOCOL_BAD_MAGIC;
     }
-    if (read_u16(packet, 4u) != 1u) {
+    if (read_u16(packet, 4u) != HERMAS2_PROTOCOL_VERSION) {
         return HERMAS2_PROTOCOL_UNSUPPORTED_VERSION;
     }
     uint16_t kind = read_u16(packet, 6u);

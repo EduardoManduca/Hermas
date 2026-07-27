@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define HERMAS2_PROTOCOL_VERSION 1u
 #define HERMAS2_PROTOCOL_HEADER_SIZE 48u
 #define HERMAS2_PROTOCOL_MAX_PACKET_SIZE 65536u
 #define HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE \

@@ -8,6 +8,17 @@ use herma2::{
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = env::args().skip(1).collect();
+    if arguments.as_slice() == ["--version"] {
+        println!(
+            "Hermas {} (herma2; graph-image 2)",
+            env!("CARGO_PKG_VERSION")
+        );
+        return ExitCode::SUCCESS;
+    }
+    if arguments.as_slice() == ["--help"] {
+        print_usage();
+        return ExitCode::SUCCESS;
+    }
     if arguments.first().map(String::as_str) == Some("schema") {
         return schema_command(&arguments[1..]);
     }
@@ -207,5 +218,18 @@ fn read_source(path: &str, kind: &str) -> Result<String, ExitCode> {
 fn usage() {
     eprintln!(
         "usage:\n  herma2 schema check <file.hschema2>...\n  herma2 workflow check <module.hscript2> <file.hschema2>...\n  herma2 workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript2> <file.hschema2>...\n  herma2 workflow image [--workflow NAME] <module.hscript2> <output.h2gi> <file.hschema2>...\n  herma2 image check <file.h2gi>"
+    );
+}
+
+fn print_usage() {
+    println!(
+        "Hermas verified action-graph compiler\n\n\
+usage:\n  herma2 schema check <file.hschema2>...\n  \
+herma2 workflow check <module.hscript2> <file.hschema2>...\n  \
+herma2 workflow <explain|graph|resources|sources> [--workflow NAME] \
+<module.hscript2> <file.hschema2>...\n  \
+herma2 workflow image [--workflow NAME] <module.hscript2> \
+<output.h2gi> <file.hschema2>...\n  \
+herma2 image check <file.h2gi>\n  herma2 --version"
     );
 }

@@ -1,4 +1,6 @@
 #include "hermas2/client.h"
+#include "hermas2/image.h"
+#include "hermas2/version.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -63,6 +65,41 @@ static int parse_hex(
     return 1;
 }
 
+static int image_input_type(
+    const char *path,
+    uint16_t *input_type) {
+    FILE *file = fopen(path, "rb");
+    if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
+        if (file != NULL) {
+            fclose(file);
+        }
+        return 0;
+    }
+    long length = ftell(file);
+    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return 0;
+    }
+    uint8_t *bytes = malloc((size_t)length);
+    if (bytes == NULL ||
+        fread(bytes, 1u, (size_t)length, file) !=
+            (size_t)length) {
+        free(bytes);
+        fclose(file);
+        return 0;
+    }
+    fclose(file);
+    hermas2_image_summary summary;
+    int valid = hermas2_image_validate(
+                    bytes, (size_t)length, &summary) ==
+                HERMAS2_IMAGE_OK;
+    if (valid) {
+        *input_type = summary.input_type;
+    }
+    free(bytes);
+    return valid;
+}
+
 static const char *outcome_name(uint16_t outcome) {
     switch (outcome) {
         case HERMAS2_OUTCOME_SUCCESS:
@@ -94,11 +131,32 @@ static int outcome_exit_code(uint16_t outcome) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 4 && argc != 5) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        printf(
+            "Hermas %s (hermas2_run; protocol %u)\n",
+            HERMAS_VERSION, HERMAS2_PROTOCOL_VERSION);
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        puts(
+            "usage:\n"
+            "  hermas2_run CONTROL_SOCKET EXECUTION_ID "
+            "INPUT_TYPE [INPUT_HEX]\n"
+            "  hermas2_run CONTROL_SOCKET EXECUTION_ID "
+            "--image IMAGE [INPUT_HEX]");
+        return 0;
+    }
+    int image_mode =
+        argc >= 4 && strcmp(argv[3], "--image") == 0;
+    if ((!image_mode && argc != 4 && argc != 5) ||
+        (image_mode && argc != 5 && argc != 6)) {
         fprintf(
             stderr,
             "usage: %s CONTROL_SOCKET EXECUTION_ID "
-            "INPUT_TYPE [INPUT_HEX]\n",
+            "INPUT_TYPE [INPUT_HEX]\n"
+            "       %s CONTROL_SOCKET EXECUTION_ID "
+            "--image IMAGE [INPUT_HEX]\n",
+            argv[0],
             argv[0]);
         return 2;
     }
@@ -109,10 +167,16 @@ int main(int argc, char **argv) {
     size_t input_size = 0u;
     if (input == NULL || packet == NULL ||
         !parse_u64(argv[2], &execution_id) ||
-        !parse_u16(argv[3], &input_type) ||
-        (argc == 5 &&
+        (image_mode
+             ? !image_input_type(argv[4], &input_type)
+             : !parse_u16(argv[3], &input_type)) ||
+        ((!image_mode && argc == 5) &&
          !parse_hex(
              argv[4], input, HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE,
+             &input_size)) ||
+        ((image_mode && argc == 6) &&
+         !parse_hex(
+             argv[5], input, HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE,
              &input_size))) {
         fputs("hermas2_run: invalid argument\n", stderr);
         free(packet);

@@ -1,12 +1,15 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "hermas2/host_linux.h"
+#include "hermas2/image.h"
+#include "hermas2/version.h"
 
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static volatile sig_atomic_t stop_requested = 0;
 
@@ -28,6 +31,23 @@ static int parse_workflow_id(const char *text, uint32_t *value) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        printf(
+            "Hermas %s (hermas2d; graph-image %u, protocol %u, "
+            "journal %u, result %u, compensation %u, saga-log %u)\n",
+            HERMAS_VERSION, HERMAS2_GRAPH_IMAGE_VERSION,
+            HERMAS2_PROTOCOL_VERSION, HERMAS2_JOURNAL_VERSION,
+            HERMAS2_RESULT_VERSION, HERMAS2_COMPENSATION_VERSION,
+            HERMAS2_SAGA_LOG_VERSION);
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        puts(
+            "usage: hermas2d IMAGE WORKFLOW_ID STATE_DIR "
+            "APP_SOCKET CONTROL_SOCKET\n\n"
+            "Run one verified graph image with private durable state.");
+        return 0;
+    }
     if (argc != 6) {
         fprintf(
             stderr,

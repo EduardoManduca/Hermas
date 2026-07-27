@@ -1,9 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "hermas2/journal_linux.h"
+#include "hermas2/version.h"
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 
 static const char *kind_name(hermas2_journal_kind kind) {
     static const char *const names[] = {
@@ -32,6 +34,18 @@ static hermas2_journal_result print_record(
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        printf(
+            "Hermas %s (hermas2_history; journal %u)\n",
+            HERMAS_VERSION, HERMAS2_JOURNAL_VERSION);
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+        puts(
+            "usage: hermas2_history FILE.h2j\n\n"
+            "Inspect a validated append-only execution journal.");
+        return 0;
+    }
     if (argc != 2) {
         fprintf(stderr, "usage: hermas2_history FILE.h2journal\n");
         return 2;
