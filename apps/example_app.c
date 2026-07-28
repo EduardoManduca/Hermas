@@ -1,4 +1,5 @@
 #include "example_app.h"
+#include "hermas/workspace_linux.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -42,18 +43,39 @@ int hermas_example_app_run_once(
     hermas_action_handler handler,
     uint8_t *result,
     size_t result_capacity) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s SOCKET CONTRACT_SHA256\n", argv[0]);
+    int workspace_mode =
+        argc == 4 && strcmp(argv[1], "--workspace") == 0;
+    if (argc != 3 && !workspace_mode) {
+        fprintf(
+            stderr,
+            "usage: %s SOCKET CONTRACT_SHA256\n"
+            "       %s --workspace DIRECTORY CONTRACT_SHA256\n",
+            argv[0], argv[0]);
         return 2;
     }
+    hermas_workspace_paths workspace;
+    const char *socket_path = argv[1];
+    const char *fingerprint_text = argv[2];
+    if (workspace_mode) {
+        hermas_workspace_result opened =
+            hermas_workspace_open(argv[2], false, &workspace);
+        if (opened != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "workspace error: %s\n",
+                hermas_workspace_result_name(opened));
+            return 2;
+        }
+        socket_path = workspace.app_socket;
+        fingerprint_text = argv[3];
+    }
     uint8_t fingerprint[32];
-    if (!parse_fingerprint(argv[2], fingerprint)) {
+    if (!parse_fingerprint(fingerprint_text, fingerprint)) {
         fputs("invalid contract fingerprint\n", stderr);
         return 2;
     }
     hermas_edge edge;
     if (hermas_edge_connect(
-            &edge, argv[1], app_id, action_id, fingerprint) !=
+            &edge, socket_path, app_id, action_id, fingerprint) !=
         HERMAS_EDGE_OK) {
         return 1;
     }

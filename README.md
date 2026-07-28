@@ -25,8 +25,9 @@ tools/quickstart.sh
 The reproducible quickstart compiles the Grade Pipeline, starts three
 independent Action processes and `hermasd`, executes the workflow, prints
 `Mean: 80`, inspects durable history, and proves a clean restart does not
-replay completed work. See [the quickstart guide](docs/QUICKSTART.md) for
-installation details.
+replay completed work. All processes share one private runtime workspace, so
+users do not coordinate internal socket paths. See
+[the quickstart guide](docs/QUICKSTART.md) for installation details.
 
 `tools/test_order_total.sh` independently exercises a second architecture
 with a caller-provided integer, three unrelated contracts, different business
@@ -78,6 +79,7 @@ admission. Key executable specifications include:
 - [Graph image v1](docs/GRAPH_IMAGE_V1.md)
 - [Protocol v1](docs/PROTOCOL_V1.md)
 - [C Action app guide](docs/APP_AUTHOR_GUIDE.md)
+- [Runtime workspace](docs/WORKSPACE.md)
 - [Compatibility policy](docs/COMPATIBILITY.md)
 
 Community growth should primarily add Actions, bindings, diagnostics, test

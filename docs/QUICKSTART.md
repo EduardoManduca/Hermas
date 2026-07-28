@@ -19,7 +19,8 @@ Mean: 80
 It then stops the daemon, validates the durable journal with
 `hermas_history`, restarts against the same state, and proves completed work
 is not replayed. All sockets and temporary state are private and removed at
-the end.
+the end. The daemon, apps, caller, and history tool share one `--workspace`
+directory; users do not construct its internal socket paths.
 
 To install C artifacts under a prefix:
 

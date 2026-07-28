@@ -1,6 +1,7 @@
 #include "hermas/client.h"
 #include "hermas/image.h"
 #include "hermas/version.h"
+#include "hermas/workspace_linux.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -329,17 +330,30 @@ int main(int argc, char **argv) {
             "--image IMAGE --value VALUE\n"
             "  hermas_run CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --hex INPUT_HEX\n\n"
+            "  hermas_run --workspace DIRECTORY EXECUTION_ID "
+            "--image IMAGE [--value VALUE | --hex INPUT_HEX]\n\n"
             "--value accepts unit, decimal Integer, true/false, "
             "String text, or 0x-prefixed Bytes.");
         return 0;
     }
+    int workspace_mode =
+        argc >= 2 && strcmp(argv[1], "--workspace") == 0;
+    size_t execution_index = workspace_mode ? 3u : 2u;
+    size_t mode_index = execution_index + 1u;
     int image_mode =
-        argc >= 4 && strcmp(argv[3], "--image") == 0;
-    if ((!image_mode && argc != 4 && argc != 5) ||
-        (image_mode && argc != 5 && argc != 6 && argc != 7) ||
-        (image_mode && argc == 7 &&
-         strcmp(argv[5], "--value") != 0 &&
-         strcmp(argv[5], "--hex") != 0)) {
+        (size_t)argc > mode_index &&
+        strcmp(argv[mode_index], "--image") == 0;
+    if ((workspace_mode && argc < 5) ||
+        (!image_mode &&
+         (size_t)argc != mode_index + 1u &&
+         (size_t)argc != mode_index + 2u) ||
+        (image_mode &&
+         (size_t)argc != mode_index + 2u &&
+         (size_t)argc != mode_index + 3u &&
+         (size_t)argc != mode_index + 4u) ||
+        (image_mode && (size_t)argc == mode_index + 4u &&
+         strcmp(argv[mode_index + 2u], "--value") != 0 &&
+         strcmp(argv[mode_index + 2u], "--hex") != 0)) {
         fprintf(
             stderr,
             "usage: %s CONTROL_SOCKET EXECUTION_ID "
@@ -349,12 +363,28 @@ int main(int argc, char **argv) {
             "       %s CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --value VALUE\n"
             "       %s CONTROL_SOCKET EXECUTION_ID "
-            "--image IMAGE --hex INPUT_HEX\n",
+            "--image IMAGE --hex INPUT_HEX\n"
+            "       %s --workspace DIRECTORY EXECUTION_ID "
+            "--image IMAGE [--value VALUE | --hex INPUT_HEX]\n",
+            argv[0],
             argv[0],
             argv[0],
             argv[0],
             argv[0]);
         return 2;
+    }
+    hermas_workspace_paths workspace;
+    const char *control_socket = argv[1];
+    if (workspace_mode) {
+        hermas_workspace_result opened =
+            hermas_workspace_open(argv[2], false, &workspace);
+        if (opened != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "hermas_run: workspace error: %s\n",
+                hermas_workspace_result_name(opened));
+            return 2;
+        }
+        control_socket = workspace.control_socket;
     }
     uint64_t execution_id = 0u;
     uint16_t input_type = 0u;
@@ -367,21 +397,26 @@ int main(int argc, char **argv) {
     int image_loaded =
         image_mode && image_storage != NULL &&
         load_image(
-            argv[4], image_storage, HERMAS_IMAGE_MAX_SIZE, &image);
+            argv[mode_index + 1u], image_storage,
+            HERMAS_IMAGE_MAX_SIZE, &image);
     int scalar_result = 1;
     if (image_loaded && input != NULL) {
         input_type = image.summary.input_type;
-        if (argc == 6) {
+        if ((size_t)argc == mode_index + 3u) {
             scalar_result = parse_hex(
-                argv[5], input, HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
+                argv[mode_index + 2u], input,
+                HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
                 &input_size);
-        } else if (argc == 7 && strcmp(argv[5], "--hex") == 0) {
+        } else if (
+            (size_t)argc == mode_index + 4u &&
+            strcmp(argv[mode_index + 2u], "--hex") == 0) {
             scalar_result = parse_hex(
-                argv[6], input, HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
+                argv[mode_index + 3u], input,
+                HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
                 &input_size);
-        } else if (argc == 7) {
+        } else if ((size_t)argc == mode_index + 4u) {
             scalar_result = parse_scalar(
-                &image, input_type, argv[6], input,
+                &image, input_type, argv[mode_index + 3u], input,
                 HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE, &input_size);
         }
     } else if (image_loaded) {
@@ -395,12 +430,14 @@ int main(int argc, char **argv) {
              input_size == 0u ? NULL : input, input_size) ==
              HERMAS_IMAGE_OK);
     if (input == NULL || packet == NULL ||
-        !parse_u64(argv[2], &execution_id) ||
+        !parse_u64(argv[execution_index], &execution_id) ||
         (image_mode ? !image_loaded
-                    : !parse_u16(argv[3], &input_type)) ||
-        ((!image_mode && argc == 5) &&
+                    : !parse_u16(argv[mode_index], &input_type)) ||
+        ((!image_mode &&
+          (size_t)argc == mode_index + 2u) &&
          !parse_hex(
-             argv[4], input, HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
+             argv[mode_index + 1u], input,
+             HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE,
              &input_size)) ||
         scalar_result <= 0 || !canonical_input) {
         if (scalar_result < 0) {
@@ -419,7 +456,7 @@ int main(int argc, char **argv) {
     }
     hermas_client client;
     hermas_client_result connected =
-        hermas_client_connect(&client, argv[1]);
+        hermas_client_connect(&client, control_socket);
     hermas_frame result;
     hermas_client_result executed = connected;
     if (connected == HERMAS_CLIENT_OK) {

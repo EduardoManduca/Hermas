@@ -3,6 +3,7 @@
 #include "hermas/host_linux.h"
 #include "hermas/image.h"
 #include "hermas/version.h"
+#include "hermas/workspace_linux.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -44,20 +45,39 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         puts(
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
-            "APP_SOCKET CONTROL_SOCKET\n\n"
+            "APP_SOCKET CONTROL_SOCKET\n"
+            "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n\n"
             "Run one verified graph image with private durable state.");
         return 0;
     }
-    if (argc != 6) {
+    int workspace_mode =
+        argc == 5 && strcmp(argv[1], "--workspace") == 0;
+    if (argc != 6 && !workspace_mode) {
         fprintf(
             stderr,
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
-            "APP_SOCKET CONTROL_SOCKET\n",
-            argv[0]);
+            "APP_SOCKET CONTROL_SOCKET\n"
+            "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n",
+            argv[0], argv[0]);
         return 2;
     }
+    hermas_workspace_paths workspace;
+    if (workspace_mode) {
+        hermas_workspace_result opened =
+            hermas_workspace_open(argv[2], true, &workspace);
+        if (opened != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "hermasd: workspace error: %s\n",
+                hermas_workspace_result_name(opened));
+            return 2;
+        }
+    }
+    const char *image_path =
+        workspace_mode ? argv[3] : argv[1];
+    const char *workflow_text =
+        workspace_mode ? argv[4] : argv[2];
     uint32_t workflow_id = 0u;
-    if (!parse_workflow_id(argv[2], &workflow_id)) {
+    if (!parse_workflow_id(workflow_text, &workflow_id)) {
         fputs("hermasd: invalid workflow ID\n", stderr);
         return 2;
     }
@@ -78,11 +98,14 @@ int main(int argc, char **argv) {
         return 1;
     }
     hermas_host_config config = {
-        .image_path = argv[1],
+        .image_path = image_path,
         .workflow_id = workflow_id,
-        .state_directory = argv[3],
-        .app_socket_path = argv[4],
-        .control_socket_path = argv[5]
+        .state_directory =
+            workspace_mode ? workspace.state_directory : argv[3],
+        .app_socket_path =
+            workspace_mode ? workspace.app_socket : argv[4],
+        .control_socket_path =
+            workspace_mode ? workspace.control_socket : argv[5]
     };
     hermas_host_result result = hermas_host_open(host, &config);
     if (result != HERMAS_HOST_OK) {

@@ -30,7 +30,12 @@ use:
 hermas_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
 hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE
 hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --hex INPUT_HEX
+hermas_run --workspace DIRECTORY EXECUTION_ID --image IMAGE --value VALUE
 ```
+
+Workspace mode derives the private control socket, so ordinary callers do not
+name or coordinate socket files. The explicit socket form remains the direct
+ABI diagnostic interface.
 
 Image mode derives the workflow input Type and accepts human-readable scalar
 values: `unit`, decimal `Integer`, `true` or `false`, unquoted `String` text,

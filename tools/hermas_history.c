@@ -2,6 +2,7 @@
 
 #include "hermas/journal_linux.h"
 #include "hermas/version.h"
+#include "hermas/workspace_linux.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -42,21 +43,40 @@ int main(int argc, char **argv) {
     }
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         puts(
-            "usage: hermas_history FILE.hj\n\n"
+            "usage: hermas_history FILE.hj\n"
+            "       hermas_history --workspace DIRECTORY\n\n"
             "Inspect a validated append-only execution journal.");
         return 0;
     }
-    if (argc != 2) {
-        fprintf(stderr, "usage: hermas_history FILE.hjournal\n");
+    int workspace_mode =
+        argc == 3 && strcmp(argv[1], "--workspace") == 0;
+    if (argc != 2 && !workspace_mode) {
+        fprintf(
+            stderr,
+            "usage: hermas_history FILE.hj\n"
+            "       hermas_history --workspace DIRECTORY\n");
         return 2;
+    }
+    hermas_workspace_paths workspace;
+    const char *path = argv[1];
+    if (workspace_mode) {
+        hermas_workspace_result opened =
+            hermas_workspace_open(argv[2], false, &workspace);
+        if (opened != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "hermas_history: workspace error: %s\n",
+                hermas_workspace_result_name(opened));
+            return 2;
+        }
+        path = workspace.journal_path;
     }
     puts("sequence\texecution\tworkflow\tkind\toutcome\trequest"
          "\tnode\tapp\taction\timage");
     hermas_journal_summary summary;
     hermas_journal_result result = hermas_journal_file_inspect(
-        argv[1], print_record, NULL, &summary);
+        path, print_record, NULL, &summary);
     if (result != HERMAS_JOURNAL_OK) {
-        fprintf(stderr, "%s: %s\n", argv[1],
+        fprintf(stderr, "%s: %s\n", path,
                 hermas_journal_result_name(result));
         return 1;
     }

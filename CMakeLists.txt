@@ -95,6 +95,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 if(UNIX)
+    add_library(hermas_workspace STATIC src/workspace_linux.c)
+    target_include_directories(hermas_workspace PUBLIC include)
+    target_compile_options(hermas_workspace PRIVATE
+        -Wall -Wextra -Wpedantic -Werror)
+    if(HERMAS_SANITIZE)
+        target_compile_options(hermas_workspace PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+    endif()
     target_sources(hermas_journal PRIVATE src/journal_linux.c)
     target_sources(hermas_compensation PRIVATE
                    src/compensation_linux.c)
@@ -102,7 +110,8 @@ if(UNIX)
     target_sources(hermas_saga_log PRIVATE src/saga_log_linux.c)
     target_sources(hermas_saga PRIVATE src/saga_linux.c)
     add_executable(hermas_history tools/hermas_history.c)
-    target_link_libraries(hermas_history PRIVATE hermas_journal)
+    target_link_libraries(hermas_history PRIVATE
+        hermas_journal hermas_workspace)
     target_compile_options(hermas_history PRIVATE
         -Wall -Wextra -Wpedantic -Werror)
     if(HERMAS_SANITIZE)
@@ -133,9 +142,11 @@ if(UNIX)
     target_include_directories(hermas_host PUBLIC include)
     target_link_libraries(hermas_host PUBLIC hermas_control)
     add_executable(hermasd tools/hermasd.c)
-    target_link_libraries(hermasd PRIVATE hermas_host)
+    target_link_libraries(hermasd PRIVATE
+        hermas_host hermas_workspace)
     add_executable(hermas_run tools/hermas_run.c)
-    target_link_libraries(hermas_run PRIVATE hermas_client hermas_image)
+    target_link_libraries(hermas_run PRIVATE
+        hermas_client hermas_image hermas_workspace)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(hermas_daemon PRIVATE
             -Wall -Wextra -Wpedantic -Werror)
@@ -174,7 +185,8 @@ if(UNIX)
 
     function(add_hermas_edge_app target)
         add_executable(${target} ${ARGN})
-        target_link_libraries(${target} PRIVATE hermas_edge)
+        target_link_libraries(${target} PRIVATE
+            hermas_edge hermas_workspace)
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
             target_compile_options(${target} PRIVATE
                 -Wall -Wextra -Wpedantic -Werror)
@@ -310,6 +322,20 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME hermas_protocol_tests COMMAND hermas_protocol_tests)
     if(UNIX)
+        add_executable(hermas_workspace_tests
+                       tests/test_workspace_linux.c)
+        target_link_libraries(hermas_workspace_tests
+                              PRIVATE hermas_workspace)
+        target_compile_options(hermas_workspace_tests PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+        if(HERMAS_SANITIZE)
+            target_compile_options(hermas_workspace_tests PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(hermas_workspace_tests PRIVATE
+                -fsanitize=address,undefined)
+        endif()
+        add_test(NAME hermas_workspace_tests
+                 COMMAND hermas_workspace_tests)
         add_executable(hermas_compensation_linux_tests
                        tests/test_compensation_linux.c)
         target_link_libraries(hermas_compensation_linux_tests
@@ -606,7 +632,8 @@ install(DIRECTORY include/hermas
 if(UNIX)
     install(TARGETS
             hermas_daemon hermas_control hermas_edge hermas_client
-            hermas_host hermasd hermas_run hermas_history
+            hermas_host hermas_workspace
+            hermasd hermas_run hermas_history
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -623,6 +650,7 @@ install(FILES
         README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md ROADMAP.md
         LICENSE-MIT LICENSE-APACHE
         docs/QUICKSTART.md docs/APP_AUTHOR_GUIDE.md
+        docs/WORKSPACE.md
         docs/COMPATIBILITY.md docs/THREAT_MODEL.md
         docs/CRASH_RECOVERY_MATRIX.md docs/FEATURE_ADMISSION.md
         docs/RELEASE_CHECKLIST.md
