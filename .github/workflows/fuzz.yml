@@ -5,6 +5,15 @@ on:
   schedule:
     - cron: "23 3 * * 1"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      smoke:
+        type: boolean
+        default: false
+
+concurrency:
+  group: hermas-fuzz-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -12,20 +21,25 @@ permissions:
 jobs:
   fuzz:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - run: cargo install cargo-fuzz --locked
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # nightly
+        with:
+          toolchain: nightly
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
       - run: cargo build -p hermas
       - run: tools/generate_test_fixtures.sh
       - name: Rust fuzz smoke
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' || inputs.smoke }}
         run: |
           cargo fuzz run image target/gate-fixtures -- -runs=500
           cargo fuzz run schema fuzz/seeds/schema -- -runs=500
           cargo fuzz run hscript fuzz/seeds/hscript -- -runs=500
       - name: Rust scheduled fuzz
-        if: github.event_name != 'pull_request'
+        if: ${{ github.event_name != 'pull_request' && !inputs.smoke }}
         run: |
           cargo fuzz run image target/gate-fixtures -- -max_total_time=300
           cargo fuzz run schema fuzz/seeds/schema -- -max_total_time=300
@@ -33,8 +47,8 @@ jobs:
       - run: cmake -S . -B build-fuzz -DCMAKE_C_COMPILER=clang -DHERMAS_BUILD_FUZZERS=ON
       - run: cmake --build build-fuzz --target hermas_c_fuzz -j2
       - name: C fuzz smoke
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' || inputs.smoke }}
         run: build-fuzz/hermas_c_fuzz -runs=1000 target/gate-fixtures
       - name: C scheduled fuzz
-        if: github.event_name != 'pull_request'
+        if: ${{ github.event_name != 'pull_request' && !inputs.smoke }}
         run: build-fuzz/hermas_c_fuzz -max_total_time=600 target/gate-fixtures
