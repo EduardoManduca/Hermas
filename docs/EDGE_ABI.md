@@ -1,22 +1,22 @@
-# libhermas2edge C ABI
+# libhermas_edge C ABI
 
 Status: implemented initial Linux caller-owned ABI.
 
-`libhermas2edge` connects outward to the daemon over
+`libhermas_edge` connects outward to the daemon over
 `AF_UNIX` `SOCK_SEQPACKET`. It allocates no memory and owns no application
 thread. The application owns:
 
-- The `hermas2_edge` context.
+- The `hermas_edge` context.
 - Request packet storage.
 - Result payload storage.
 - Handler state.
 - Its event-loop or blocking policy.
 
-`hermas2_edge_connect` registers the app ID and exact 32-byte semantic contract
+`hermas_edge_connect` registers the app ID and exact 32-byte semantic contract
 fingerprint before accepting work. A mismatched registration is rejected by
 the daemon rather than deferred until invocation.
 
-`hermas2_edge_serve_once`:
+`hermas_edge_serve_once`:
 
 1. Receives exactly one packet with truncation detection.
 2. Decodes and validates the protocol header.

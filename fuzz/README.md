@@ -16,10 +16,10 @@ results, compensation tokens, and saga-attempt logs:
 ```text
 cmake -S . -B build-fuzz \
   -DCMAKE_C_COMPILER=clang \
-  -DHERMAS2_SANITIZE=ON \
-  -DHERMAS2_BUILD_FUZZERS=ON
-cmake --build build-fuzz --target hermas2_c_fuzz
-build-fuzz/hermas2_c_fuzz -max_total_time=60 CORPUS_DIR
+  -DHERMAS_SANITIZE=ON \
+  -DHERMAS_BUILD_FUZZERS=ON
+cmake --build build-fuzz --target hermas_c_fuzz
+build-fuzz/hermas_c_fuzz -max_total_time=60 CORPUS_DIR
 ```
 
 Pull requests run bounded smoke sessions. Scheduled CI runs longer sessions.

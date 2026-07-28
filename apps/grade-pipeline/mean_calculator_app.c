@@ -53,7 +53,7 @@ static int calculate_mean(
         read_i64(input + 8u) + read_i64(input + 16u) +
         read_i64(input + 24u);
     write_i64(result, total / 3);
-    *outcome = HERMAS2_OUTCOME_SUCCESS;
+    *outcome = HERMAS_OUTCOME_SUCCESS;
     *result_type = MEAN_TYPE_ID;
     *result_length = 8u;
     return 1;
@@ -61,7 +61,7 @@ static int calculate_mean(
 
 int main(int argc, char **argv) {
     uint8_t result[8];
-    return hermas2_example_app_run_once(
+    return hermas_example_app_run_once(
         argc, argv, MEAN_CALCULATOR_APP_ID, CALCULATE_ACTION_ID,
         calculate_mean,
         result, sizeof(result));

@@ -2,6 +2,10 @@
 /fuzz/target/
 /fuzz/artifacts/
 /fuzz/corpus/
+/fuzz/seeds/schema/*
+!/fuzz/seeds/schema/basic.hschema
+/fuzz/seeds/hscript/*
+!/fuzz/seeds/hscript/basic.hscript
 /build-*/
 /dist*/
 **/*.swp

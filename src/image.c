@@ -1,20 +1,20 @@
-#include "hermas2/image.h"
+#include "hermas/image.h"
 
 #include <stdbool.h>
 #include <string.h>
 
-#define HERMAS2_HEADER_SIZE HERMAS2_IMAGE_HEADER_SIZE
-#define HERMAS2_ACTION_CONTRACT_RECORD_SIZE \
-    HERMAS2_IMAGE_ACTION_CONTRACT_RECORD_SIZE
-#define HERMAS2_TYPE_RECORD_SIZE HERMAS2_IMAGE_TYPE_RECORD_SIZE
-#define HERMAS2_NODE_RECORD_SIZE HERMAS2_IMAGE_NODE_RECORD_SIZE
-#define HERMAS2_EDGE_RECORD_SIZE HERMAS2_IMAGE_EDGE_RECORD_SIZE
-#define HERMAS2_REGION_RECORD_SIZE HERMAS2_IMAGE_REGION_RECORD_SIZE
-#define HERMAS2_MAX_NODES 64u
-#define HERMAS2_MAX_ACTION_CONTRACTS 80u
-#define HERMAS2_MAX_EDGES 192u
-#define HERMAS2_MAX_ERRORS 256u
-#define HERMAS2_MAX_ALL_BRANCHES 8u
+#define HERMAS_HEADER_SIZE HERMAS_IMAGE_HEADER_SIZE
+#define HERMAS_ACTION_CONTRACT_RECORD_SIZE \
+    HERMAS_IMAGE_ACTION_CONTRACT_RECORD_SIZE
+#define HERMAS_TYPE_RECORD_SIZE HERMAS_IMAGE_TYPE_RECORD_SIZE
+#define HERMAS_NODE_RECORD_SIZE HERMAS_IMAGE_NODE_RECORD_SIZE
+#define HERMAS_EDGE_RECORD_SIZE HERMAS_IMAGE_EDGE_RECORD_SIZE
+#define HERMAS_REGION_RECORD_SIZE HERMAS_IMAGE_REGION_RECORD_SIZE
+#define HERMAS_MAX_NODES 64u
+#define HERMAS_MAX_ACTION_CONTRACTS 80u
+#define HERMAS_MAX_EDGES 192u
+#define HERMAS_MAX_ERRORS 256u
+#define HERMAS_MAX_ALL_BRANCHES 8u
 
 static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
     return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1u] << 8u);
@@ -110,7 +110,7 @@ static bool contains_action_contract(
     uint16_t action) {
     for (size_t index = 0u; index < count; ++index) {
         size_t record =
-            offset + index * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+            offset + index * HERMAS_ACTION_CONTRACT_RECORD_SIZE;
         if (read_u16(bytes, record) == app &&
             read_u16(bytes, record + 2u) == action) {
             return true;
@@ -119,13 +119,13 @@ static bool contains_action_contract(
     return false;
 }
 
-static hermas2_image_result validate_representation(
+static hermas_image_result validate_representation(
     const uint8_t *bytes,
     size_t end,
     size_t *cursor,
     size_t depth) {
     if (depth > 64u || *cursor > end || end - *cursor < 8u) {
-        return HERMAS2_IMAGE_INVALID_RECORD;
+        return HERMAS_IMAGE_INVALID_RECORD;
     }
     size_t offset = *cursor;
     uint8_t kind = bytes[offset];
@@ -141,17 +141,17 @@ static hermas2_image_result validate_representation(
          (kind == 7u && children == 1u && bound >= 1u && bound <= 256u) ||
          (kind == 8u && children != 0u && bound == 0u));
     if (!valid) {
-        return HERMAS2_IMAGE_INVALID_RECORD;
+        return HERMAS_IMAGE_INVALID_RECORD;
     }
     *cursor += 8u;
     for (size_t child = 0u; child < children; ++child) {
-        hermas2_image_result result =
+        hermas_image_result result =
             validate_representation(bytes, end, cursor, depth + 1u);
-        if (result != HERMAS2_IMAGE_OK) {
+        if (result != HERMAS_IMAGE_OK) {
             return result;
         }
     }
-    return HERMAS2_IMAGE_OK;
+    return HERMAS_IMAGE_OK;
 }
 
 static bool type_descriptor(
@@ -163,13 +163,13 @@ static bool type_descriptor(
     size_t *start,
     size_t *end) {
     for (size_t index = 0u; index < type_count; ++index) {
-        size_t record = types_offset + index * HERMAS2_TYPE_RECORD_SIZE;
+        size_t record = types_offset + index * HERMAS_TYPE_RECORD_SIZE;
         if (read_u16(bytes, record) != type_id) {
             continue;
         }
         *start = read_u32(bytes, record + 4u);
         *end = index + 1u < type_count
-                   ? read_u32(bytes, record + HERMAS2_TYPE_RECORD_SIZE + 4u)
+                   ? read_u32(bytes, record + HERMAS_TYPE_RECORD_SIZE + 4u)
                    : strings_offset;
         return true;
     }
@@ -191,7 +191,7 @@ static bool representation_child(
     for (size_t index = 0u; index < children; ++index) {
         size_t start = cursor;
         if (validate_representation(bytes, descriptor_end, &cursor, 1u) !=
-            HERMAS2_IMAGE_OK) {
+            HERMAS_IMAGE_OK) {
             return false;
         }
         if (index == child_index) {
@@ -215,7 +215,7 @@ static bool payload_u32(
     return true;
 }
 
-static hermas2_image_result validate_value_inner(
+static hermas_image_result validate_value_inner(
     const uint8_t *image,
     size_t representation_end,
     size_t *representation_cursor,
@@ -225,7 +225,7 @@ static hermas2_image_result validate_value_inner(
     size_t depth) {
     if (depth > 64u || *representation_cursor > representation_end ||
         representation_end - *representation_cursor < 8u) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     size_t representation = *representation_cursor;
     uint8_t kind = image[representation];
@@ -234,22 +234,22 @@ static hermas2_image_result validate_value_inner(
     size_t child_start = representation + 8u;
     *representation_cursor = child_start;
     if (kind == 1u) {
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 2u) {
         if (*payload_cursor > payload_size ||
             payload_size - *payload_cursor < 8u) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         *payload_cursor += 8u;
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 3u) {
         if (*payload_cursor >= payload_size || payload[*payload_cursor] > 1u) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         ++*payload_cursor;
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 4u || kind == 5u) {
         uint32_t length = 0u;
@@ -259,26 +259,26 @@ static hermas2_image_result validate_value_inner(
             reserved != 0u || length > bound ||
             *payload_cursor > payload_size - 8u ||
             (size_t)length > payload_size - (*payload_cursor + 8u)) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         const uint8_t *data = payload + *payload_cursor + 8u;
         if (kind == 4u &&
             (!valid_utf8(data, length) || memchr(data, 0, length) != NULL)) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         *payload_cursor += 8u + (size_t)length;
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 6u) {
         for (size_t child = 0u; child < children; ++child) {
-            hermas2_image_result result = validate_value_inner(
+            hermas_image_result result = validate_value_inner(
                 image, representation_end, representation_cursor,
                 payload, payload_size, payload_cursor, depth + 1u);
-            if (result != HERMAS2_IMAGE_OK) {
+            if (result != HERMAS_IMAGE_OK) {
                 return result;
             }
         }
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 7u) {
         uint32_t count = 0u;
@@ -286,26 +286,26 @@ static hermas2_image_result validate_value_inner(
         if (!payload_u32(payload, payload_size, *payload_cursor, &count) ||
             !payload_u32(payload, payload_size, *payload_cursor + 4u, &reserved) ||
             reserved != 0u || count > bound) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         *payload_cursor += 8u;
         size_t child_end = child_start;
         if (validate_representation(image, representation_end,
                                     &child_end, depth + 1u) !=
-            HERMAS2_IMAGE_OK) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            HERMAS_IMAGE_OK) {
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         for (size_t item = 0u; item < count; ++item) {
             size_t child_cursor = child_start;
-            hermas2_image_result result = validate_value_inner(
+            hermas_image_result result = validate_value_inner(
                 image, representation_end, &child_cursor, payload,
                 payload_size, payload_cursor, depth + 1u);
-            if (result != HERMAS2_IMAGE_OK || child_cursor != child_end) {
-                return HERMAS2_IMAGE_INVALID_VALUE;
+            if (result != HERMAS_IMAGE_OK || child_cursor != child_end) {
+                return HERMAS_IMAGE_INVALID_VALUE;
             }
         }
         *representation_cursor = child_end;
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
     if (kind == 8u) {
         uint32_t tag = 0u;
@@ -313,49 +313,49 @@ static hermas2_image_result validate_value_inner(
         if (!payload_u32(payload, payload_size, *payload_cursor, &tag) ||
             !payload_u32(payload, payload_size, *payload_cursor + 4u, &reserved) ||
             reserved != 0u || tag >= children) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         *payload_cursor += 8u;
         for (size_t child = 0u; child < children; ++child) {
             if (child == tag) {
-                hermas2_image_result result = validate_value_inner(
+                hermas_image_result result = validate_value_inner(
                     image, representation_end, representation_cursor,
                     payload, payload_size, payload_cursor, depth + 1u);
-                if (result != HERMAS2_IMAGE_OK) {
+                if (result != HERMAS_IMAGE_OK) {
                     return result;
                 }
             } else if (validate_representation(
                            image, representation_end,
                            representation_cursor, depth + 1u) !=
-                       HERMAS2_IMAGE_OK) {
-                return HERMAS2_IMAGE_INVALID_VALUE;
+                       HERMAS_IMAGE_OK) {
+                return HERMAS_IMAGE_INVALID_VALUE;
             }
         }
-        return HERMAS2_IMAGE_OK;
+        return HERMAS_IMAGE_OK;
     }
-    return HERMAS2_IMAGE_INVALID_VALUE;
+    return HERMAS_IMAGE_INVALID_VALUE;
 }
 
-hermas2_image_result hermas2_image_validate(
+hermas_image_result hermas_image_validate(
     const uint8_t *bytes,
     size_t size,
-    hermas2_image_summary *summary) {
-    if (bytes == NULL || size < HERMAS2_HEADER_SIZE) {
-        return HERMAS2_IMAGE_TRUNCATED;
+    hermas_image_summary *summary) {
+    if (bytes == NULL || size < HERMAS_HEADER_SIZE) {
+        return HERMAS_IMAGE_TRUNCATED;
     }
-    if (memcmp(bytes, "H2GI", 4u) != 0) {
-        return HERMAS2_IMAGE_BAD_MAGIC;
+    if (memcmp(bytes, "HGI1", 4u) != 0) {
+        return HERMAS_IMAGE_BAD_MAGIC;
     }
-    if (read_u16(bytes, 4u) != HERMAS2_GRAPH_IMAGE_VERSION) {
-        return HERMAS2_IMAGE_UNSUPPORTED_VERSION;
+    if (read_u16(bytes, 4u) != HERMAS_GRAPH_IMAGE_VERSION) {
+        return HERMAS_IMAGE_UNSUPPORTED_VERSION;
     }
-    if (read_u16(bytes, 6u) != HERMAS2_HEADER_SIZE ||
+    if (read_u16(bytes, 6u) != HERMAS_HEADER_SIZE ||
         (size > UINT32_MAX) ||
         read_u32(bytes, 8u) != (uint32_t)size ||
         read_u32(bytes, 12u) != 0u ||
         read_u16(bytes, 70u) != 0u ||
         read_u32(bytes, 76u) != 0u) {
-        return HERMAS2_IMAGE_INVALID_HEADER;
+        return HERMAS_IMAGE_INVALID_HEADER;
     }
 
     size_t name_offset = read_u32(bytes, 16u);
@@ -369,12 +369,12 @@ hermas2_image_result hermas2_image_validate(
     uint16_t type_count = read_u16(bytes, 34u);
     uint16_t region_count = read_u16(bytes, 68u);
     if (input_type == 0u || success_type == 0u || error_count == 0u ||
-        error_count > HERMAS2_MAX_ERRORS || action_contract_count == 0u ||
-        action_contract_count > HERMAS2_MAX_ACTION_CONTRACTS ||
+        error_count > HERMAS_MAX_ERRORS || action_contract_count == 0u ||
+        action_contract_count > HERMAS_MAX_ACTION_CONTRACTS ||
         type_count == 0u ||
-        type_count > HERMAS2_MAX_ERRORS || node_count > HERMAS2_MAX_NODES ||
-        edge_count > HERMAS2_MAX_EDGES || region_count > 40u) {
-        return HERMAS2_IMAGE_INVALID_COUNT;
+        type_count > HERMAS_MAX_ERRORS || node_count > HERMAS_MAX_NODES ||
+        edge_count > HERMAS_MAX_EDGES || region_count > 40u) {
+        return HERMAS_IMAGE_INVALID_COUNT;
     }
 
     size_t errors_offset = read_u32(bytes, 36u);
@@ -387,7 +387,7 @@ hermas2_image_result hermas2_image_validate(
     size_t representations_length = read_u32(bytes, 64u);
     size_t regions_offset = read_u32(bytes, 72u);
     size_t expected_action_contracts =
-        (HERMAS2_HEADER_SIZE + (size_t)error_count * 2u + 3u) &
+        (HERMAS_HEADER_SIZE + (size_t)error_count * 2u + 3u) &
         ~(size_t)3u;
     size_t expected_types = 0u;
     size_t expected_nodes = 0u;
@@ -396,14 +396,14 @@ hermas2_image_result hermas2_image_validate(
     size_t expected_strings = 0u;
     if (!checked_table_end(expected_action_contracts,
                            action_contract_count,
-                           HERMAS2_ACTION_CONTRACT_RECORD_SIZE,
+                           HERMAS_ACTION_CONTRACT_RECORD_SIZE,
                            &expected_types) ||
-        !checked_table_end(expected_types, type_count, HERMAS2_TYPE_RECORD_SIZE, &expected_nodes) ||
-        !checked_table_end(expected_nodes, node_count, HERMAS2_NODE_RECORD_SIZE, &expected_edges) ||
-        !checked_table_end(expected_edges, edge_count, HERMAS2_EDGE_RECORD_SIZE, &expected_regions) ||
-        !checked_table_end(expected_regions, region_count, HERMAS2_REGION_RECORD_SIZE, &expected_strings) ||
+        !checked_table_end(expected_types, type_count, HERMAS_TYPE_RECORD_SIZE, &expected_nodes) ||
+        !checked_table_end(expected_nodes, node_count, HERMAS_NODE_RECORD_SIZE, &expected_edges) ||
+        !checked_table_end(expected_edges, edge_count, HERMAS_EDGE_RECORD_SIZE, &expected_regions) ||
+        !checked_table_end(expected_regions, region_count, HERMAS_REGION_RECORD_SIZE, &expected_strings) ||
         representations_length > SIZE_MAX - expected_strings ||
-        errors_offset != HERMAS2_HEADER_SIZE ||
+        errors_offset != HERMAS_HEADER_SIZE ||
         action_contracts_offset != expected_action_contracts ||
         types_offset != expected_types ||
         nodes_offset != expected_nodes || edges_offset != expected_edges ||
@@ -412,85 +412,85 @@ hermas2_image_result hermas2_image_validate(
         strings_offset != expected_strings + representations_length ||
         name_offset != strings_offset || name_offset > size ||
         (size_t)name_length != size - name_offset) {
-        return HERMAS2_IMAGE_INVALID_OFFSET;
+        return HERMAS_IMAGE_INVALID_OFFSET;
     }
     if (name_length == 0u || !valid_utf8(bytes + name_offset, name_length)) {
-        return HERMAS2_IMAGE_INVALID_STRING;
+        return HERMAS_IMAGE_INVALID_STRING;
     }
 
     for (size_t left = 0u; left < error_count; ++left) {
         uint16_t value = read_u16(bytes, errors_offset + left * 2u);
         if (value == 0u) {
-            return HERMAS2_IMAGE_DUPLICATE_RECORD;
+            return HERMAS_IMAGE_DUPLICATE_RECORD;
         }
         for (size_t right = 0u; right < left; ++right) {
             if (value == read_u16(bytes, errors_offset + right * 2u)) {
-                return HERMAS2_IMAGE_DUPLICATE_RECORD;
+                return HERMAS_IMAGE_DUPLICATE_RECORD;
             }
         }
     }
     for (size_t left = 0u; left < action_contract_count; ++left) {
         size_t offset = action_contracts_offset +
-                        left * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+                        left * HERMAS_ACTION_CONTRACT_RECORD_SIZE;
         uint16_t app = read_u16(bytes, offset);
         uint16_t action = read_u16(bytes, offset + 2u);
         if (app == 0u || action == 0u) {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
         for (size_t right = 0u; right < left; ++right) {
             size_t previous = action_contracts_offset +
-                              right * HERMAS2_ACTION_CONTRACT_RECORD_SIZE;
+                              right * HERMAS_ACTION_CONTRACT_RECORD_SIZE;
             if (app == read_u16(bytes, previous) &&
                 action == read_u16(bytes, previous + 2u)) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
         }
     }
     size_t representation_cursor = representations_offset;
     for (size_t left = 0u; left < type_count; ++left) {
-        size_t offset = types_offset + left * HERMAS2_TYPE_RECORD_SIZE;
+        size_t offset = types_offset + left * HERMAS_TYPE_RECORD_SIZE;
         uint16_t type_id = read_u16(bytes, offset);
         if (type_id == 0u || read_u16(bytes, offset + 2u) != 0u ||
             read_u32(bytes, offset + 4u) != representation_cursor) {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
         for (size_t right = 0u; right < left; ++right) {
             if (type_id ==
-                read_u16(bytes, types_offset + right * HERMAS2_TYPE_RECORD_SIZE)) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                read_u16(bytes, types_offset + right * HERMAS_TYPE_RECORD_SIZE)) {
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
         }
         if (validate_representation(bytes, strings_offset,
                                     &representation_cursor, 0u) !=
-            HERMAS2_IMAGE_OK) {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            HERMAS_IMAGE_OK) {
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
     }
     if (representation_cursor != strings_offset ||
         !contains_u16(bytes, types_offset, type_count,
-                      HERMAS2_TYPE_RECORD_SIZE, input_type) ||
+                      HERMAS_TYPE_RECORD_SIZE, input_type) ||
         !contains_u16(bytes, types_offset, type_count,
-                      HERMAS2_TYPE_RECORD_SIZE, success_type)) {
-        return HERMAS2_IMAGE_INVALID_RECORD;
+                      HERMAS_TYPE_RECORD_SIZE, success_type)) {
+        return HERMAS_IMAGE_INVALID_RECORD;
     }
     for (size_t index = 0u; index < error_count; ++index) {
         if (!contains_u16(bytes, types_offset, type_count,
-                          HERMAS2_TYPE_RECORD_SIZE,
+                          HERMAS_TYPE_RECORD_SIZE,
                           read_u16(bytes, errors_offset + index * 2u))) {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
     }
 
-    bool action_nodes[HERMAS2_MAX_NODES + 1u] = {false};
-    uint16_t dispatch_types[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint16_t dispatch_cases[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint16_t fork_types[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t fork_branches[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t join_branches[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t terminal_nodes[HERMAS2_MAX_NODES + 1u] = {0u};
+    bool action_nodes[HERMAS_MAX_NODES + 1u] = {false};
+    uint16_t dispatch_types[HERMAS_MAX_NODES + 1u] = {0u};
+    uint16_t dispatch_cases[HERMAS_MAX_NODES + 1u] = {0u};
+    uint16_t fork_types[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t fork_branches[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t join_branches[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t terminal_nodes[HERMAS_MAX_NODES + 1u] = {0u};
     bool terminal_kinds[5] = {false};
     for (size_t index = 0u; index < node_count; ++index) {
-        size_t offset = nodes_offset + index * HERMAS2_NODE_RECORD_SIZE;
+        size_t offset = nodes_offset + index * HERMAS_NODE_RECORD_SIZE;
         uint8_t kind = bytes[offset];
         uint8_t subtype = bytes[offset + 1u];
         uint16_t action = read_u16(bytes, offset + 2u);
@@ -510,20 +510,20 @@ hermas2_image_result hermas2_image_validate(
                                  strings_offset, action, &descriptor,
                                  &descriptor_end) ||
                 bytes[descriptor] != 8u ||
-                read_u16(bytes, descriptor + 2u) > HERMAS2_MAX_EDGES) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                read_u16(bytes, descriptor + 2u) > HERMAS_MAX_EDGES) {
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
             dispatch_types[node] = action;
             dispatch_cases[node] = read_u16(bytes, descriptor + 2u);
         } else if (kind == 4u && subtype >= 2u &&
-                   subtype <= HERMAS2_MAX_ALL_BRANCHES && action != 0u &&
+                   subtype <= HERMAS_MAX_ALL_BRANCHES && action != 0u &&
                    app == 0u && reserved == 0u &&
                    contains_u16(bytes, types_offset, type_count,
-                                HERMAS2_TYPE_RECORD_SIZE, action)) {
+                                HERMAS_TYPE_RECORD_SIZE, action)) {
             fork_types[node] = action;
             fork_branches[node] = subtype;
         } else if (kind == 5u && subtype >= 2u &&
-                   subtype <= HERMAS2_MAX_ALL_BRANCHES && action == 0u &&
+                   subtype <= HERMAS_MAX_ALL_BRANCHES && action == 0u &&
                    app == 0u && reserved == 0u) {
             join_branches[node] = subtype;
         } else if (kind == 2u && subtype >= 1u && subtype <= 4u &&
@@ -532,12 +532,12 @@ hermas2_image_result hermas2_image_validate(
             terminal_kinds[subtype] = true;
             terminal_nodes[node] = subtype;
         } else {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
     }
     if (!terminal_kinds[1] || !terminal_kinds[2] ||
         !terminal_kinds[3] || !terminal_kinds[4]) {
-        return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+        return HERMAS_IMAGE_INVALID_TOPOLOGY;
     }
 
     uint16_t deadline_first[8] = {0u};
@@ -554,11 +554,11 @@ hermas2_image_result hermas2_image_validate(
     size_t saga_count = 0u;
     size_t saga_outcome_count = 0u;
     uint16_t last_saga_forward = 0u;
-    uint16_t saga_source_type[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint16_t saga_success_type[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint16_t saga_error_type[HERMAS2_MAX_NODES + 1u] = {0u};
+    uint16_t saga_source_type[HERMAS_MAX_NODES + 1u] = {0u};
+    uint16_t saga_success_type[HERMAS_MAX_NODES + 1u] = {0u};
+    uint16_t saga_error_type[HERMAS_MAX_NODES + 1u] = {0u};
     for (size_t index = 0u; index < region_count; ++index) {
-        size_t offset = regions_offset + index * HERMAS2_REGION_RECORD_SIZE;
+        size_t offset = regions_offset + index * HERMAS_REGION_RECORD_SIZE;
         uint8_t kind = bytes[offset];
         if (kind == 1u) {
             uint16_t first = read_u16(bytes, offset + 2u);
@@ -577,14 +577,14 @@ hermas2_image_result hermas2_image_validate(
                 (deadline_count == 0u &&
                  (first != 1u || count != node_count || parent != 0u)) ||
                 read_u64(bytes, offset + 8u) == 0u) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
             deadline_first[deadline_count] = first;
             deadline_last[deadline_count] = (uint16_t)last;
             ++deadline_count;
         } else if (kind == 2u) {
             if (each_count >= 8u || saga_count != 0u) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
             size_t id = ++each_count;
             each_concurrency[id] = bytes[offset + 1u];
@@ -633,14 +633,14 @@ hermas2_image_result hermas2_image_validate(
                 memcmp(bytes + child_start, bytes + output_start,
                        child_end - child_start) == 0;
             if (each_concurrency[id] == 0u ||
-                each_concurrency[id] > HERMAS2_MAX_ALL_BRANCHES ||
+                each_concurrency[id] > HERMAS_MAX_ALL_BRANCHES ||
                 each_concurrency[id] > each_bound[id] ||
                 each_template[id] == 0u ||
                 each_template[id] > node_count ||
                 !action_nodes[each_template[id]] ||
                 !source_matches || !output_matches ||
                 read_u16(bytes, offset + 14u) != 0u) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
         } else if (kind == 3u) {
             uint16_t forward = read_u16(bytes, offset + 2u);
@@ -672,7 +672,7 @@ hermas2_image_result hermas2_image_validate(
                     compensation_action) ||
                 ordinal != saga_count + 1u || saga_source_type[forward] != 0u ||
                 !compatible || read_u16(bytes, offset + 14u) != 0u) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
             saga_source_type[forward] = source_type;
             last_saga_forward = forward;
@@ -687,40 +687,40 @@ hermas2_image_result hermas2_image_validate(
                 forward != last_saga_forward ||
                 saga_success_type[forward] != 0u ||
                 !contains_u16(bytes, types_offset, type_count,
-                              HERMAS2_TYPE_RECORD_SIZE, success_type) ||
+                              HERMAS_TYPE_RECORD_SIZE, success_type) ||
                 !contains_u16(bytes, types_offset, type_count,
-                              HERMAS2_TYPE_RECORD_SIZE, error_type) ||
+                              HERMAS_TYPE_RECORD_SIZE, error_type) ||
                 read_u64(bytes, offset + 8u) != 0u) {
-                return HERMAS2_IMAGE_INVALID_RECORD;
+                return HERMAS_IMAGE_INVALID_RECORD;
             }
             saga_success_type[forward] = success_type;
             saga_error_type[forward] = error_type;
             ++saga_outcome_count;
         } else {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
     }
 
-    uint8_t input_counts[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t success_counts[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t error_counts[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t not_sent_counts[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t unknown_counts[HERMAS2_MAX_NODES + 1u] = {0u};
-    uint8_t dispatch_case_counts[HERMAS2_MAX_NODES + 1u][256] = {{0u}};
-    uint8_t fork_branch_counts[HERMAS2_MAX_NODES + 1u][HERMAS2_MAX_ALL_BRANCHES] = {{0u}};
-    uint8_t join_input_counts[HERMAS2_MAX_NODES + 1u][HERMAS2_MAX_ALL_BRANCHES] = {{0u}};
-    uint8_t join_output_counts[HERMAS2_MAX_NODES + 1u][HERMAS2_MAX_ALL_BRANCHES] = {{0u}};
-    uint16_t join_input_types[HERMAS2_MAX_NODES + 1u][HERMAS2_MAX_ALL_BRANCHES] = {{0u}};
-    uint16_t join_output_types[HERMAS2_MAX_NODES + 1u][HERMAS2_MAX_ALL_BRANCHES] = {{0u}};
+    uint8_t input_counts[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t success_counts[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t error_counts[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t not_sent_counts[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t unknown_counts[HERMAS_MAX_NODES + 1u] = {0u};
+    uint8_t dispatch_case_counts[HERMAS_MAX_NODES + 1u][256] = {{0u}};
+    uint8_t fork_branch_counts[HERMAS_MAX_NODES + 1u][HERMAS_MAX_ALL_BRANCHES] = {{0u}};
+    uint8_t join_input_counts[HERMAS_MAX_NODES + 1u][HERMAS_MAX_ALL_BRANCHES] = {{0u}};
+    uint8_t join_output_counts[HERMAS_MAX_NODES + 1u][HERMAS_MAX_ALL_BRANCHES] = {{0u}};
+    uint16_t join_input_types[HERMAS_MAX_NODES + 1u][HERMAS_MAX_ALL_BRANCHES] = {{0u}};
+    uint16_t join_output_types[HERMAS_MAX_NODES + 1u][HERMAS_MAX_ALL_BRANCHES] = {{0u}};
     uint8_t each_input_counts[9] = {0u};
     uint8_t each_collect_counts[9] = {0u};
     uint8_t each_item_counts[9] = {0u};
     uint8_t each_output_counts[9] = {0u};
-    uint16_t action_success_type[HERMAS2_MAX_NODES + 1u] = {0u};
-    bool reachable[HERMAS2_MAX_NODES + 1u] = {false};
+    uint16_t action_success_type[HERMAS_MAX_NODES + 1u] = {0u};
+    bool reachable[HERMAS_MAX_NODES + 1u] = {false};
     unsigned workflow_input_count = 0u;
     for (size_t index = 0u; index < edge_count; ++index) {
-        size_t offset = edges_offset + index * HERMAS2_EDGE_RECORD_SIZE;
+        size_t offset = edges_offset + index * HERMAS_EDGE_RECORD_SIZE;
         uint8_t source_kind = bytes[offset];
         uint8_t target_kind = bytes[offset + 1u];
         uint8_t flags = bytes[offset + 2u];
@@ -756,11 +756,11 @@ hermas2_image_result hermas2_image_validate(
         bool valid_source =
             (source_kind == 0u && source_node == 0u && source_type == input_type &&
              contains_u16(bytes, types_offset, type_count,
-                          HERMAS2_TYPE_RECORD_SIZE, source_type)) ||
+                          HERMAS_TYPE_RECORD_SIZE, source_type)) ||
             ((source_kind == 1u || source_kind == 2u) &&
              source_node <= node_count && action_nodes[source_node] &&
              contains_u16(bytes, types_offset, type_count,
-                          HERMAS2_TYPE_RECORD_SIZE, source_type)) ||
+                          HERMAS_TYPE_RECORD_SIZE, source_type)) ||
             ((source_kind == 3u || source_kind == 4u) &&
              source_node <= node_count &&
              action_nodes[source_node] && source_type == 0u && target_type == 0u) ||
@@ -773,7 +773,7 @@ hermas2_image_result hermas2_image_validate(
              join_branches[source_node] != 0u &&
              case_tag < join_branches[source_node] &&
              contains_u16(bytes, types_offset, type_count,
-                          HERMAS2_TYPE_RECORD_SIZE, source_type)) ||
+                          HERMAS_TYPE_RECORD_SIZE, source_type)) ||
             (source_kind == 8u && source_node > 0u &&
              source_node <= each_count && case_tag == 0u &&
              source_type == each_item_input[source_node]) ||
@@ -785,7 +785,7 @@ hermas2_image_result hermas2_image_validate(
             if (target_kind == 1u) {
                 valid_target = action_nodes[target_node] &&
                     contains_u16(bytes, types_offset, type_count,
-                                 HERMAS2_TYPE_RECORD_SIZE, target_type);
+                                 HERMAS_TYPE_RECORD_SIZE, target_type);
             } else if (target_kind == 2u) {
                 uint8_t terminal = terminal_nodes[target_node];
                 valid_target =
@@ -802,7 +802,7 @@ hermas2_image_result hermas2_image_validate(
                 valid_target = join_branches[target_node] != 0u &&
                                case_tag < join_branches[target_node] &&
                                contains_u16(bytes, types_offset, type_count,
-                                            HERMAS2_TYPE_RECORD_SIZE,
+                                            HERMAS_TYPE_RECORD_SIZE,
                                             target_type);
             } else if (target_kind == 6u) {
                 valid_target = target_node <= each_count &&
@@ -822,35 +822,35 @@ hermas2_image_result hermas2_image_validate(
              source_kind != 8u && source_kind != 9u &&
              target_kind != 5u && case_tag != 0u) ||
             read_u16(bytes, offset + 14u) != 0u) {
-            return HERMAS2_IMAGE_INVALID_RECORD;
+            return HERMAS_IMAGE_INVALID_RECORD;
         }
         for (size_t prior = 0u; prior < index; ++prior) {
-            size_t previous = edges_offset + prior * HERMAS2_EDGE_RECORD_SIZE;
+            size_t previous = edges_offset + prior * HERMAS_EDGE_RECORD_SIZE;
             if (source_kind == bytes[previous] &&
                 source_node == read_u16(bytes, previous + 4u) &&
                 case_tag == bytes[previous + 3u] &&
                 target_kind == bytes[previous + 1u] &&
                 target_node == read_u16(bytes, previous + 6u)) {
-                return HERMAS2_IMAGE_DUPLICATE_RECORD;
+                return HERMAS_IMAGE_DUPLICATE_RECORD;
             }
         }
         if ((target_kind == 1u || target_kind == 3u || target_kind == 4u) &&
             ++input_counts[target_node] > 1u) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
         if (target_kind == 5u) {
             if (++join_input_counts[target_node][case_tag] > 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
             join_input_types[target_node][case_tag] = target_type;
         }
         if (target_kind == 6u &&
             ++each_input_counts[target_node] > 1u) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
         if (target_kind == 7u &&
             ++each_collect_counts[target_node] > 1u) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
         if (source_kind == 0u) {
             ++workflow_input_count;
@@ -871,59 +871,59 @@ hermas2_image_result hermas2_image_validate(
             ++unknown_counts[source_node];
         } else if (source_kind == 5u) {
             if (++dispatch_case_counts[source_node][case_tag] > 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
         } else if (source_kind == 6u) {
             if (++fork_branch_counts[source_node][case_tag] > 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
         } else if (source_kind == 7u) {
             if (++join_output_counts[source_node][case_tag] > 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
             join_output_types[source_node][case_tag] = source_type;
         } else if (source_kind == 8u) {
             if (++each_item_counts[source_node] > 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
         } else if (++each_output_counts[source_node] > 1u) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
     }
     if (workflow_input_count != 1u) {
-        return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+        return HERMAS_IMAGE_INVALID_TOPOLOGY;
     }
     for (size_t node = 1u; node <= node_count; ++node) {
         if (action_nodes[node] &&
             (input_counts[node] != 1u || success_counts[node] != 1u ||
              error_counts[node] != 1u || not_sent_counts[node] != 1u ||
              unknown_counts[node] != 1u)) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
         if (action_nodes[node] && saga_count != 0u &&
             (saga_source_type[node] == 0u ||
              saga_success_type[node] == 0u ||
              saga_error_type[node] == 0u ||
              saga_source_type[node] != action_success_type[node])) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
         if (dispatch_types[node] != 0u) {
             if (input_counts[node] != 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
             for (size_t tag = 0u; tag < dispatch_cases[node]; ++tag) {
                 if (dispatch_case_counts[node][tag] != 1u) {
-                    return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                    return HERMAS_IMAGE_INVALID_TOPOLOGY;
                 }
             }
         }
         if (fork_types[node] != 0u) {
             if (input_counts[node] != 1u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
             for (size_t tag = 0u; tag < fork_branches[node]; ++tag) {
                 if (fork_branch_counts[node][tag] != 1u) {
-                    return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                    return HERMAS_IMAGE_INVALID_TOPOLOGY;
                 }
             }
         }
@@ -935,11 +935,11 @@ hermas2_image_result hermas2_image_validate(
                     join_output_counts[node][tag] > 1u ||
                     (join_output_counts[node][tag] == 1u &&
                      join_input_types[node][tag] != join_output_types[node][tag])) {
-                    return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                    return HERMAS_IMAGE_INVALID_TOPOLOGY;
                 }
             }
             if (used_outputs == 0u) {
-                return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+                return HERMAS_IMAGE_INVALID_TOPOLOGY;
             }
         }
     }
@@ -950,7 +950,7 @@ hermas2_image_result hermas2_image_validate(
         }
         if (saga_count != action_count ||
             saga_outcome_count != saga_count) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
     }
     for (size_t region = 1u; region <= each_count; ++region) {
@@ -958,13 +958,13 @@ hermas2_image_result hermas2_image_validate(
             each_collect_counts[region] != 1u ||
             each_item_counts[region] != 1u ||
             each_output_counts[region] != 1u) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
     }
     for (size_t pass = 0u; pass < node_count; ++pass) {
         bool changed = false;
         for (size_t index = 0u; index < edge_count; ++index) {
-            size_t offset = edges_offset + index * HERMAS2_EDGE_RECORD_SIZE;
+            size_t offset = edges_offset + index * HERMAS_EDGE_RECORD_SIZE;
             uint8_t source_kind = bytes[offset];
             uint8_t target_kind = bytes[offset + 1u];
             uint16_t source_node = read_u16(bytes, offset + 4u);
@@ -990,7 +990,7 @@ hermas2_image_result hermas2_image_validate(
     }
     for (size_t node = 1u; node <= node_count; ++node) {
         if (!reachable[node]) {
-            return HERMAS2_IMAGE_INVALID_TOPOLOGY;
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
         }
     }
     if (summary != NULL) {
@@ -1004,18 +1004,18 @@ hermas2_image_result hermas2_image_validate(
         summary->node_count = node_count;
         summary->edge_count = edge_count;
     }
-    return HERMAS2_IMAGE_OK;
+    return HERMAS_IMAGE_OK;
 }
 
-hermas2_image_result hermas2_image_validate_value(
+hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
     size_t image_size,
     uint16_t type_id,
     const uint8_t *payload,
     size_t payload_size) {
     if ((payload == NULL && payload_size != 0u) ||
-        hermas2_image_validate(image, image_size, NULL) != HERMAS2_IMAGE_OK) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        hermas_image_validate(image, image_size, NULL) != HERMAS_IMAGE_OK) {
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     uint16_t type_count = read_u16(image, 34u);
     size_t types_offset = read_u32(image, 44u);
@@ -1023,7 +1023,7 @@ hermas2_image_result hermas2_image_validate_value(
     size_t representation_cursor = 0u;
     bool found = false;
     for (size_t index = 0u; index < type_count; ++index) {
-        size_t offset = types_offset + index * HERMAS2_TYPE_RECORD_SIZE;
+        size_t offset = types_offset + index * HERMAS_TYPE_RECORD_SIZE;
         if (read_u16(image, offset) == type_id) {
             representation_cursor = read_u32(image, offset + 4u);
             found = true;
@@ -1031,18 +1031,18 @@ hermas2_image_result hermas2_image_validate_value(
         }
     }
     if (!found) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     size_t payload_cursor = 0u;
-    hermas2_image_result result = validate_value_inner(
+    hermas_image_result result = validate_value_inner(
         image, representation_end, &representation_cursor,
         payload, payload_size, &payload_cursor, 0u);
-    return result == HERMAS2_IMAGE_OK && payload_cursor == payload_size
-               ? HERMAS2_IMAGE_OK
-               : HERMAS2_IMAGE_INVALID_VALUE;
+    return result == HERMAS_IMAGE_OK && payload_cursor == payload_size
+               ? HERMAS_IMAGE_OK
+               : HERMAS_IMAGE_INVALID_VALUE;
 }
 
-hermas2_image_result hermas2_image_list_items(
+hermas_image_result hermas_image_list_items(
     const uint8_t *image,
     size_t image_size,
     uint16_t type_id,
@@ -1054,9 +1054,9 @@ hermas2_image_result hermas2_image_list_items(
     size_t item_capacity) {
     if (image == NULL || payload == NULL || item_count == NULL ||
         item_offsets == NULL || item_lengths == NULL ||
-        hermas2_image_validate(image, image_size, NULL) != HERMAS2_IMAGE_OK ||
+        hermas_image_validate(image, image_size, NULL) != HERMAS_IMAGE_OK ||
         payload_size < 8u) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     size_t descriptor = 0u;
     size_t descriptor_end = 0u;
@@ -1065,19 +1065,19 @@ hermas2_image_result hermas2_image_list_items(
             read_u32(image, 60u), type_id, &descriptor,
             &descriptor_end) ||
         image[descriptor] != 7u) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     uint32_t count = read_u32(payload, 0u);
     if (read_u32(payload, 4u) != 0u ||
         count > read_u32(image, descriptor + 4u) ||
         count > item_capacity || count > UINT16_MAX) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     size_t child_start = descriptor + 8u;
     size_t child_end = child_start;
     if (validate_representation(
-            image, descriptor_end, &child_end, 1u) != HERMAS2_IMAGE_OK) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+            image, descriptor_end, &child_end, 1u) != HERMAS_IMAGE_OK) {
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     size_t payload_cursor = 8u;
     for (size_t index = 0u; index < count; ++index) {
@@ -1085,21 +1085,21 @@ hermas2_image_result hermas2_image_list_items(
         size_t child_cursor = child_start;
         if (validate_value_inner(
                 image, descriptor_end, &child_cursor, payload,
-                payload_size, &payload_cursor, 1u) != HERMAS2_IMAGE_OK ||
+                payload_size, &payload_cursor, 1u) != HERMAS_IMAGE_OK ||
             child_cursor != child_end) {
-            return HERMAS2_IMAGE_INVALID_VALUE;
+            return HERMAS_IMAGE_INVALID_VALUE;
         }
         item_offsets[index] = item_start;
         item_lengths[index] = payload_cursor - item_start;
     }
     if (payload_cursor != payload_size) {
-        return HERMAS2_IMAGE_INVALID_VALUE;
+        return HERMAS_IMAGE_INVALID_VALUE;
     }
     *item_count = (uint16_t)count;
-    return HERMAS2_IMAGE_OK;
+    return HERMAS_IMAGE_OK;
 }
 
-const char *hermas2_image_result_name(hermas2_image_result result) {
+const char *hermas_image_result_name(hermas_image_result result) {
     static const char *const names[] = {
         "ok", "truncated", "bad-magic", "unsupported-version",
         "invalid-header", "invalid-offset", "invalid-count", "invalid-string",

@@ -1,4 +1,4 @@
-#include "hermas2/daemon.h"
+#include "hermas/daemon.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,8 +33,8 @@ static uint8_t *read_fixture(const char *path, size_t *size) {
     return bytes;
 }
 
-static hermas2_daemon_action *action_slot(
-    hermas2_daemon_registry *registry,
+static hermas_daemon_action *action_slot(
+    hermas_daemon_registry *registry,
     uint16_t app_id,
     uint16_t action_id) {
     for (size_t index = 0u; index < registry->action_count; ++index) {
@@ -46,78 +46,78 @@ static hermas2_daemon_action *action_slot(
     return NULL;
 }
 
-static int receive_request(int descriptor, hermas2_frame *request) {
-    static uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];
+static int receive_request(int descriptor, hermas_frame *request) {
+    static uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
     ssize_t received = recv(descriptor, packet, sizeof(packet), 0);
     return received > 0 &&
-           hermas2_protocol_decode(packet, (size_t)received, request) ==
-               HERMAS2_PROTOCOL_OK &&
-           request->kind == HERMAS2_FRAME_INVOKE;
+           hermas_protocol_decode(packet, (size_t)received, request) ==
+               HERMAS_PROTOCOL_OK &&
+           request->kind == HERMAS_FRAME_INVOKE;
 }
 
-static int send_unit_error(int descriptor, const hermas2_frame *request) {
-    uint8_t packet[HERMAS2_PROTOCOL_HEADER_SIZE];
+static int send_unit_error(int descriptor, const hermas_frame *request) {
+    uint8_t packet[HERMAS_PROTOCOL_HEADER_SIZE];
     size_t packet_size = 0u;
-    hermas2_frame response = {
-        .kind = HERMAS2_FRAME_RESULT,
+    hermas_frame response = {
+        .kind = HERMAS_FRAME_RESULT,
         .execution_id = request->execution_id,
         .request_id = request->request_id,
         .app_id = request->app_id,
         .action_id = request->action_id,
         .source_type = 3u,
         .destination_type = 3u,
-        .outcome = HERMAS2_OUTCOME_APP_ERROR
+        .outcome = HERMAS_OUTCOME_APP_ERROR
     };
-    return hermas2_protocol_encode(&response, packet, sizeof(packet),
-                                   &packet_size) == HERMAS2_PROTOCOL_OK &&
+    return hermas_protocol_encode(&response, packet, sizeof(packet),
+                                   &packet_size) == HERMAS_PROTOCOL_OK &&
            send(descriptor, packet, packet_size, MSG_NOSIGNAL) ==
                (ssize_t)packet_size;
 }
 
 typedef struct journal_memory {
-    uint8_t bytes[8u * HERMAS2_JOURNAL_RECORD_SIZE];
+    uint8_t bytes[8u * HERMAS_JOURNAL_RECORD_SIZE];
     size_t length;
 } journal_memory;
 
-static hermas2_journal_result write_journal_memory(
+static hermas_journal_result write_journal_memory(
     void *context,
     const uint8_t *record,
     size_t record_size) {
     journal_memory *memory = context;
     if (record_size > sizeof(memory->bytes) - memory->length) {
-        return HERMAS2_JOURNAL_WRITE_ERROR;
+        return HERMAS_JOURNAL_WRITE_ERROR;
     }
     memcpy(memory->bytes + memory->length, record, record_size);
     memory->length += record_size;
-    return HERMAS2_JOURNAL_OK;
+    return HERMAS_JOURNAL_OK;
 }
 
 static int test_not_sent(
-    hermas2_daemon_loop *loop,
-    hermas2_daemon_registry *registry,
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
+    hermas_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create NotSent socket pair");
     }
     app->file_descriptor = sockets[0];
     close(sockets[1]);
-    if (hermas2_daemon_loop_init(loop, registry, image, image_size) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(loop, 201u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK) {
+    if (hermas_daemon_loop_init(loop, registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 201u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
         return fail("cannot admit NotSent execution");
     }
     size_t progress = 0u;
-    if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK) {
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
         return fail("NotSent poll failed");
     }
-    hermas2_frame result;
-    if (hermas2_daemon_loop_result(loop, 201u, &result) != HERMAS2_LOOP_OK ||
-        result.outcome != HERMAS2_OUTCOME_NOT_SENT ||
+    hermas_frame result;
+    if (hermas_daemon_loop_result(loop, 201u, &result) != HERMAS_LOOP_OK ||
+        result.outcome != HERMAS_OUTCOME_NOT_SENT ||
         app->file_descriptor != -1) {
         return fail("pre-delivery disconnect did not become NotSent");
     }
@@ -125,38 +125,38 @@ static int test_not_sent(
 }
 
 static int test_unknown(
-    hermas2_daemon_loop *loop,
-    hermas2_daemon_registry *registry,
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
+    hermas_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create Unknown socket pair");
     }
     app->registered_action_id = 77u;
     app->file_descriptor = sockets[0];
-    if (hermas2_daemon_loop_init(loop, registry, image, image_size) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(loop, 202u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK) {
+    if (hermas_daemon_loop_init(loop, registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 202u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
         return fail("cannot admit Unknown execution");
     }
     size_t progress = 0u;
-    hermas2_frame request;
-    if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK ||
+    hermas_frame request;
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK ||
         !receive_request(sockets[1], &request) ||
         request.action_id != app->registered_action_id) {
         return fail("invocation did not use the registered local Action ID");
     }
     close(sockets[1]);
-    if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK) {
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
         return fail("Unknown poll failed");
     }
-    hermas2_frame result;
-    if (hermas2_daemon_loop_result(loop, 202u, &result) != HERMAS2_LOOP_OK ||
-        result.outcome != HERMAS2_OUTCOME_UNKNOWN ||
+    hermas_frame result;
+    if (hermas_daemon_loop_result(loop, 202u, &result) != HERMAS_LOOP_OK ||
+        result.outcome != HERMAS_OUTCOME_UNKNOWN ||
         app->file_descriptor != -1) {
         return fail("post-delivery disconnect did not become Unknown");
     }
@@ -164,61 +164,61 @@ static int test_unknown(
 }
 
 static int test_single_flight(
-    hermas2_daemon_loop *loop,
-    hermas2_daemon_registry *registry,
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
+    hermas_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create single-flight socket pair");
     }
     app->file_descriptor = sockets[0];
-    if (hermas2_daemon_loop_init(loop, registry, image, image_size) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(loop, 203u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(loop, 204u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK) {
+    if (hermas_daemon_loop_init(loop, registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 203u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 204u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
         return fail("cannot admit contending executions");
     }
     size_t progress = 0u;
-    hermas2_frame first;
-    if (hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK ||
+    hermas_frame first;
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK ||
         !receive_request(sockets[1], &first)) {
         return fail("first same-app invocation was not delivered");
     }
     size_t sent_count = 0u;
     size_t prepared_count = 0u;
-    for (size_t index = 0u; index < HERMAS2_DAEMON_MAX_EXECUTIONS; ++index) {
-        const hermas2_loop_slot *slot = &loop->executions[index];
+    for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
+        const hermas_loop_slot *slot = &loop->executions[index];
         sent_count += slot->active &&
-                      slot->execution.state == HERMAS2_EXECUTION_SENT;
+                      slot->execution.state == HERMAS_EXECUTION_SENT;
         prepared_count += slot->active &&
-                          slot->execution.state == HERMAS2_EXECUTION_PREPARED;
+                          slot->execution.state == HERMAS_EXECUTION_PREPARED;
     }
     if (sent_count != 1u || prepared_count != 1u ||
         !send_unit_error(sockets[1], &first) ||
-        hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK) {
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK ||
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
         return fail("same app was not serialized");
     }
-    hermas2_frame second;
+    hermas_frame second;
     if (!receive_request(sockets[1], &second) ||
         second.execution_id == first.execution_id ||
         !send_unit_error(sockets[1], &second) ||
-        hermas2_daemon_loop_poll(loop, 1000, &progress) != HERMAS2_LOOP_OK) {
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
         return fail("second same-app invocation did not advance");
     }
-    hermas2_frame first_result;
-    hermas2_frame second_result;
-    if (hermas2_daemon_loop_result(loop, first.execution_id, &first_result) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_result(loop, second.execution_id,
-                                   &second_result) != HERMAS2_LOOP_OK ||
-        first_result.outcome != HERMAS2_OUTCOME_APP_ERROR ||
-        second_result.outcome != HERMAS2_OUTCOME_APP_ERROR) {
+    hermas_frame first_result;
+    hermas_frame second_result;
+    if (hermas_daemon_loop_result(loop, first.execution_id, &first_result) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_result(loop, second.execution_id,
+                                   &second_result) != HERMAS_LOOP_OK ||
+        first_result.outcome != HERMAS_OUTCOME_APP_ERROR ||
+        second_result.outcome != HERMAS_OUTCOME_APP_ERROR) {
         return fail("serialized execution results differ");
     }
     close(sockets[1]);
@@ -226,12 +226,12 @@ static int test_single_flight(
 }
 
 static int test_durable_delivery_facts(
-    hermas2_daemon_loop *loop,
-    hermas2_daemon_registry *registry,
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
     const uint8_t *image,
     size_t image_size) {
     int sockets[2];
-    hermas2_daemon_action *app = action_slot(registry, 1u, 1u);
+    hermas_daemon_action *app = action_slot(registry, 1u, 1u);
     if (app == NULL ||
         socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
         return fail("cannot create durable journal socket pair");
@@ -242,35 +242,35 @@ static int test_durable_delivery_facts(
     app->file_descriptor = sockets[0];
     journal_memory memory;
     memset(&memory, 0, sizeof(memory));
-    hermas2_journal_writer writer;
-    if (hermas2_journal_writer_init(
+    hermas_journal_writer writer;
+    if (hermas_journal_writer_init(
             &writer, write_journal_memory, &memory, 1u) !=
-            HERMAS2_JOURNAL_OK ||
-        hermas2_daemon_loop_init(loop, registry, image, image_size) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_attach_journal(loop, &writer, 11u) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_set_execution_floor(loop, 205u) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(loop, 204u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_DUPLICATE_EXECUTION ||
-        hermas2_daemon_loop_admit(loop, 205u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK) {
+            HERMAS_JOURNAL_OK ||
+        hermas_daemon_loop_init(loop, registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_attach_journal(loop, &writer, 11u) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_set_execution_floor(loop, 205u) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 204u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_DUPLICATE_EXECUTION ||
+        hermas_daemon_loop_admit(loop, 205u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
         close(sockets[1]);
         return fail("cannot initialize durable execution");
     }
     size_t progress = 0u;
-    hermas2_frame request;
-    if (hermas2_daemon_loop_poll(loop, 1000, &progress) !=
-            HERMAS2_LOOP_OK ||
+    hermas_frame request;
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) !=
+            HERMAS_LOOP_OK ||
         !receive_request(sockets[1], &request)) {
         close(sockets[1]);
         return fail("durable invocation was not delivered");
     }
-    hermas2_journal_summary summary;
-    if (hermas2_journal_scan(
+    hermas_journal_summary summary;
+    if (hermas_journal_scan(
             memory.bytes, memory.length, NULL, NULL, &summary) !=
-            HERMAS2_JOURNAL_OK ||
+            HERMAS_JOURNAL_OK ||
         summary.record_count != 3u ||
         summary.interrupted_count != 1u ||
         summary.interrupted[0].delivery_was_sent != 1u) {
@@ -278,30 +278,30 @@ static int test_durable_delivery_facts(
         return fail("sent delivery facts were not durable");
     }
     if (!send_unit_error(sockets[1], &request) ||
-        hermas2_daemon_loop_poll(loop, 1000, &progress) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_journal_scan(
+        hermas_daemon_loop_poll(loop, 1000, &progress) !=
+            HERMAS_LOOP_OK ||
+        hermas_journal_scan(
             memory.bytes, memory.length, NULL, NULL, &summary) !=
-            HERMAS2_JOURNAL_OK ||
+            HERMAS_JOURNAL_OK ||
         summary.record_count != 5u ||
         summary.interrupted_count != 0u) {
         close(sockets[1]);
         return fail("completed execution journal did not close");
     }
-    static const hermas2_journal_kind expected[] = {
-        HERMAS2_JOURNAL_EXECUTION_STARTED,
-        HERMAS2_JOURNAL_DELIVERY_PREPARED,
-        HERMAS2_JOURNAL_DELIVERY_SENT,
-        HERMAS2_JOURNAL_ACTION_FAILED,
-        HERMAS2_JOURNAL_EXECUTION_FINISHED
+    static const hermas_journal_kind expected[] = {
+        HERMAS_JOURNAL_EXECUTION_STARTED,
+        HERMAS_JOURNAL_DELIVERY_PREPARED,
+        HERMAS_JOURNAL_DELIVERY_SENT,
+        HERMAS_JOURNAL_ACTION_FAILED,
+        HERMAS_JOURNAL_EXECUTION_FINISHED
     };
     for (size_t index = 0u;
          index < sizeof(expected) / sizeof(expected[0]); ++index) {
-        hermas2_journal_record record;
-        if (hermas2_journal_decode(
-                memory.bytes + index * HERMAS2_JOURNAL_RECORD_SIZE,
-                HERMAS2_JOURNAL_RECORD_SIZE, &record) !=
-                HERMAS2_JOURNAL_OK ||
+        hermas_journal_record record;
+        if (hermas_journal_decode(
+                memory.bytes + index * HERMAS_JOURNAL_RECORD_SIZE,
+                HERMAS_JOURNAL_RECORD_SIZE, &record) !=
+                HERMAS_JOURNAL_OK ||
             record.kind != expected[index]) {
             close(sockets[1]);
             return fail("durable transition order differs");
@@ -320,15 +320,15 @@ int main(int argc, char **argv) {
     if (image == NULL) {
         return fail("cannot read fixture");
     }
-    hermas2_daemon_registry registry;
-    if (hermas2_daemon_registry_init(&registry, image, image_size) !=
-        HERMAS2_DAEMON_OK) {
+    hermas_daemon_registry registry;
+    if (hermas_daemon_registry_init(&registry, image, image_size) !=
+        HERMAS_DAEMON_OK) {
         free(image);
         return fail("cannot initialize registry");
     }
-    hermas2_daemon_loop *loop = malloc(sizeof(*loop));
+    hermas_daemon_loop *loop = malloc(sizeof(*loop));
     if (loop == NULL) {
-        hermas2_daemon_registry_close(&registry);
+        hermas_daemon_registry_close(&registry);
         free(image);
         return fail("test cannot allocate loop fixture");
     }
@@ -343,7 +343,7 @@ int main(int argc, char **argv) {
         result = test_durable_delivery_facts(
             loop, &registry, image, image_size);
     }
-    hermas2_daemon_registry_close(&registry);
+    hermas_daemon_registry_close(&registry);
     free(loop);
     free(image);
     return result;

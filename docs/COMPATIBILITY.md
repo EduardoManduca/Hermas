@@ -8,7 +8,7 @@ promise.
 - Every binary protocol and durable format carries an explicit version.
   Unsupported versions are rejected; they are never guessed or silently
   reinterpreted.
-- An alpha release may change HSchema2, HScript2, C APIs, protocol frames,
+- An alpha release may change HSchema, HScript, C APIs, protocol frames,
   graph images, or durable state when the change materially improves safety
   or coherence.
 - Release notes identify every incompatible change. If durable formats

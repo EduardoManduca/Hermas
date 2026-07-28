@@ -1,8 +1,8 @@
 #define _GNU_SOURCE
 
-#include "hermas2/registration_linux.h"
+#include "hermas/registration_linux.h"
 
-#include "hermas2/protocol.h"
+#include "hermas/protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -11,7 +11,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-static void close_client(hermas2_registration_client *client) {
+static void close_client(hermas_registration_client *client) {
     if (client->file_descriptor >= 0) {
         close(client->file_descriptor);
     }
@@ -19,22 +19,22 @@ static void close_client(hermas2_registration_client *client) {
     client->file_descriptor = -1;
 }
 
-static void release_client(hermas2_registration_client *client) {
+static void release_client(hermas_registration_client *client) {
     memset(client, 0, sizeof(*client));
     client->file_descriptor = -1;
 }
 
 static void reject_client(
-    hermas2_registration_server *server,
-    hermas2_registration_client *client) {
-    hermas2_frame error = {
-        .kind = HERMAS2_FRAME_PROTOCOL_ERROR,
-        .outcome = HERMAS2_OUTCOME_PROTOCOL_ERROR
+    hermas_registration_server *server,
+    hermas_registration_client *client) {
+    hermas_frame error = {
+        .kind = HERMAS_FRAME_PROTOCOL_ERROR,
+        .outcome = HERMAS_OUTCOME_PROTOCOL_ERROR
     };
     size_t packet_size = 0u;
-    if (hermas2_protocol_encode(
+    if (hermas_protocol_encode(
             &error, server->packet, sizeof(server->packet),
-            &packet_size) == HERMAS2_PROTOCOL_OK) {
+            &packet_size) == HERMAS_PROTOCOL_OK) {
         (void)send(
             client->file_descriptor, server->packet, packet_size,
             MSG_DONTWAIT | MSG_NOSIGNAL);
@@ -43,12 +43,12 @@ static void reject_client(
 }
 
 static bool action_is_pending(
-    const hermas2_registration_server *server,
+    const hermas_registration_server *server,
     size_t action_index,
-    const hermas2_registration_client *except) {
+    const hermas_registration_client *except) {
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
-        const hermas2_registration_client *candidate =
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
+        const hermas_registration_client *candidate =
             &server->clients[index];
         if (candidate != except && candidate->active &&
             candidate->validated &&
@@ -60,8 +60,8 @@ static bool action_is_pending(
 }
 
 static void receive_registration(
-    hermas2_registration_server *server,
-    hermas2_registration_client *client,
+    hermas_registration_server *server,
+    hermas_registration_client *client,
     size_t *progress_count) {
     struct iovec vector = {
         .iov_base = server->packet,
@@ -83,11 +83,11 @@ static void receive_registration(
         ++*progress_count;
         return;
     }
-    hermas2_frame registration;
-    if (hermas2_protocol_decode(
+    hermas_frame registration;
+    if (hermas_protocol_decode(
             server->packet, (size_t)received, &registration) !=
-            HERMAS2_PROTOCOL_OK ||
-        registration.kind != HERMAS2_FRAME_REGISTER_APP) {
+            HERMAS_PROTOCOL_OK ||
+        registration.kind != HERMAS_FRAME_REGISTER_APP) {
         reject_client(server, client);
         ++*progress_count;
         return;
@@ -117,12 +117,12 @@ static void receive_registration(
     ++*progress_count;
 }
 
-static hermas2_registration_server_result flush_acknowledgements(
-    hermas2_registration_server *server,
+static hermas_registration_server_result flush_acknowledgements(
+    hermas_registration_server *server,
     size_t *progress_count) {
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
-        hermas2_registration_client *client =
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
+        hermas_registration_client *client =
             &server->clients[index];
         if (!client->active || !client->validated) {
             continue;
@@ -130,21 +130,21 @@ static hermas2_registration_server_result flush_acknowledgements(
         if (client->action_index >= server->registry->action_count ||
             server->registry->actions[client->action_index]
                     .file_descriptor >= 0) {
-            return HERMAS2_REGISTRATION_SERVER_STATE_ERROR;
+            return HERMAS_REGISTRATION_SERVER_STATE_ERROR;
         }
-        hermas2_frame acknowledgement = {
-            .kind = HERMAS2_FRAME_REGISTER_OK,
+        hermas_frame acknowledgement = {
+            .kind = HERMAS_FRAME_REGISTER_OK,
             .app_id =
                 server->registry->actions[client->action_index].app_id,
             .action_id = client->registered_action_id,
-            .outcome = HERMAS2_OUTCOME_NONE
+            .outcome = HERMAS_OUTCOME_NONE
         };
         size_t packet_size = 0u;
-        if (hermas2_protocol_encode(
+        if (hermas_protocol_encode(
                 &acknowledgement, server->packet,
                 sizeof(server->packet), &packet_size) !=
-                HERMAS2_PROTOCOL_OK) {
-            return HERMAS2_REGISTRATION_SERVER_STATE_ERROR;
+                HERMAS_PROTOCOL_OK) {
+            return HERMAS_REGISTRATION_SERVER_STATE_ERROR;
         }
         ssize_t sent = send(
             client->file_descriptor, server->packet, packet_size,
@@ -166,31 +166,31 @@ static hermas2_registration_server_result flush_acknowledgements(
         release_client(client);
         ++*progress_count;
     }
-    return HERMAS2_REGISTRATION_SERVER_OK;
+    return HERMAS_REGISTRATION_SERVER_OK;
 }
 
-hermas2_registration_server_result hermas2_registration_server_init(
-    hermas2_registration_server *server,
-    hermas2_daemon_registry *registry) {
+hermas_registration_server_result hermas_registration_server_init(
+    hermas_registration_server *server,
+    hermas_daemon_registry *registry) {
     if (server == NULL || registry == NULL ||
-        registry->action_count > HERMAS2_DAEMON_MAX_ACTIONS) {
-        return HERMAS2_REGISTRATION_SERVER_INVALID_ARGUMENT;
+        registry->action_count > HERMAS_DAEMON_MAX_ACTIONS) {
+        return HERMAS_REGISTRATION_SERVER_INVALID_ARGUMENT;
     }
     memset(server, 0, sizeof(*server));
     server->registry = registry;
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
         server->clients[index].file_descriptor = -1;
     }
-    return HERMAS2_REGISTRATION_SERVER_OK;
+    return HERMAS_REGISTRATION_SERVER_OK;
 }
 
-hermas2_registration_server_result hermas2_registration_server_attach(
-    hermas2_registration_server *server,
+hermas_registration_server_result hermas_registration_server_attach(
+    hermas_registration_server *server,
     int client_descriptor) {
     if (server == NULL || server->registry == NULL ||
         client_descriptor < 0) {
-        return HERMAS2_REGISTRATION_SERVER_INVALID_ARGUMENT;
+        return HERMAS_REGISTRATION_SERVER_INVALID_ARGUMENT;
     }
     int flags = fcntl(client_descriptor, F_GETFL);
     int descriptor_flags = fcntl(client_descriptor, F_GETFD);
@@ -201,66 +201,66 @@ hermas2_registration_server_result hermas2_registration_server_attach(
         fcntl(
             client_descriptor, F_SETFD,
             descriptor_flags | FD_CLOEXEC) != 0) {
-        return HERMAS2_REGISTRATION_SERVER_STATE_ERROR;
+        return HERMAS_REGISTRATION_SERVER_STATE_ERROR;
     }
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
-        hermas2_registration_client *client =
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
+        hermas_registration_client *client =
             &server->clients[index];
         if (!client->active) {
-            *client = (hermas2_registration_client){
+            *client = (hermas_registration_client){
                 .file_descriptor = client_descriptor,
                 .active = true
             };
-            return HERMAS2_REGISTRATION_SERVER_OK;
+            return HERMAS_REGISTRATION_SERVER_OK;
         }
     }
-    return HERMAS2_REGISTRATION_SERVER_CAPACITY_EXHAUSTED;
+    return HERMAS_REGISTRATION_SERVER_CAPACITY_EXHAUSTED;
 }
 
-hermas2_registration_server_result hermas2_registration_server_accept(
-    hermas2_registration_server *server,
+hermas_registration_server_result hermas_registration_server_accept(
+    hermas_registration_server *server,
     int listener) {
     if (server == NULL || server->registry == NULL || listener < 0) {
-        return HERMAS2_REGISTRATION_SERVER_INVALID_ARGUMENT;
+        return HERMAS_REGISTRATION_SERVER_INVALID_ARGUMENT;
     }
     int client = accept4(
         listener, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (client < 0) {
         return errno == EAGAIN || errno == EWOULDBLOCK ||
                        errno == EINTR
-                   ? HERMAS2_REGISTRATION_SERVER_OK
-                   : HERMAS2_REGISTRATION_SERVER_ACCEPT_ERROR;
+                   ? HERMAS_REGISTRATION_SERVER_OK
+                   : HERMAS_REGISTRATION_SERVER_ACCEPT_ERROR;
     }
-    hermas2_registration_server_result attached =
-        hermas2_registration_server_attach(server, client);
-    if (attached != HERMAS2_REGISTRATION_SERVER_OK) {
+    hermas_registration_server_result attached =
+        hermas_registration_server_attach(server, client);
+    if (attached != HERMAS_REGISTRATION_SERVER_OK) {
         close(client);
     }
     return attached;
 }
 
-hermas2_registration_server_result hermas2_registration_server_step(
-    hermas2_registration_server *server,
+hermas_registration_server_result hermas_registration_server_step(
+    hermas_registration_server *server,
     int timeout_milliseconds,
     size_t *progress_count) {
     if (server == NULL || server->registry == NULL ||
         progress_count == NULL || timeout_milliseconds < -1) {
-        return HERMAS2_REGISTRATION_SERVER_INVALID_ARGUMENT;
+        return HERMAS_REGISTRATION_SERVER_INVALID_ARGUMENT;
     }
     *progress_count = 0u;
-    hermas2_registration_server_result flushed =
+    hermas_registration_server_result flushed =
         flush_acknowledgements(server, progress_count);
-    if (flushed != HERMAS2_REGISTRATION_SERVER_OK) {
+    if (flushed != HERMAS_REGISTRATION_SERVER_OK) {
         return flushed;
     }
-    struct pollfd items[HERMAS2_REGISTRATION_MAX_PENDING];
-    hermas2_registration_client
-        *owners[HERMAS2_REGISTRATION_MAX_PENDING];
+    struct pollfd items[HERMAS_REGISTRATION_MAX_PENDING];
+    hermas_registration_client
+        *owners[HERMAS_REGISTRATION_MAX_PENDING];
     nfds_t count = 0u;
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
-        hermas2_registration_client *client =
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
+        hermas_registration_client *client =
             &server->clients[index];
         if (!client->active) {
             continue;
@@ -277,10 +277,10 @@ hermas2_registration_server_result hermas2_registration_server_step(
         polled = poll(items, count, timeout_milliseconds);
     } while (polled < 0 && errno == EINTR);
     if (polled < 0) {
-        return HERMAS2_REGISTRATION_SERVER_POLL_ERROR;
+        return HERMAS_REGISTRATION_SERVER_POLL_ERROR;
     }
     for (nfds_t index = 0u; index < count; ++index) {
-        hermas2_registration_client *client = owners[index];
+        hermas_registration_client *client = owners[index];
         short events = items[index].revents;
         if ((events & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
             close_client(client);
@@ -292,37 +292,37 @@ hermas2_registration_server_result hermas2_registration_server_step(
     return flush_acknowledgements(server, progress_count);
 }
 
-size_t hermas2_registration_server_pending(
-    const hermas2_registration_server *server) {
+size_t hermas_registration_server_pending(
+    const hermas_registration_server *server) {
     if (server == NULL) {
         return 0u;
     }
     size_t count = 0u;
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
         count += server->clients[index].active ? 1u : 0u;
     }
     return count;
 }
 
-void hermas2_registration_server_close(
-    hermas2_registration_server *server) {
+void hermas_registration_server_close(
+    hermas_registration_server *server) {
     if (server == NULL) {
         return;
     }
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
         close_client(&server->clients[index]);
     }
     memset(server, 0, sizeof(*server));
     for (size_t index = 0u;
-         index < HERMAS2_REGISTRATION_MAX_PENDING; ++index) {
+         index < HERMAS_REGISTRATION_MAX_PENDING; ++index) {
         server->clients[index].file_descriptor = -1;
     }
 }
 
-const char *hermas2_registration_server_result_name(
-    hermas2_registration_server_result result) {
+const char *hermas_registration_server_result_name(
+    hermas_registration_server_result result) {
     static const char *const names[] = {
         "ok", "invalid-argument", "capacity-exhausted",
         "accept-error", "poll-error", "state-error"

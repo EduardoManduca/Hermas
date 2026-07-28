@@ -1,4 +1,4 @@
-#include "hermas2/image.h"
+#include "hermas/image.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -36,8 +36,8 @@ static int validate_additional_fixture(const char *path) {
     }
     fclose(file);
     int result = 0;
-    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
-        HERMAS2_IMAGE_OK) {
+    if (hermas_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS_IMAGE_OK) {
         result = fail("additional Rust image was rejected");
     }
     if (result == 0) {
@@ -50,8 +50,8 @@ static int validate_additional_fixture(const char *path) {
             if (bytes[offset] == 4u) {
                 uint8_t original = bytes[offset + 1u];
                 bytes[offset + 1u] = 1u;
-                if (hermas2_image_validate(bytes, (size_t)length, NULL) ==
-                    HERMAS2_IMAGE_OK) {
+                if (hermas_image_validate(bytes, (size_t)length, NULL) ==
+                    HERMAS_IMAGE_OK) {
                     result = fail("invalid Fork branch count was accepted");
                 }
                 bytes[offset + 1u] = original;
@@ -86,8 +86,8 @@ static int validate_saga_fixture(const char *path) {
     }
     fclose(file);
     int result = 0;
-    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
-        HERMAS2_IMAGE_OK) {
+    if (hermas_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS_IMAGE_OK) {
         result = fail("valid saga image was rejected");
     } else {
         size_t regions = read_u32(bytes, 72u);
@@ -100,8 +100,8 @@ static int validate_saga_fixture(const char *path) {
                                 bytes[regions + 13u]};
             bytes[regions + 12u] = 0u;
             bytes[regions + 13u] = 0u;
-            if (hermas2_image_validate(bytes, (size_t)length, NULL) ==
-                HERMAS2_IMAGE_OK) {
+            if (hermas_image_validate(bytes, (size_t)length, NULL) ==
+                HERMAS_IMAGE_OK) {
                 result = fail("invalid saga ordinal was accepted");
             }
             bytes[regions + 12u] = saved[0];
@@ -129,8 +129,8 @@ int main(int argc, char **argv) {
         return fail("cannot read fixture");
     }
     fclose(file);
-    hermas2_image_summary summary;
-    if (hermas2_image_validate(bytes, (size_t)length, &summary) != HERMAS2_IMAGE_OK) {
+    hermas_image_summary summary;
+    if (hermas_image_validate(bytes, (size_t)length, &summary) != HERMAS_IMAGE_OK) {
         return fail("valid Rust image was rejected");
     }
     if (summary.node_count != 7u || summary.edge_count != 13u ||
@@ -146,48 +146,48 @@ int main(int argc, char **argv) {
     grades[24] = 90u;
     uint8_t mean[8] = {80u};
     uint8_t printed[1] = {1u};
-    if (hermas2_image_validate_value(bytes, (size_t)length, 1u, NULL, 0u) !=
-            HERMAS2_IMAGE_OK ||
-        hermas2_image_validate_value(bytes, (size_t)length, 4u,
+    if (hermas_image_validate_value(bytes, (size_t)length, 1u, NULL, 0u) !=
+            HERMAS_IMAGE_OK ||
+        hermas_image_validate_value(bytes, (size_t)length, 4u,
                                      grades, sizeof(grades)) !=
-            HERMAS2_IMAGE_OK ||
-        hermas2_image_validate_value(bytes, (size_t)length, 6u,
+            HERMAS_IMAGE_OK ||
+        hermas_image_validate_value(bytes, (size_t)length, 6u,
                                      mean, sizeof(mean)) !=
-            HERMAS2_IMAGE_OK ||
-        hermas2_image_validate_value(bytes, (size_t)length, 11u,
+            HERMAS_IMAGE_OK ||
+        hermas_image_validate_value(bytes, (size_t)length, 11u,
                                      printed, sizeof(printed)) !=
-            HERMAS2_IMAGE_OK) {
+            HERMAS_IMAGE_OK) {
         return fail("valid canonical payload was rejected");
     }
     grades[0] = 33u;
     printed[0] = 2u;
-    if (hermas2_image_validate_value(bytes, (size_t)length, 4u,
+    if (hermas_image_validate_value(bytes, (size_t)length, 4u,
                                      grades, sizeof(grades)) ==
-            HERMAS2_IMAGE_OK ||
-        hermas2_image_validate_value(bytes, (size_t)length, 6u,
+            HERMAS_IMAGE_OK ||
+        hermas_image_validate_value(bytes, (size_t)length, 6u,
                                      mean, sizeof(mean) - 1u) ==
-            HERMAS2_IMAGE_OK ||
-        hermas2_image_validate_value(bytes, (size_t)length, 11u,
+            HERMAS_IMAGE_OK ||
+        hermas_image_validate_value(bytes, (size_t)length, 11u,
                                      printed, sizeof(printed)) ==
-            HERMAS2_IMAGE_OK) {
+            HERMAS_IMAGE_OK) {
         return fail("malformed canonical payload was accepted");
     }
     for (size_t prefix = 0u; prefix < (size_t)length; ++prefix) {
-        if (hermas2_image_validate(bytes, prefix, NULL) == HERMAS2_IMAGE_OK) {
+        if (hermas_image_validate(bytes, prefix, NULL) == HERMAS_IMAGE_OK) {
             return fail("truncated prefix was accepted");
         }
     }
     uint8_t original = bytes[12];
     bytes[12] = 1u;
-    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
-        HERMAS2_IMAGE_INVALID_HEADER) {
+    if (hermas_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS_IMAGE_INVALID_HEADER) {
         return fail("reserved header mutation was accepted");
     }
     bytes[12] = original;
     original = bytes[44];
     bytes[44] = 0u;
-    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
-        HERMAS2_IMAGE_INVALID_OFFSET) {
+    if (hermas_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS_IMAGE_INVALID_OFFSET) {
         return fail("node offset mutation was accepted");
     }
     bytes[44] = original;
@@ -207,8 +207,8 @@ int main(int argc, char **argv) {
         size_t offset = record_mutations[index];
         original = bytes[offset];
         bytes[offset] = 0xffu;
-        if (hermas2_image_validate(bytes, (size_t)length, NULL) ==
-            HERMAS2_IMAGE_OK) {
+        if (hermas_image_validate(bytes, (size_t)length, NULL) ==
+            HERMAS_IMAGE_OK) {
             return fail("malformed table record was accepted");
         }
         bytes[offset] = original;
@@ -216,8 +216,8 @@ int main(int argc, char **argv) {
     uint8_t saved_error[2] = {bytes[82], bytes[83]};
     bytes[82] = bytes[80];
     bytes[83] = bytes[81];
-    if (hermas2_image_validate(bytes, (size_t)length, NULL) !=
-        HERMAS2_IMAGE_DUPLICATE_RECORD) {
+    if (hermas_image_validate(bytes, (size_t)length, NULL) !=
+        HERMAS_IMAGE_DUPLICATE_RECORD) {
         return fail("duplicate workflow error was accepted");
     }
     bytes[82] = saved_error[0];

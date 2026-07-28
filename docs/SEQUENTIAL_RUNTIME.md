@@ -2,7 +2,7 @@
 
 Status: implemented Milestone 5 execution kernel.
 
-`hermas2_execution` is caller-owned mutable state for one traversal of a
+`hermas_execution` is caller-owned mutable state for one traversal of a
 validated graph image. The caller also supplies the value buffer and its
 capacity. The executor allocates no memory and never changes graph-image
 bytes.
@@ -49,7 +49,7 @@ descriptor for dispatch.
 
 The original accept operation remains a blocking primitive for focused
 integration fixtures. Production composition uses
-`hermas2_registration_server`: a fixed 80-slot owner for accepted but not yet
+`hermas_registration_server`: a fixed 80-slot owner for accepted but not yet
 registered Action connections. It polls every pending descriptor without heap
 allocation, validates one complete registration packet, rejects malformed,
 unknown, mismatched, and duplicate Actions independently, and publishes an Action
@@ -66,7 +66,7 @@ delivered invocation.
 
 ## Bounded nonblocking loop
 
-`hermas2_daemon_loop` advances up to 16 executions through one rotating
+`hermas_daemon_loop` advances up to 16 executions through one rotating
 `poll` scheduler. It is caller-owned and contains all execution, canonical
 value, and packet storage:
 
@@ -103,7 +103,7 @@ test-only orchestrator.
 
 ## Bounded flow arena
 
-`hermas2_group_execution` extends the graph interpreter with eight
+`hermas_group_execution` extends the graph interpreter with eight
 caller-owned flow slots. Fork copies the immutable canonical input into fixed
 branch buffers; Join retains each result under its dense field tag and does
 not expose used fields until every branch has completed.

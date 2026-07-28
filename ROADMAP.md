@@ -20,7 +20,7 @@ and unbounded dynamic graphs are not incremental daemon features.
 
 These areas can grow independently around the small kernel:
 
-- Application Actions and reusable HSchema2 contracts
+- Application Actions and reusable HSchema contracts
 - C API ergonomics and additional language bindings
 - Diagnostics, graph inspection, editors, and developer tooling
 - Adversarial fixtures, fuzz corpora, and platform testing

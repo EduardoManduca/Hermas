@@ -15,17 +15,17 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 grep -Fq "#define HERMAS_VERSION \"$version\"" \
-    "$root/include/hermas2/version.h"
-grep -Fq "version = \"$version\"" "$root/compiler/herma2/Cargo.toml"
+    "$root/include/hermas/version.h"
+grep -Fq "version = \"$version\"" "$root/compiler/hermas/Cargo.toml"
 
 mkdir -p "$output"
 export CARGO_TARGET_DIR="$build/cargo"
-cargo build --manifest-path "$root/Cargo.toml" -p herma2 --release
+cargo build --manifest-path "$root/Cargo.toml" -p hermas --release
 cmake -S "$root" -B "$build/cmake" \
     -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build "$build/cmake" -j2
 cmake --install "$build/cmake" --prefix "$stage/$name"
-install -m 0755 "$CARGO_TARGET_DIR/release/herma2" "$stage/$name/bin/herma2"
+install -m 0755 "$CARGO_TARGET_DIR/release/hermas" "$stage/$name/bin/hermas"
 
 tar --sort=name \
     --mtime="@$source_date_epoch" \

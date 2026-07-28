@@ -1,0 +1,19 @@
+[package]
+name = "hermas"
+version = "0.1.0-alpha.1"
+edition = "2024"
+description = "Hermas verified action-graph kernel"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+sha2 = "0.10"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermas"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"

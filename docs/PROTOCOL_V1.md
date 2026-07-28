@@ -1,8 +1,8 @@
-# Hermas2 Protocol Version 1
+# Hermas Protocol Version 1
 
 Status: implemented frame codec and malformed-frame tests.
 
-Hermas2 uses `AF_UNIX` `SOCK_SEQPACKET` on Linux. One packet contains exactly
+Hermas uses `AF_UNIX` `SOCK_SEQPACKET` on Linux. One packet contains exactly
 one frame. The wire format is independent from the C ABI; every integer is
 serialized explicitly in little-endian order.
 
@@ -13,7 +13,7 @@ bytes. The maximum packet size is 65,536 bytes.
 
 | Offset | Size | Field |
 | ---: | ---: | --- |
-| 0 | 4 | Magic `H2P1` |
+| 0 | 4 | Magic `HRP1` |
 | 4 | 2 | Protocol version `1` |
 | 6 | 2 | Frame kind |
 | 8 | 4 | Flags, zero |
@@ -34,7 +34,7 @@ one at-most-once invocation attempt within one execution.
 ## Frame kinds
 
 - `REGISTER_APP` carries an app ID, the app's current local Action ID, and
-  that Action's exact 32-byte HSchema2 semantic fingerprint.
+  that Action's exact 32-byte HSchema semantic fingerprint.
 - `REGISTER_OK` acknowledges both registered IDs.
 - `INVOKE` carries one Action request and canonical input payload.
 - `RESULT` carries either exact app success or exact app error.
@@ -45,7 +45,7 @@ one at-most-once invocation attempt within one execution.
   uncertainty.
 
 `Unknown` and `NotSent` execution results carry no nominal value or payload.
-They remain operational outcomes rather than HSchema2 domain values.
+They remain operational outcomes rather than HSchema domain values.
 
 Registration is one connection per Action, not one connection per app. The
 daemon matches the app identity and Action fingerprint against the loaded

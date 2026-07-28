@@ -1,4 +1,4 @@
-#include "hermas2/compensation.h"
+#include "hermas/compensation.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -12,11 +12,11 @@ static void require(int condition, const char *message) {
     }
 }
 
-static hermas2_compensation_record token_record(
+static hermas_compensation_record token_record(
     uint64_t sequence,
     const uint8_t *token,
     uint32_t token_length) {
-    return (hermas2_compensation_record){
+    return (hermas_compensation_record){
         .sequence = sequence,
         .key = {
             .execution_id = 19u,
@@ -36,98 +36,98 @@ static hermas2_compensation_record token_record(
 
 static void test_codec_scan_and_lookup(void) {
     uint8_t value[8] = {42u};
-    hermas2_compensation_record input =
+    hermas_compensation_record input =
         token_record(1u, value, sizeof(value));
-    uint8_t bytes[2u * (HERMAS2_COMPENSATION_HEADER_SIZE + 8u)];
+    uint8_t bytes[2u * (HERMAS_COMPENSATION_HEADER_SIZE + 8u)];
     size_t size = 0u;
-    require(hermas2_compensation_encode(
+    require(hermas_compensation_encode(
                 &input, bytes, sizeof(bytes), &size) ==
-                HERMAS2_COMPENSATION_OK &&
-                size == HERMAS2_COMPENSATION_HEADER_SIZE + sizeof(value) &&
-                memcmp(bytes, "H2CT", 4u) == 0,
+                HERMAS_COMPENSATION_OK &&
+                size == HERMAS_COMPENSATION_HEADER_SIZE + sizeof(value) &&
+                memcmp(bytes, "HCT1", 4u) == 0,
             "token record did not encode");
-    hermas2_compensation_record decoded;
+    hermas_compensation_record decoded;
     size_t decoded_size = 0u;
-    require(hermas2_compensation_decode(
+    require(hermas_compensation_decode(
                 bytes, size, &decoded, &decoded_size) ==
-                HERMAS2_COMPENSATION_OK &&
+                HERMAS_COMPENSATION_OK &&
                 decoded_size == size &&
                 decoded.sequence == 1u &&
                 decoded.compensation_action_id == 5u &&
                 decoded.token_length == sizeof(value) &&
                 memcmp(decoded.token, value, sizeof(value)) == 0,
             "token record did not round trip");
-    hermas2_compensation_summary summary;
-    require(hermas2_compensation_scan(
+    hermas_compensation_summary summary;
+    require(hermas_compensation_scan(
                 bytes, size, NULL, NULL, &summary) ==
-                HERMAS2_COMPENSATION_OK &&
+                HERMAS_COMPENSATION_OK &&
                 summary.record_count == 1u &&
                 summary.next_sequence == 2u,
             "token log did not scan");
     uint8_t output[8];
     int found = 0;
-    hermas2_compensation_record match;
-    require(hermas2_compensation_find(
+    hermas_compensation_record match;
+    require(hermas_compensation_find(
                 bytes, size, input.key, &match, output,
-                sizeof(output), &found) == HERMAS2_COMPENSATION_OK &&
+                sizeof(output), &found) == HERMAS_COMPENSATION_OK &&
                 found == 1 && match.token == output &&
                 memcmp(output, value, sizeof(value)) == 0,
             "exact compensation token lookup failed");
 
     input.sequence = 2u;
     size_t second = 0u;
-    require(hermas2_compensation_encode(
+    require(hermas_compensation_encode(
                 &input, bytes + size, sizeof(bytes) - size, &second) ==
-                HERMAS2_COMPENSATION_OK &&
-                hermas2_compensation_find(
+                HERMAS_COMPENSATION_OK &&
+                hermas_compensation_find(
                     bytes, size + second, input.key, &match, output,
                     sizeof(output), &found) ==
-                    HERMAS2_COMPENSATION_DUPLICATE_TOKEN,
+                    HERMAS_COMPENSATION_DUPLICATE_TOKEN,
             "ambiguous compensation token was accepted");
-    bytes[HERMAS2_COMPENSATION_HEADER_SIZE] ^= 1u;
-    require(hermas2_compensation_decode(
+    bytes[HERMAS_COMPENSATION_HEADER_SIZE] ^= 1u;
+    require(hermas_compensation_decode(
                 bytes, size, &decoded, &decoded_size) ==
-                HERMAS2_COMPENSATION_CHECKSUM_MISMATCH,
+                HERMAS_COMPENSATION_CHECKSUM_MISMATCH,
             "token corruption was accepted");
 }
 
 typedef struct memory_sink {
-    uint8_t bytes[HERMAS2_COMPENSATION_HEADER_SIZE + 8u];
+    uint8_t bytes[HERMAS_COMPENSATION_HEADER_SIZE + 8u];
     size_t length;
 } memory_sink;
 
-static hermas2_compensation_result memory_write(
+static hermas_compensation_result memory_write(
     void *context,
     const uint8_t *record,
     size_t record_size) {
     memory_sink *sink = context;
     if (record_size > sizeof(sink->bytes) - sink->length) {
-        return HERMAS2_COMPENSATION_WRITE_ERROR;
+        return HERMAS_COMPENSATION_WRITE_ERROR;
     }
     memcpy(sink->bytes + sink->length, record, record_size);
     sink->length += record_size;
-    return HERMAS2_COMPENSATION_OK;
+    return HERMAS_COMPENSATION_OK;
 }
 
 static void test_writer(void) {
     memory_sink sink;
     memset(&sink, 0, sizeof(sink));
-    hermas2_compensation_writer writer;
+    hermas_compensation_writer writer;
     uint8_t value[8] = {9u};
-    uint8_t scratch[HERMAS2_COMPENSATION_HEADER_SIZE + 8u];
-    hermas2_compensation_record record =
+    uint8_t scratch[HERMAS_COMPENSATION_HEADER_SIZE + 8u];
+    hermas_compensation_record record =
         token_record(0u, value, sizeof(value));
-    require(hermas2_compensation_writer_init(
+    require(hermas_compensation_writer_init(
                 &writer, memory_write, &sink, 1u) ==
-                HERMAS2_COMPENSATION_OK &&
-                hermas2_compensation_writer_append(
+                HERMAS_COMPENSATION_OK &&
+                hermas_compensation_writer_append(
                     &writer, record, scratch, sizeof(scratch)) ==
-                    HERMAS2_COMPENSATION_OK &&
+                    HERMAS_COMPENSATION_OK &&
                 writer.next_sequence == 2u,
             "durable token writer did not advance");
-    require(hermas2_compensation_writer_append(
+    require(hermas_compensation_writer_append(
                 &writer, record, scratch, sizeof(scratch)) ==
-                HERMAS2_COMPENSATION_WRITE_ERROR &&
+                HERMAS_COMPENSATION_WRITE_ERROR &&
                 writer.next_sequence == 2u,
             "failed token write consumed a sequence");
 }

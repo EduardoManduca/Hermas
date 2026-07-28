@@ -1,4 +1,4 @@
-# Hermas2 Saga Attempt Log
+# Hermas Saga Attempt Log
 
 Status: canonical bounded compensation-attempt journal, version 1.
 
@@ -7,7 +7,7 @@ token log preserves their opaque result values. The saga attempt log is the
 third, separate durability boundary: it records progress while those confirmed
 steps are compensated in reverse order.
 
-Every record is a fixed 64-byte little-endian `H2SG` record with a contiguous
+Every record is a fixed 64-byte little-endian `HSG1` record with a contiguous
 sequence, execution/workflow/image identity, compensation request route,
 forward node, reverse ordinal, outcome, reserved-field checks, and CRC-32.
 
@@ -31,14 +31,14 @@ summary distinguishes resumable state after a durable success from open
 prepared/sent deliveries. An open delivery is uncertainty and must never be
 replayed.
 
-The saga executor consumes this summary through `hermas2_saga_reconcile`.
+The saga executor consumes this summary through `hermas_saga_reconcile`.
 It resumes at `next_ordinal` only when there is no open delivery or terminal
 failure, advances request IDs above both forward and compensation history,
 and leaves completed logs complete across repeated restart.
 
 ## Linux storage
 
-`hermas2_saga_log_file_open` accepts only a non-symlink regular file owned by
+`hermas_saga_log_file_open` accepts only a non-symlink regular file owned by
 the current user with no group or other permission bits, creates new files
 with mode `0600`, and takes an exclusive nonblocking writer lock. Startup
 memory-maps and validates the complete history before

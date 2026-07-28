@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify tag
-        run: test "v$(sed -n 's/^version = "\(.*\)"/\1/p' compiler/herma2/Cargo.toml | head -1)" = "$GITHUB_REF_NAME"
+        run: test "v$(sed -n 's/^version = "\(.*\)"/\1/p' compiler/hermas/Cargo.toml | head -1)" = "$GITHUB_REF_NAME"
       - run: tools/package_release.sh "${GITHUB_REF_NAME#v}"
       - uses: softprops/action-gh-release@v2
         with:

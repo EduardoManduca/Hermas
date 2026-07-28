@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-herma2 = { path = "../compiler/herma2" }
+hermas = { path = "../compiler/hermas" }
 
 [[bin]]
 name = "image"

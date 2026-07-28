@@ -46,7 +46,7 @@ static int calculate_tax(
         return 0;
     }
     write_i64(result, discounted + discounted / 10);
-    *outcome = HERMAS2_OUTCOME_SUCCESS;
+    *outcome = HERMAS_OUTCOME_SUCCESS;
     *result_type = TOTAL_TYPE_ID;
     *result_length = 8u;
     return 1;
@@ -54,7 +54,7 @@ static int calculate_tax(
 
 int main(int argc, char **argv) {
     uint8_t result[8];
-    return hermas2_example_app_run_once(
+    return hermas_example_app_run_once(
         argc, argv, TAX_APP_ID, CALCULATE_ACTION_ID, calculate_tax,
         result, sizeof(result));
 }

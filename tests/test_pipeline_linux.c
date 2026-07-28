@@ -1,6 +1,6 @@
-#include "hermas2/daemon.h"
-#include "hermas2/edge.h"
-#include "hermas2/runtime.h"
+#include "hermas/daemon.h"
+#include "hermas/edge.h"
+#include "hermas/runtime.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -57,11 +57,11 @@ static void run_bad_registration(
     uint8_t wrong[32];
     memcpy(wrong, fingerprint, sizeof(wrong));
     wrong[0] ^= 0xffu;
-    hermas2_edge edge;
-    hermas2_edge_result result =
-        hermas2_edge_connect(&edge, socket_path, 1u, 1u, wrong);
-    if (result == HERMAS2_EDGE_OK) {
-        hermas2_edge_disconnect(&edge);
+    hermas_edge edge;
+    hermas_edge_result result =
+        hermas_edge_connect(&edge, socket_path, 1u, 1u, wrong);
+    if (result == HERMAS_EDGE_OK) {
+        hermas_edge_disconnect(&edge);
         _exit(1);
     }
     _exit(0);
@@ -101,49 +101,49 @@ static int create_listener(const char *path) {
 static bool drive_pipeline(
     const uint8_t *image,
     size_t image_size,
-    hermas2_daemon_registry *registry) {
-    hermas2_daemon_loop loop;
-    if (hermas2_daemon_loop_init(&loop, registry, image, image_size) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(&loop, 91u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_admit(&loop, 91u, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_DUPLICATE_EXECUTION) {
+    hermas_daemon_registry *registry) {
+    hermas_daemon_loop loop;
+    if (hermas_daemon_loop_init(&loop, registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(&loop, 91u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(&loop, 91u, 1u, NULL, 0u) !=
+            HERMAS_LOOP_DUPLICATE_EXECUTION) {
         return false;
     }
-    hermas2_frame result;
+    hermas_frame result;
     size_t iterations = 0u;
-    while (hermas2_daemon_loop_result(&loop, 91u, &result) ==
-           HERMAS2_LOOP_EXECUTION_ACTIVE) {
+    while (hermas_daemon_loop_result(&loop, 91u, &result) ==
+           HERMAS_LOOP_EXECUTION_ACTIVE) {
         size_t progress = 0u;
         if (iterations++ >= 32u ||
-            hermas2_daemon_loop_poll(&loop, 1000, &progress) !=
-                HERMAS2_LOOP_OK) {
+            hermas_daemon_loop_poll(&loop, 1000, &progress) !=
+                HERMAS_LOOP_OK) {
             return false;
         }
     }
-    if (hermas2_daemon_loop_result(&loop, 91u, &result) !=
-            HERMAS2_LOOP_OK ||
-        result.outcome != HERMAS2_OUTCOME_SUCCESS ||
+    if (hermas_daemon_loop_result(&loop, 91u, &result) !=
+            HERMAS_LOOP_OK ||
+        result.outcome != HERMAS_OUTCOME_SUCCESS ||
         result.source_type != 11u || result.payload_length != 1u ||
         result.payload[0] != 1u) {
         return false;
     }
-    if (hermas2_daemon_loop_release(&loop, 91u) != HERMAS2_LOOP_OK ||
-        hermas2_daemon_loop_active(&loop) != 0u) {
+    if (hermas_daemon_loop_release(&loop, 91u) != HERMAS_LOOP_OK ||
+        hermas_daemon_loop_active(&loop) != 0u) {
         return false;
     }
     for (uint64_t id = 100u;
-         id < 100u + HERMAS2_DAEMON_MAX_EXECUTIONS; ++id) {
-        if (hermas2_daemon_loop_admit(&loop, id, 1u, NULL, 0u) !=
-            HERMAS2_LOOP_OK) {
+         id < 100u + HERMAS_DAEMON_MAX_EXECUTIONS; ++id) {
+        if (hermas_daemon_loop_admit(&loop, id, 1u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
             return false;
         }
     }
-    return hermas2_daemon_loop_active(&loop) ==
-               HERMAS2_DAEMON_MAX_EXECUTIONS &&
-           hermas2_daemon_loop_admit(&loop, 999u, 1u, NULL, 0u) ==
-               HERMAS2_LOOP_CAPACITY_EXHAUSTED;
+    return hermas_daemon_loop_active(&loop) ==
+               HERMAS_DAEMON_MAX_EXECUTIONS &&
+           hermas_daemon_loop_admit(&loop, 999u, 1u, NULL, 0u) ==
+               HERMAS_LOOP_CAPACITY_EXHAUSTED;
 }
 
 int main(int argc, char **argv) {
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
     }
 
     char socket_path[96];
-    snprintf(socket_path, sizeof(socket_path), "/tmp/hermas2-pipeline-%ld.sock",
+    snprintf(socket_path, sizeof(socket_path), "/tmp/hermas-pipeline-%ld.sock",
              (long)getpid());
     int listener = create_listener(socket_path);
     int output_pipe[2];
@@ -179,14 +179,14 @@ int main(int argc, char **argv) {
         free(image);
         return fail("cannot create local endpoints");
     }
-    hermas2_daemon_registry registry;
+    hermas_daemon_registry registry;
     memset(&registry, 0, sizeof(registry));
-    if (hermas2_daemon_registry_init(&registry, image, image_size) !=
-        HERMAS2_DAEMON_OK) {
+    if (hermas_daemon_registry_init(&registry, image, image_size) !=
+        HERMAS_DAEMON_OK) {
         free(image);
         return fail("cannot initialize app registry");
     }
-    uint8_t registration_packet[HERMAS2_PROTOCOL_HEADER_SIZE + 32u];
+    uint8_t registration_packet[HERMAS_PROTOCOL_HEADER_SIZE + 32u];
     pid_t bad_child = fork();
     if (bad_child == 0) {
         close(listener);
@@ -196,12 +196,12 @@ int main(int argc, char **argv) {
     }
     int bad_status = 0;
     if (bad_child < 0 ||
-        hermas2_daemon_registry_accept(
+        hermas_daemon_registry_accept(
             &registry, listener, registration_packet,
-            sizeof(registration_packet)) != HERMAS2_DAEMON_CONTRACT_MISMATCH ||
+            sizeof(registration_packet)) != HERMAS_DAEMON_CONTRACT_MISMATCH ||
         waitpid(bad_child, &bad_status, 0) != bad_child ||
         !WIFEXITED(bad_status) || WEXITSTATUS(bad_status) != 0) {
-        hermas2_daemon_registry_close(&registry);
+        hermas_daemon_registry_close(&registry);
         free(image);
         return fail("contract mismatch registration was not rejected");
     }
@@ -228,14 +228,14 @@ int main(int argc, char **argv) {
     close(output_pipe[1]);
     bool success = true;
     for (size_t index = 0u; success && index < 3u; ++index) {
-        success = hermas2_daemon_registry_accept(
+        success = hermas_daemon_registry_accept(
                       &registry, listener, registration_packet,
-                      sizeof(registration_packet)) == HERMAS2_DAEMON_OK;
+                      sizeof(registration_packet)) == HERMAS_DAEMON_OK;
     }
     success = success && drive_pipeline(image, image_size, &registry);
     close(listener);
     unlink(socket_path);
-    hermas2_daemon_registry_close(&registry);
+    hermas_daemon_registry_close(&registry);
     char output[64] = {0};
     ssize_t output_length = read(output_pipe[0], output, sizeof(output) - 1u);
     close(output_pipe[0]);

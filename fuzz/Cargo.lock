@@ -92,7 +92,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "herma2"
+name = "hermas"
 version = "0.1.0-alpha.1"
 dependencies = [
  "sha2",
@@ -102,7 +102,7 @@ dependencies = [
 name = "hermas-fuzz"
 version = "0.0.0"
 dependencies = [
- "herma2",
+ "hermas",
  "libfuzzer-sys",
 ]
 

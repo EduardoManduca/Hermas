@@ -1,4 +1,4 @@
 [workspace]
-members = ["compiler/herma2"]
+members = ["compiler/hermas"]
 exclude = ["fuzz"]
 resolver = "3"

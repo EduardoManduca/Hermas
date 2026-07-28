@@ -40,7 +40,7 @@ static int get_grades(
     write_i64(result + 8u, 70);
     write_i64(result + 16u, 80);
     write_i64(result + 24u, 90);
-    *outcome = HERMAS2_OUTCOME_SUCCESS;
+    *outcome = HERMAS_OUTCOME_SUCCESS;
     *result_type = GRADES_TYPE_ID;
     *result_length = 32u;
     return 1;
@@ -48,7 +48,7 @@ static int get_grades(
 
 int main(int argc, char **argv) {
     uint8_t result[32];
-    return hermas2_example_app_run_once(
+    return hermas_example_app_run_once(
         argc, argv, GRADE_LIST_APP_ID, GET_ACTION_ID, get_grades,
         result, sizeof(result));
 }

@@ -1,8 +1,8 @@
-# Hermas2 Saga Recovery Runtime
+# Hermas Saga Recovery Runtime
 
 Status: bounded recovery planner and reverse compensation executor.
 
-`hermas2_saga_execution` reconstructs compensation work from three immutable
+`hermas_saga_execution` reconstructs compensation work from three immutable
 inputs: a verified graph image, the complete execution journal, and the
 durable compensation-token log. It allocates no heap memory and admits at most
 16 saga steps.
@@ -25,7 +25,7 @@ than converted into compensating work.
 
 ## Reverse executor
 
-`hermas2_saga_prepare` selects the greatest confirmed forward ordinal, copies
+`hermas_saga_prepare` selects the greatest confirmed forward ordinal, copies
 its token into caller-owned storage, and emits an ordinary `INVOKE` frame for
 the declared compensation Action. Request IDs continue above the greatest
 forward request ID.
@@ -44,7 +44,7 @@ using the compensation success/error types embedded in the image. It never
 retries a compensation or proceeds past an uncertain or failed compensation.
 
 This layer reconstructs forward facts and executes a bounded reverse plan.
-`hermas2_saga_reconcile` additionally applies a validated saga attempt log.
+`hermas_saga_reconcile` additionally applies a validated saga attempt log.
 Durably successful reverse steps reduce the remaining ordinal and are never
 replayed. A finished log remains complete or blocked according to its terminal
 outcome. Any open prepared or sent compensation is converted to blocked
@@ -54,7 +54,7 @@ The executor and journal remain separate primitives: orchestration code owns
 the write-ahead calls around socket delivery, while reconciliation owns the
 restart decision.
 
-`hermas2_saga_driver` is the narrow composition layer for callers that want
+`hermas_saga_driver` is the narrow composition layer for callers that want
 those write-ahead calls enforced. It appends `Started` before exposing the
 plan, `DeliveryPrepared` before an invocation can be sent, and the matching
 sent/outcome facts around runtime transitions. A final success or blocked
@@ -81,7 +81,7 @@ remains opaque-value authority.
 
 ## Live plan construction
 
-`hermas2_saga_begin_live` constructs the same bounded reverse executor from
+`hermas_saga_begin_live` constructs the same bounded reverse executor from
 the daemon's already-durable forward enrollment request IDs. Token access is a
 small lookup capability rather than a file or byte-buffer assumption. The
 in-memory log adapter and Linux compensation file both implement that
@@ -94,7 +94,7 @@ success; that bookkeeping only identifies the journal/token facts to verify.
 
 ## Live reverse execution in the daemon
 
-`hermas2_daemon_loop_attach_saga` attaches the token writer and lookup
+`hermas_daemon_loop_attach_saga` attaches the token writer and lookup
 capability together with the saga-attempt writer. After a known forward
 failure (`AppError` or `NotSent`), the loop constructs the verified live plan
 and drives its compensation invocations through the existing nonblocking app
@@ -116,8 +116,8 @@ executes both directions.
 
 ## Restart handoff
 
-After `hermas2_saga_recover` and `hermas2_saga_reconcile` produce a safe
-`Ready` executor, `hermas2_daemon_loop_resume_saga` installs it into a fresh
+After `hermas_saga_recover` and `hermas_saga_reconcile` produce a safe
+`Ready` executor, `hermas_daemon_loop_resume_saga` installs it into a fresh
 transport loop. The loop replaces any transient token buffer with its attached
 lookup capability and starts the driver in resume mode, so no second `Started`
 record is emitted. Durable reverse successes are skipped and only the next
@@ -137,10 +137,10 @@ uncertainty: compensation itself may be fully proven while the pre-crash
 terminal value is unavailable. The daemon never fabricates it from journal
 metadata.
 
-On Linux, `hermas2_saga_recover_files` performs this recovery directly from
+On Linux, `hermas_saga_recover_files` performs this recovery directly from
 the three already-open, exclusively locked durable files. It maps them
 read-only for the bounded validation pass, reconciles the reverse attempt
 history, then discards every mapping. A safely recovered executor is rebound
-to `hermas2_compensation_file_lookup`, so later preparation reads the token
+to `hermas_compensation_file_lookup`, so later preparation reads the token
 from the locked file and no startup mapping or caller buffer can become a
 dangling value authority.

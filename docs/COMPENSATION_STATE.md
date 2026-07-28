@@ -1,4 +1,4 @@
-# Hermas2 Compensation State
+# Hermas Compensation State
 
 Status: durable opaque compensation-token format, version 1.
 
@@ -7,16 +7,16 @@ values. Explicit sagas additionally require the successful value returned by
 each Action with a named compensation because that app-owned value is the input token for its
 declared compensating Action.
 
-Hermas2 stores those tokens in a separate append-only log. Token presence
+Hermas stores those tokens in a separate append-only log. Token presence
 alone never proves that a forward Action succeeded.
 
 ## Record format
 
 Each record has a 72-byte canonical little-endian header followed immediately
-by a token of at most `HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE` bytes. The header
+by a token of at most `HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE` bytes. The header
 contains:
 
-- Magic `H2CT`, version `1`, header and complete record sizes.
+- Magic `HCT1`, version `1`, header and complete record sizes.
 - Strictly contiguous log sequence.
 - Execution, workflow, request, graph-node, and graph-image identity.
 - Compensation app and Action IDs.

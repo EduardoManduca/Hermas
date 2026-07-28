@@ -5,7 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 build=${1:-"$root/build-quickstart"}
 rust_target=${CARGO_TARGET_DIR:-"$root/target/quickstart"}
 export CARGO_TARGET_DIR="$rust_target"
-herma2="$rust_target/debug/herma2"
+hermas="$rust_target/debug/hermas"
 work=$(mktemp -d "${TMPDIR:-/tmp}/hermas-quickstart-XXXXXX")
 daemon_pid=
 
@@ -19,19 +19,19 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$root"
-cargo build -p herma2
+cargo build -p hermas
 cmake -S . -B "$build" -DCMAKE_BUILD_TYPE=Debug
 cmake --build "$build" -j2
 
-image="$work/grade-pipeline.h2gi"
-"$herma2" workflow image \
-    apps/grade-pipeline/grade-pipeline.hscript2 "$image" \
-    apps/grade-pipeline/grade-list.hschema2 \
-    apps/grade-pipeline/mean-calculator.hschema2 \
-    apps/grade-pipeline/printer.hschema2
+image="$work/grade-pipeline.hgi"
+"$hermas" workflow image \
+    apps/grade-pipeline/grade-pipeline.hscript "$image" \
+    apps/grade-pipeline/grade-list.hschema \
+    apps/grade-pipeline/mean-calculator.hschema \
+    apps/grade-pipeline/printer.hschema
 chmod 600 "$image"
 
-description=$("$build/hermas2_image_check" --describe "$image")
+description=$("$build/hermas_image_check" --describe "$image")
 fingerprint() {
     local app=$1
     local action=$2
@@ -53,7 +53,7 @@ fi
 state="$work/state"
 app_socket="$work/apps.sock"
 control_socket="$work/control.sock"
-"$build/hermas2d" \
+"$build/hermasd" \
     "$image" 1 "$state" "$app_socket" "$control_socket" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
@@ -63,11 +63,11 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas2_grade_list" "$app_socket" "$grade_fp" &
+"$build/hermas_grade_list" "$app_socket" "$grade_fp" &
 grade_pid=$!
-"$build/hermas2_mean_calculator" "$app_socket" "$mean_fp" &
+"$build/hermas_mean_calculator" "$app_socket" "$mean_fp" &
 mean_pid=$!
-"$build/hermas2_printer" "$app_socket" "$printer_fp" &
+"$build/hermas_printer" "$app_socket" "$printer_fp" &
 printer_pid=$!
 
 for _ in $(seq 1 100); do
@@ -76,17 +76,17 @@ for _ in $(seq 1 100); do
     sleep 0.05
 done
 [[ -S "$control_socket" ]]
-"$build/hermas2_run" \
+"$build/hermas_run" \
     "$control_socket" 1 --image "$image"
 wait "$grade_pid" "$mean_pid" "$printer_pid"
 
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-"$build/hermas2_history" "$state/journal.h2j"
+"$build/hermas_history" "$state/journal.hj"
 
 echo "Restarting the daemon against completed durable state..."
-"$build/hermas2d" \
+"$build/hermasd" \
     "$image" 1 "$state" "$app_socket" "$control_socket" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
@@ -98,6 +98,6 @@ done
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-"$build/hermas2_history" "$state/journal.h2j"
+"$build/hermas_history" "$state/journal.hj"
 
 echo "Hermas quickstart passed."

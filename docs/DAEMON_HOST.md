@@ -1,26 +1,26 @@
-# Hermas2 Linux Daemon Host
+# Hermas Linux Daemon Host
 
 Status: runnable host with conservative forward closure and safe saga resume.
 
-`hermas2d` composes one independently validated graph image, the bounded app
+`hermasd` composes one independently validated graph image, the bounded app
 registry and registration server, the bounded caller control server, and four
-separate durable stores. It does not parse HScript2, load application code, or
+separate durable stores. It does not parse HScript, load application code, or
 interpret nominal values.
 
 Run it as:
 
 ```text
-hermas2d IMAGE WORKFLOW_ID STATE_DIR APP_SOCKET CONTROL_SOCKET
+hermasd IMAGE WORKFLOW_ID STATE_DIR APP_SOCKET CONTROL_SOCKET
 ```
 
 The state directory is created with mode `0700` when absent and must remain a
 non-symlink directory owned by the current effective user with no group or
 other permission bits. It contains:
 
-- `journal.h2j` for execution and delivery facts.
-- `results.h2r` for exact terminal Success and AppError values.
-- `compensation.h2c` for opaque compensation tokens.
-- `saga.h2s` for reverse-attempt progress.
+- `journal.hj` for execution and delivery facts.
+- `results.hr` for exact terminal Success and AppError values.
+- `compensation.hc` for opaque compensation tokens.
+- `saga.hs` for reverse-attempt progress.
 
 The graph image must be a non-symlink regular file with no group or other
 write bits. Both public sockets are nonblocking `AF_UNIX` `SOCK_SEQPACKET`

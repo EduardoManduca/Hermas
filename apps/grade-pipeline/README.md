@@ -1,12 +1,12 @@
 # Grade Pipeline proof apps
 
-This directory contains the complete HSchema2 contracts, HScript2 workflow,
+This directory contains the complete HSchema contracts, HScript workflow,
 and three independently built C app executables used by the Milestone 5
 end-to-end gate:
 
-- `hermas2_grade_list` returns the canonical bounded list `[70, 80, 90]`.
-- `hermas2_mean_calculator` owns the arithmetic and returns `80`.
-- `hermas2_printer` owns presentation and prints `Mean: 80`.
+- `hermas_grade_list` returns the canonical bounded list `[70, 80, 90]`.
+- `hermas_mean_calculator` owns the arithmetic and returns `80`.
+- `hermas_printer` owns presentation and prints `Mean: 80`.
 
 Each app owns a separate implementation file:
 
@@ -15,11 +15,11 @@ Each app owns a separate implementation file:
 - [printer_app.c](printer_app.c)
 
 They share only [app_common.c](app_common.c), a small example bootstrap that
-parses the fingerprint, connects through `libhermas2edge`, and serves one
+parses the fingerprint, connects through `libhermas_edge`, and serves one
 Action. App IDs, Action checks, nominal Type IDs, buffers, and business logic
 remain in their owning app source. This is the same boundary future apps are
 expected to use: reuse the stable edge ABI, not another app's handler.
 
-No calculation or printing is performed by HScript2 or the daemon. The
+No calculation or printing is performed by HScript or the daemon. The
 workflow graph only routes the canonical values and nominal presentation
 metadata between these app-owned operations.

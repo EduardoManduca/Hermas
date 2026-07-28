@@ -1,4 +1,4 @@
-# Hermas2 Execution Journal
+# Hermas Execution Journal
 
 Status: durable delivery-fact journal, version 1.
 
@@ -12,7 +12,7 @@ Every record is exactly 64 bytes and uses unsigned little-endian fields:
 
 | Offset | Size | Field |
 | ---: | ---: | --- |
-| 0 | 4 | Magic `H2JR` |
+| 0 | 4 | Magic `HJR1` |
 | 4 | 2 | Version `1` |
 | 6 | 2 | Record size `64` |
 | 8 | 2 | Record kind |
@@ -64,25 +64,25 @@ Startup validates the complete file before accepting writes:
 
 An interrupted `DeliveryPrepared` or `DeliverySent` is closed with
 `ActionUnknown`, followed by `ExecutionFinished(Unknown)`. An unfinished
-execution without an open delivery is also closed as `Unknown`. Hermas2 never
+execution without an open delivery is also closed as `Unknown`. Hermas never
 replays or resumes the forward graph from journal facts.
 
 The next execution ID is one greater than the largest durable ID.
 
 ## Linux durability and inspection
 
-`hermas2_journal_file_open` accepts only a non-symlink regular file owned by
+`hermas_journal_file_open` accepts only a non-symlink regular file owned by
 the current effective user with no group or other permission bits. New files
 use mode `0600`. It acquires an exclusive writer lock, scans the existing file,
 and initializes the next sequence. Every append uses a complete record write
 followed by `fdatasync`. Read-only inspection enforces the same file policy.
 
-`hermas2_journal_file_inspect` provides read-only validated traversal without
-acquiring the writer lock. The `hermas2_history` executable prints one
+`hermas_journal_file_inspect` provides read-only validated traversal without
+acquiring the writer lock. The `hermas_history` executable prints one
 tab-separated row per record:
 
 ```text
-hermas2_history execution.h2journal
+hermas_history execution.hjournal
 ```
 
 History inspection exposes orchestration facts only. Payload capture,

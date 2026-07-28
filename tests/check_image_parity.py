@@ -53,14 +53,14 @@ def cases(image: bytes):
 def main() -> int:
     if len(sys.argv) < 4:
         print(
-            "usage: check_image_parity.py HERMA2 C_CHECK IMAGE...",
+            "usage: check_image_parity.py HERMAS C_CHECK IMAGE...",
             file=sys.stderr,
         )
         return 2
     rust = [sys.argv[1], "image", "check"]
     c = [sys.argv[2]]
     with tempfile.TemporaryDirectory(prefix="hermas-image-parity-") as root:
-        candidate = pathlib.Path(root, "candidate.h2gi")
+        candidate = pathlib.Path(root, "candidate.hgi")
         for source_text in sys.argv[3:]:
             source = pathlib.Path(source_text)
             image = source.read_bytes()

@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "hermas2/host_linux.h"
-#include "hermas2/image.h"
+#include "hermas/host_linux.h"
+#include "hermas/image.h"
 
 #include <poll.h>
 #include <stdio.h>
@@ -77,29 +77,29 @@ static int read_routes(
     const uint8_t *image,
     saga_route routes[3]) {
     uint16_t region_count = read_u16(
-        image, HERMAS2_IMAGE_HEADER_REGION_COUNT_OFFSET);
+        image, HERMAS_IMAGE_HEADER_REGION_COUNT_OFFSET);
     size_t regions = read_u32(
-        image, HERMAS2_IMAGE_HEADER_REGIONS_OFFSET);
+        image, HERMAS_IMAGE_HEADER_REGIONS_OFFSET);
     size_t nodes = read_u32(
-        image, HERMAS2_IMAGE_HEADER_NODES_OFFSET);
+        image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
     size_t found = 0u;
     for (uint16_t index = 0u; index < region_count; ++index) {
         size_t offset =
             regions + (size_t)index *
-                          HERMAS2_IMAGE_REGION_RECORD_SIZE;
+                          HERMAS_IMAGE_REGION_RECORD_SIZE;
         if (image[offset] != 3u) {
             continue;
         }
         uint16_t ordinal = read_u16(image, offset + 12u);
         if (ordinal == 0u || ordinal > 3u ||
             index + 1u >= region_count ||
-            image[offset + HERMAS2_IMAGE_REGION_RECORD_SIZE] != 4u) {
+            image[offset + HERMAS_IMAGE_REGION_RECORD_SIZE] != 4u) {
             return 0;
         }
         uint16_t forward_node = read_u16(image, offset + 2u);
         size_t node =
             nodes + ((size_t)forward_node - 1u) *
-                        HERMAS2_IMAGE_NODE_RECORD_SIZE;
+                        HERMAS_IMAGE_NODE_RECORD_SIZE;
         routes[ordinal - 1u] = (saga_route){
             .forward_node = forward_node,
             .forward_app = read_u16(image, node + 4u),
@@ -113,13 +113,13 @@ static int read_routes(
         ++found;
     }
     uint16_t edge_count = read_u16(
-        image, HERMAS2_IMAGE_HEADER_EDGE_COUNT_OFFSET);
+        image, HERMAS_IMAGE_HEADER_EDGE_COUNT_OFFSET);
     size_t edges = read_u32(
-        image, HERMAS2_IMAGE_HEADER_EDGES_OFFSET);
+        image, HERMAS_IMAGE_HEADER_EDGES_OFFSET);
     for (uint16_t index = 0u; index < edge_count; ++index) {
         size_t edge =
             edges + (size_t)index *
-                        HERMAS2_IMAGE_EDGE_RECORD_SIZE;
+                        HERMAS_IMAGE_EDGE_RECORD_SIZE;
         if (image[edge] == 2u &&
             read_u16(image, edge + 4u) ==
                 routes[2].forward_node) {
@@ -137,14 +137,14 @@ static int read_routes(
 static int make_paths(fixture_paths *paths) {
     memset(paths, 0, sizeof(*paths));
     memcpy(
-        paths->directory, "/tmp/hermas2-host-XXXXXX",
-        sizeof("/tmp/hermas2-host-XXXXXX"));
+        paths->directory, "/tmp/hermas-host-XXXXXX",
+        sizeof("/tmp/hermas-host-XXXXXX"));
     if (mkdtemp(paths->directory) == NULL) {
         return 0;
     }
     return snprintf(
                paths->image, sizeof(paths->image),
-               "%s/workflow.h2gi", paths->directory) > 0 &&
+               "%s/workflow.hgi", paths->directory) > 0 &&
            snprintf(
                paths->app_socket, sizeof(paths->app_socket),
                "%s/apps.sock", paths->directory) > 0 &&
@@ -153,16 +153,16 @@ static int make_paths(fixture_paths *paths) {
                "%s/control.sock", paths->directory) > 0 &&
            snprintf(
                paths->journal, sizeof(paths->journal),
-               "%s/journal.h2j", paths->directory) > 0 &&
+               "%s/journal.hj", paths->directory) > 0 &&
            snprintf(
                paths->compensation, sizeof(paths->compensation),
-               "%s/compensation.h2c", paths->directory) > 0 &&
+               "%s/compensation.hc", paths->directory) > 0 &&
            snprintf(
                paths->results, sizeof(paths->results),
-               "%s/results.h2r", paths->directory) > 0 &&
+               "%s/results.hr", paths->directory) > 0 &&
            snprintf(
                paths->saga, sizeof(paths->saga),
-               "%s/saga.h2s", paths->directory) > 0;
+               "%s/saga.hs", paths->directory) > 0;
 }
 
 static void remove_fixture(const fixture_paths *paths) {
@@ -192,14 +192,14 @@ static int write_secure_image(
     return written;
 }
 
-static hermas2_journal_record journal_action(
-    hermas2_journal_kind kind,
+static hermas_journal_record journal_action(
+    hermas_journal_kind kind,
     uint16_t outcome,
     uint64_t execution_id,
     uint64_t request_id,
     const saga_route *route,
     uint64_t fingerprint) {
-    return (hermas2_journal_record){
+    return (hermas_journal_record){
         .kind = kind,
         .outcome = outcome,
         .execution_id = execution_id,
@@ -218,78 +218,78 @@ static int write_fixture(
     size_t image_size,
     const saga_route routes[3],
     int uncertain) {
-    hermas2_journal_file journal;
-    hermas2_compensation_file compensation;
-    hermas2_result_file results;
-    hermas2_saga_log_file saga;
-    hermas2_journal_summary journal_summary;
-    hermas2_compensation_summary compensation_summary;
-    hermas2_result_summary result_summary;
-    hermas2_saga_log_summary saga_summary;
-    if (hermas2_journal_file_open(
+    hermas_journal_file journal;
+    hermas_compensation_file compensation;
+    hermas_result_file results;
+    hermas_saga_log_file saga;
+    hermas_journal_summary journal_summary;
+    hermas_compensation_summary compensation_summary;
+    hermas_result_summary result_summary;
+    hermas_saga_log_summary saga_summary;
+    if (hermas_journal_file_open(
             &journal, paths->journal, &journal_summary) !=
-            HERMAS2_JOURNAL_OK ||
-        hermas2_compensation_file_open(
+            HERMAS_JOURNAL_OK ||
+        hermas_compensation_file_open(
             &compensation, paths->compensation,
-            &compensation_summary) != HERMAS2_COMPENSATION_OK ||
-        hermas2_result_file_open(
+            &compensation_summary) != HERMAS_COMPENSATION_OK ||
+        hermas_result_file_open(
             &results, paths->results, &result_summary) !=
-            HERMAS2_RESULT_STORE_OK ||
-        hermas2_saga_log_file_open(
+            HERMAS_RESULT_STORE_OK ||
+        hermas_saga_log_file_open(
             &saga, paths->saga, &saga_summary) !=
-            HERMAS2_SAGA_LOG_OK) {
+            HERMAS_SAGA_LOG_OK) {
         return 0;
     }
     uint64_t fingerprint =
-        hermas2_journal_image_fingerprint(image, image_size);
+        hermas_journal_image_fingerprint(image, image_size);
     uint64_t execution_id = uncertain != 0 ? 43u : 42u;
-    int ok = hermas2_journal_writer_append(
+    int ok = hermas_journal_writer_append(
                  &journal.writer,
-                 (hermas2_journal_record){
-                     .kind = HERMAS2_JOURNAL_EXECUTION_STARTED,
+                 (hermas_journal_record){
+                     .kind = HERMAS_JOURNAL_EXECUTION_STARTED,
                      .execution_id = execution_id,
                      .workflow_id = 7u,
                      .image_fingerprint = fingerprint
-                 }) == HERMAS2_JOURNAL_OK;
+                 }) == HERMAS_JOURNAL_OK;
     for (size_t ordinal = 0u; ok && ordinal < 3u; ++ordinal) {
         uint64_t request_id = ordinal + 1u;
         ok =
-            hermas2_journal_writer_append(
+            hermas_journal_writer_append(
                 &journal.writer,
                 journal_action(
-                    HERMAS2_JOURNAL_DELIVERY_PREPARED,
-                    HERMAS2_OUTCOME_NONE, execution_id,
+                    HERMAS_JOURNAL_DELIVERY_PREPARED,
+                    HERMAS_OUTCOME_NONE, execution_id,
                     request_id, &routes[ordinal],
-                    fingerprint)) == HERMAS2_JOURNAL_OK &&
-            hermas2_journal_writer_append(
+                    fingerprint)) == HERMAS_JOURNAL_OK &&
+            hermas_journal_writer_append(
                 &journal.writer,
                 journal_action(
-                    HERMAS2_JOURNAL_DELIVERY_SENT,
-                    HERMAS2_OUTCOME_NONE, execution_id,
+                    HERMAS_JOURNAL_DELIVERY_SENT,
+                    HERMAS_OUTCOME_NONE, execution_id,
                     request_id, &routes[ordinal],
-                    fingerprint)) == HERMAS2_JOURNAL_OK &&
-            hermas2_journal_writer_append(
+                    fingerprint)) == HERMAS_JOURNAL_OK &&
+            hermas_journal_writer_append(
                 &journal.writer,
                 journal_action(
                     ordinal < 2u
-                        ? HERMAS2_JOURNAL_ACTION_SUCCEEDED
-                        : HERMAS2_JOURNAL_ACTION_FAILED,
+                        ? HERMAS_JOURNAL_ACTION_SUCCEEDED
+                        : HERMAS_JOURNAL_ACTION_FAILED,
                     ordinal < 2u
-                        ? HERMAS2_OUTCOME_SUCCESS
-                        : HERMAS2_OUTCOME_APP_ERROR,
+                        ? HERMAS_OUTCOME_SUCCESS
+                        : HERMAS_OUTCOME_APP_ERROR,
                     execution_id, request_id, &routes[ordinal],
-                    fingerprint)) == HERMAS2_JOURNAL_OK;
+                    fingerprint)) == HERMAS_JOURNAL_OK;
     }
     uint8_t scratch[
-        HERMAS2_COMPENSATION_HEADER_SIZE +
-        HERMAS2_PROTOCOL_MAX_PAYLOAD_SIZE];
+        HERMAS_COMPENSATION_HEADER_SIZE +
+        HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE];
     for (size_t ordinal = 0u; ok && ordinal < 2u; ++ordinal) {
         uint8_t token[8] = {
             (uint8_t)(11u * (ordinal + 1u))
         };
-        ok = hermas2_compensation_writer_append(
+        ok = hermas_compensation_writer_append(
                  &compensation.writer,
-                 (hermas2_compensation_record){
+                 (hermas_compensation_record){
                      .key = {
                          .execution_id = execution_id,
                          .workflow_id = 7u,
@@ -309,18 +309,18 @@ static int write_fixture(
                      .token_length = sizeof(token)
                  },
                  scratch, sizeof(scratch)) ==
-             HERMAS2_COMPENSATION_OK;
+             HERMAS_COMPENSATION_OK;
     }
     ok = ok &&
-         hermas2_result_writer_append(
+         hermas_result_writer_append(
              &results.writer,
-             (hermas2_result_record){
+             (hermas_result_record){
                  .key = {
                      .execution_id = execution_id,
                      .workflow_id = 7u,
                      .image_fingerprint = fingerprint
                  },
-                 .outcome = HERMAS2_OUTCOME_APP_ERROR,
+                 .outcome = HERMAS_OUTCOME_APP_ERROR,
                  .source_type = routes[2].failure_source_type,
                  .destination_type =
                      routes[2].failure_destination_type,
@@ -328,29 +328,29 @@ static int write_fixture(
                  .value_length = 0u
              },
              scratch, sizeof(scratch)) ==
-             HERMAS2_RESULT_STORE_OK &&
-         hermas2_journal_writer_append(
+             HERMAS_RESULT_STORE_OK &&
+         hermas_journal_writer_append(
              &journal.writer,
-             (hermas2_journal_record){
-                 .kind = HERMAS2_JOURNAL_EXECUTION_FINISHED,
-                 .outcome = HERMAS2_OUTCOME_APP_ERROR,
+             (hermas_journal_record){
+                 .kind = HERMAS_JOURNAL_EXECUTION_FINISHED,
+                 .outcome = HERMAS_OUTCOME_APP_ERROR,
                  .execution_id = execution_id,
                  .workflow_id = 7u,
                  .image_fingerprint = fingerprint
-             }) == HERMAS2_JOURNAL_OK &&
-         hermas2_saga_log_writer_append(
+             }) == HERMAS_JOURNAL_OK &&
+         hermas_saga_log_writer_append(
              &saga.writer,
-             (hermas2_saga_log_record){
-                 .kind = HERMAS2_SAGA_LOG_STARTED,
-                 .outcome = HERMAS2_OUTCOME_APP_ERROR,
+             (hermas_saga_log_record){
+                 .kind = HERMAS_SAGA_LOG_STARTED,
+                 .outcome = HERMAS_OUTCOME_APP_ERROR,
                  .execution_id = execution_id,
                  .workflow_id = 7u,
                  .ordinal = 2u,
                  .image_fingerprint = fingerprint
-             }) == HERMAS2_SAGA_LOG_OK;
+             }) == HERMAS_SAGA_LOG_OK;
     if (ok && uncertain != 0) {
-        hermas2_saga_log_record delivery = {
-            .kind = HERMAS2_SAGA_LOG_DELIVERY_PREPARED,
+        hermas_saga_log_record delivery = {
+            .kind = HERMAS_SAGA_LOG_DELIVERY_PREPARED,
             .execution_id = execution_id,
             .workflow_id = 7u,
             .request_id = 4u,
@@ -360,23 +360,23 @@ static int write_fixture(
             .ordinal = 2u,
             .image_fingerprint = fingerprint
         };
-        ok = hermas2_saga_log_writer_append(
-                 &saga.writer, delivery) == HERMAS2_SAGA_LOG_OK;
-        delivery.kind = HERMAS2_SAGA_LOG_DELIVERY_SENT;
-        ok = ok && hermas2_saga_log_writer_append(
+        ok = hermas_saga_log_writer_append(
+                 &saga.writer, delivery) == HERMAS_SAGA_LOG_OK;
+        delivery.kind = HERMAS_SAGA_LOG_DELIVERY_SENT;
+        ok = ok && hermas_saga_log_writer_append(
                        &saga.writer, delivery) ==
-                       HERMAS2_SAGA_LOG_OK;
+                       HERMAS_SAGA_LOG_OK;
     }
-    hermas2_saga_log_file_close(&saga);
-    hermas2_result_file_close(&results);
-    hermas2_compensation_file_close(&compensation);
-    hermas2_journal_file_close(&journal);
+    hermas_saga_log_file_close(&saga);
+    hermas_result_file_close(&results);
+    hermas_compensation_file_close(&compensation);
+    hermas_journal_file_close(&journal);
     return ok;
 }
 
 static int attach_apps(
-    hermas2_host *host,
-    app_channel channels[HERMAS2_DAEMON_MAX_ACTIONS]) {
+    hermas_host *host,
+    app_channel channels[HERMAS_DAEMON_MAX_ACTIONS]) {
     for (size_t index = 0u;
          index < host->registry.action_count; ++index) {
         int sockets[2];
@@ -394,17 +394,17 @@ static int attach_apps(
 }
 
 static int receive_compensation(
-    hermas2_host *host,
+    hermas_host *host,
     const app_channel *channels,
     size_t channel_count,
     const saga_route *route,
     uint8_t expected_token) {
-    uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];
-    hermas2_frame invocation;
+    uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
+    hermas_frame invocation;
     for (unsigned attempt = 0u; attempt < 16u; ++attempt) {
         size_t progress = 0u;
-        if (hermas2_host_step(host, 10, &progress) !=
-            HERMAS2_HOST_OK) {
+        if (hermas_host_step(host, 10, &progress) !=
+            HERMAS_HOST_OK) {
             return 0;
         }
         for (size_t index = 0u; index < channel_count; ++index) {
@@ -419,10 +419,10 @@ static int receive_compensation(
             ssize_t received = recv(
                 item.fd, packet, sizeof(packet), 0);
             if (received <= 0 ||
-                hermas2_protocol_decode(
+                hermas_protocol_decode(
                     packet, (size_t)received, &invocation) !=
-                    HERMAS2_PROTOCOL_OK ||
-                invocation.kind != HERMAS2_FRAME_INVOKE ||
+                    HERMAS_PROTOCOL_OK ||
+                invocation.kind != HERMAS_FRAME_INVOKE ||
                 invocation.app_id != route->compensation_app ||
                 invocation.action_id !=
                     route->compensation_action ||
@@ -430,22 +430,22 @@ static int receive_compensation(
                 invocation.payload[0] != expected_token) {
                 return 0;
             }
-            hermas2_frame result = {
-                .kind = HERMAS2_FRAME_RESULT,
+            hermas_frame result = {
+                .kind = HERMAS_FRAME_RESULT,
                 .execution_id = invocation.execution_id,
                 .request_id = invocation.request_id,
                 .app_id = invocation.app_id,
                 .action_id = invocation.action_id,
                 .source_type = route->success_type,
                 .destination_type = route->success_type,
-                .outcome = HERMAS2_OUTCOME_SUCCESS,
+                .outcome = HERMAS_OUTCOME_SUCCESS,
                 .payload = NULL,
                 .payload_length = 0u
             };
             size_t packet_size = 0u;
-            return hermas2_protocol_encode(
+            return hermas_protocol_encode(
                        &result, packet, sizeof(packet),
-                       &packet_size) == HERMAS2_PROTOCOL_OK &&
+                       &packet_size) == HERMAS_PROTOCOL_OK &&
                    send(item.fd, packet, packet_size, 0) ==
                        (ssize_t)packet_size;
         }
@@ -453,10 +453,10 @@ static int receive_compensation(
     return 0;
 }
 
-static hermas2_host_config host_config(
+static hermas_host_config host_config(
     const char *image_path,
     const fixture_paths *paths) {
-    return (hermas2_host_config){
+    return (hermas_host_config){
         .image_path = image_path,
         .state_directory = paths->directory,
         .app_socket_path = paths->app_socket,
@@ -475,8 +475,8 @@ int main(int argc, char **argv) {
     memset(routes, 0, sizeof(routes));
     if (!load_image(
             argv[1], image, sizeof(image), &image_size) ||
-        hermas2_image_validate(image, image_size, NULL) !=
-            HERMAS2_IMAGE_OK ||
+        hermas_image_validate(image, image_size, NULL) !=
+            HERMAS_IMAGE_OK ||
         !read_routes(image, routes)) {
         fputs("saga image fixture failed\n", stderr);
         return 2;
@@ -490,16 +490,16 @@ int main(int argc, char **argv) {
         fputs("safe recovery fixture failed\n", stderr);
         return 1;
     }
-    hermas2_host host;
-    hermas2_host_config config =
+    hermas_host host;
+    hermas_host_config config =
         host_config(safe_paths.image, &safe_paths);
-    if (hermas2_host_open(&host, &config) != HERMAS2_HOST_OK ||
+    if (hermas_host_open(&host, &config) != HERMAS_HOST_OK ||
         host.recovered_execution_count != 1u ||
-        hermas2_daemon_loop_active(&host.loop) != 1u) {
+        hermas_daemon_loop_active(&host.loop) != 1u) {
         fputs("safe compensation was not restored\n", stderr);
         return 1;
     }
-    app_channel channels[HERMAS2_DAEMON_MAX_ACTIONS];
+    app_channel channels[HERMAS_DAEMON_MAX_ACTIONS];
     memset(channels, 0, sizeof(channels));
     if (!attach_apps(&host, channels) ||
         !receive_compensation(
@@ -515,14 +515,14 @@ int main(int argc, char **argv) {
          attempt < 16u &&
          host.recovered_execution_count != 0u; ++attempt) {
         size_t progress = 0u;
-        if (hermas2_host_step(&host, 10, &progress) !=
-            HERMAS2_HOST_OK) {
+        if (hermas_host_step(&host, 10, &progress) !=
+            HERMAS_HOST_OK) {
             fputs("restored compensation completion failed\n", stderr);
             return 1;
         }
     }
     if (host.recovered_execution_count != 0u ||
-        hermas2_daemon_loop_active(&host.loop) != 0u) {
+        hermas_daemon_loop_active(&host.loop) != 0u) {
         fputs("restored execution was not reaped\n", stderr);
         return 1;
     }
@@ -530,14 +530,14 @@ int main(int argc, char **argv) {
          index < host.registry.action_count; ++index) {
         close(channels[index].peer);
     }
-    hermas2_host_close(&host);
-    if (hermas2_host_open(&host, &config) != HERMAS2_HOST_OK ||
+    hermas_host_close(&host);
+    if (hermas_host_open(&host, &config) != HERMAS_HOST_OK ||
         host.recovered_execution_count != 0u ||
-        hermas2_daemon_loop_active(&host.loop) != 0u) {
+        hermas_daemon_loop_active(&host.loop) != 0u) {
         fputs("completed compensation was recovered twice\n", stderr);
         return 1;
     }
-    hermas2_host_close(&host);
+    hermas_host_close(&host);
     remove_fixture(&safe_paths);
 
     fixture_paths unsafe_paths;
@@ -549,8 +549,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     config = host_config(unsafe_paths.image, &unsafe_paths);
-    if (hermas2_host_open(&host, &config) !=
-            HERMAS2_HOST_RECOVERY_REQUIRED ||
+    if (hermas_host_open(&host, &config) !=
+            HERMAS_HOST_RECOVERY_REQUIRED ||
         access(unsafe_paths.app_socket, F_OK) == 0 ||
         access(unsafe_paths.control_socket, F_OK) == 0) {
         fputs("uncertain compensation was replayed\n", stderr);

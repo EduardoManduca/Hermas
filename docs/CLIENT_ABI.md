@@ -1,9 +1,9 @@
-# Hermas2 Caller Client ABI
+# Hermas Caller Client ABI
 
 Status: implemented initial Linux caller-owned ABI.
 
-`libhermas2client` is the workflow-caller counterpart to
-`libhermas2edge`. It connects to the daemon's control `AF_UNIX`
+`libhermas_client` is the workflow-caller counterpart to
+`libhermas_edge`. It connects to the daemon's control `AF_UNIX`
 `SOCK_SEQPACKET` socket and performs one explicit execution exchange:
 
 1. Encode and send one complete `EXECUTE` frame.
@@ -13,7 +13,7 @@ Status: implemented initial Linux caller-owned ABI.
 
 The library assigns no execution IDs, retries no execution, and interprets no
 application value. Input and output storage remain caller-owned. The result
-payload points into the packet buffer supplied to `hermas2_client_execute` and
+payload points into the packet buffer supplied to `hermas_client_execute` and
 remains valid until that buffer is reused.
 
 Connection lifetime and higher-level concurrency belong to the caller. A
@@ -23,11 +23,11 @@ authority.
 
 ## Shell runner
 
-`hermas2_run` exposes the same one-execution ABI for development and operator
+`hermas_run` exposes the same one-execution ABI for development and operator
 use:
 
 ```text
-hermas2_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
+hermas_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
 ```
 
 It prints the exact terminal outcome, nominal source and destination Type IDs,

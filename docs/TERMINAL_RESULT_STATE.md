@@ -1,4 +1,4 @@
-# Hermas2 Terminal Result State
+# Hermas Terminal Result State
 
 Status: canonical durable terminal-value format, version 1.
 
@@ -8,7 +8,7 @@ canonical value that a completed workflow may later return to its caller. It
 does not prove that execution completed: a matching `ExecutionFinished` fact
 and graph-image identity remain authoritative for that claim.
 
-Every record has a 64-byte little-endian `H2RS` header followed by at most one
+Every record has a 64-byte little-endian `HRS1` header followed by at most one
 protocol payload. The header contains a contiguous log sequence, execution,
 workflow, and graph-image identity, the terminal `Success` or `AppError`
 outcome, source and destination nominal Type IDs, payload length, reserved
@@ -44,7 +44,7 @@ exact lookup maps only for the duration of the copy into caller-owned memory.
 
 ## Daemon integration
 
-`hermas2_daemon_loop_attach_results` installs the writer and lookup capability
+`hermas_daemon_loop_attach_results` installs the writer and lookup capability
 as a pair before any execution is admitted. For a known terminal result, the
 loop appends the value after the final Action fact and before
 `ExecutionFinished`. A live saga continues to retain the same in-memory result

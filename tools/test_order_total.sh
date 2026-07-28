@@ -5,7 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 build=${1:-"$root/build-order-total"}
 rust_target=${CARGO_TARGET_DIR:-"$root/target/order-total"}
 export CARGO_TARGET_DIR="$rust_target"
-herma2="$rust_target/debug/herma2"
+hermas="$rust_target/debug/hermas"
 work=$(mktemp -d "${TMPDIR:-/tmp}/hermas-order-total-XXXXXX")
 daemon_pid=
 
@@ -19,19 +19,19 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$root"
-cargo build -p herma2
+cargo build -p hermas
 cmake -S . -B "$build" -DCMAKE_BUILD_TYPE=Debug
 cmake --build "$build" -j2
 
-image="$work/order-total.h2gi"
-"$herma2" workflow image \
-    apps/order-total/order-total.hscript2 "$image" \
-    apps/order-total/discount.hschema2 \
-    apps/order-total/tax.hschema2 \
-    apps/order-total/receipt.hschema2
+image="$work/order-total.hgi"
+"$hermas" workflow image \
+    apps/order-total/order-total.hscript "$image" \
+    apps/order-total/discount.hschema \
+    apps/order-total/tax.hschema \
+    apps/order-total/receipt.hschema
 chmod 600 "$image"
 
-description=$("$build/hermas2_image_check" --describe "$image")
+description=$("$build/hermas_image_check" --describe "$image")
 fingerprint() {
     local app=$1
     local action=$2
@@ -53,7 +53,7 @@ fi
 state="$work/state"
 app_socket="$work/apps.sock"
 control_socket="$work/control.sock"
-"$build/hermas2d" \
+"$build/hermasd" \
     "$image" 1 "$state" "$app_socket" "$control_socket" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
@@ -63,11 +63,11 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas2_discount" "$app_socket" "$discount_fp" &
+"$build/hermas_discount" "$app_socket" "$discount_fp" &
 discount_pid=$!
-"$build/hermas2_tax" "$app_socket" "$tax_fp" &
+"$build/hermas_tax" "$app_socket" "$tax_fp" &
 tax_pid=$!
-"$build/hermas2_receipt" \
+"$build/hermas_receipt" \
     "$app_socket" "$receipt_fp" >"$work/receipt.out" &
 receipt_pid=$!
 
@@ -78,8 +78,8 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$control_socket" ]]
 
-# 10,000 cents as a canonical little-endian HSchema2 Integer.
-"$build/hermas2_run" \
+# 10,000 cents as a canonical little-endian HSchema Integer.
+"$build/hermas_run" \
     "$control_socket" 41 --image "$image" 1027000000000000
 wait "$discount_pid" "$tax_pid" "$receipt_pid"
 grep -Fx "Order total: 9900 cents" "$work/receipt.out"
@@ -87,9 +87,9 @@ grep -Fx "Order total: 9900 cents" "$work/receipt.out"
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-before=$(sha256sum "$state/journal.h2j")
+before=$(sha256sum "$state/journal.hj")
 
-"$build/hermas2d" \
+"$build/hermasd" \
     "$image" 1 "$state" "$app_socket" "$control_socket" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
@@ -101,8 +101,8 @@ done
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-after=$(sha256sum "$state/journal.h2j")
+after=$(sha256sum "$state/journal.hj")
 [[ "$before" == "$after" ]]
 
-"$build/hermas2_history" "$state/journal.h2j"
+"$build/hermas_history" "$state/journal.hj"
 echo "Independent Order Total pipeline passed."

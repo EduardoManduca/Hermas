@@ -34,12 +34,12 @@ static int parse_fingerprint(
     return 1;
 }
 
-int hermas2_example_app_run_once(
+int hermas_example_app_run_once(
     int argc,
     char **argv,
     uint16_t app_id,
     uint16_t action_id,
-    hermas2_action_handler handler,
+    hermas_action_handler handler,
     uint8_t *result,
     size_t result_capacity) {
     if (argc != 3) {
@@ -51,19 +51,19 @@ int hermas2_example_app_run_once(
         fputs("invalid contract fingerprint\n", stderr);
         return 2;
     }
-    hermas2_edge edge;
-    if (hermas2_edge_connect(
+    hermas_edge edge;
+    if (hermas_edge_connect(
             &edge, argv[1], app_id, action_id, fingerprint) !=
-        HERMAS2_EDGE_OK) {
+        HERMAS_EDGE_OK) {
         return 1;
     }
-    uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];
-    hermas2_edge_result served = hermas2_edge_serve_once(
+    uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
+    hermas_edge_result served = hermas_edge_serve_once(
         &edge, packet, sizeof(packet), result, result_capacity,
         handler, NULL);
     int succeeded =
-        served == HERMAS2_EDGE_OK &&
+        served == HERMAS_EDGE_OK &&
         edge.delivered_invocations == 1u;
-    hermas2_edge_disconnect(&edge);
+    hermas_edge_disconnect(&edge);
     return succeeded ? 0 : 1;
 }

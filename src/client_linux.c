@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "hermas2/client.h"
+#include "hermas/client.h"
 
 #include <errno.h>
 #include <string.h>
@@ -8,23 +8,23 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-hermas2_client_result hermas2_client_connect(
-    hermas2_client *client,
+hermas_client_result hermas_client_connect(
+    hermas_client *client,
     const char *socket_path) {
     if (client == NULL || socket_path == NULL ||
         socket_path[0] == '\0') {
-        return HERMAS2_CLIENT_INVALID_ARGUMENT;
+        return HERMAS_CLIENT_INVALID_ARGUMENT;
     }
     memset(client, 0, sizeof(*client));
     client->file_descriptor = -1;
     size_t path_length = strlen(socket_path);
     if (path_length >= sizeof(((struct sockaddr_un *)0)->sun_path)) {
-        return HERMAS2_CLIENT_INVALID_ARGUMENT;
+        return HERMAS_CLIENT_INVALID_ARGUMENT;
     }
     int descriptor =
         socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
     if (descriptor < 0) {
-        return HERMAS2_CLIENT_SOCKET_ERROR;
+        return HERMAS_CLIENT_SOCKET_ERROR;
     }
     struct sockaddr_un address;
     memset(&address, 0, sizeof(address));
@@ -38,41 +38,41 @@ hermas2_client_result hermas2_client_connect(
     } while (connected != 0 && errno == EINTR);
     if (connected != 0) {
         close(descriptor);
-        return HERMAS2_CLIENT_CONNECT_ERROR;
+        return HERMAS_CLIENT_CONNECT_ERROR;
     }
     client->file_descriptor = descriptor;
-    return HERMAS2_CLIENT_OK;
+    return HERMAS_CLIENT_OK;
 }
 
-hermas2_client_result hermas2_client_execute(
-    hermas2_client *client,
+hermas_client_result hermas_client_execute(
+    hermas_client *client,
     uint64_t execution_id,
     uint16_t input_type,
     const uint8_t *input,
     size_t input_length,
     uint8_t *packet_buffer,
     size_t packet_capacity,
-    hermas2_frame *result) {
+    hermas_frame *result) {
     if (client == NULL || client->file_descriptor < 0 ||
         execution_id == 0u || input_type == 0u ||
         (input == NULL && input_length != 0u) ||
         input_length > UINT32_MAX || packet_buffer == NULL ||
         result == NULL) {
-        return HERMAS2_CLIENT_INVALID_ARGUMENT;
+        return HERMAS_CLIENT_INVALID_ARGUMENT;
     }
-    hermas2_frame request = {
-        .kind = HERMAS2_FRAME_EXECUTE,
+    hermas_frame request = {
+        .kind = HERMAS_FRAME_EXECUTE,
         .execution_id = execution_id,
         .source_type = input_type,
-        .outcome = HERMAS2_OUTCOME_NONE,
+        .outcome = HERMAS_OUTCOME_NONE,
         .payload = input,
         .payload_length = (uint32_t)input_length
     };
     size_t packet_size = 0u;
-    if (hermas2_protocol_encode(
+    if (hermas_protocol_encode(
             &request, packet_buffer, packet_capacity,
-            &packet_size) != HERMAS2_PROTOCOL_OK) {
-        return HERMAS2_CLIENT_ENCODE_ERROR;
+            &packet_size) != HERMAS_PROTOCOL_OK) {
+        return HERMAS_CLIENT_ENCODE_ERROR;
     }
     ssize_t sent;
     do {
@@ -81,7 +81,7 @@ hermas2_client_result hermas2_client_execute(
             MSG_NOSIGNAL);
     } while (sent < 0 && errno == EINTR);
     if (sent != (ssize_t)packet_size) {
-        return HERMAS2_CLIENT_SEND_ERROR;
+        return HERMAS_CLIENT_SEND_ERROR;
     }
     struct iovec vector = {
         .iov_base = packet_buffer,
@@ -96,23 +96,23 @@ hermas2_client_result hermas2_client_execute(
         received = recvmsg(client->file_descriptor, &message, 0);
     } while (received < 0 && errno == EINTR);
     if (received <= 0) {
-        return HERMAS2_CLIENT_RECEIVE_ERROR;
+        return HERMAS_CLIENT_RECEIVE_ERROR;
     }
     if ((message.msg_flags & MSG_TRUNC) != 0) {
-        return HERMAS2_CLIENT_TRUNCATED_PACKET;
+        return HERMAS_CLIENT_TRUNCATED_PACKET;
     }
-    if (hermas2_protocol_decode(
+    if (hermas_protocol_decode(
             packet_buffer, (size_t)received, result) !=
-        HERMAS2_PROTOCOL_OK) {
-        return HERMAS2_CLIENT_PROTOCOL_ERROR;
+        HERMAS_PROTOCOL_OK) {
+        return HERMAS_CLIENT_PROTOCOL_ERROR;
     }
-    return result->kind == HERMAS2_FRAME_EXECUTION_RESULT &&
+    return result->kind == HERMAS_FRAME_EXECUTION_RESULT &&
                    result->execution_id == execution_id
-               ? HERMAS2_CLIENT_OK
-               : HERMAS2_CLIENT_UNEXPECTED_RESULT;
+               ? HERMAS_CLIENT_OK
+               : HERMAS_CLIENT_UNEXPECTED_RESULT;
 }
 
-void hermas2_client_close(hermas2_client *client) {
+void hermas_client_close(hermas_client *client) {
     if (client == NULL) {
         return;
     }
@@ -123,8 +123,8 @@ void hermas2_client_close(hermas2_client *client) {
     client->file_descriptor = -1;
 }
 
-const char *hermas2_client_result_name(
-    hermas2_client_result result) {
+const char *hermas_client_result_name(
+    hermas_client_result result) {
     static const char *const names[] = {
         "ok", "invalid-argument", "socket-error", "connect-error",
         "encode-error", "send-error", "receive-error",

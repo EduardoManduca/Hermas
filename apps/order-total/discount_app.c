@@ -46,7 +46,7 @@ static int apply_discount(
         return 0;
     }
     write_i64(result, subtotal * 9 / 10);
-    *outcome = HERMAS2_OUTCOME_SUCCESS;
+    *outcome = HERMAS_OUTCOME_SUCCESS;
     *result_type = DISCOUNTED_TYPE_ID;
     *result_length = 8u;
     return 1;
@@ -54,7 +54,7 @@ static int apply_discount(
 
 int main(int argc, char **argv) {
     uint8_t result[8];
-    return hermas2_example_app_run_once(
+    return hermas_example_app_run_once(
         argc, argv, DISCOUNT_APP_ID, APPLY_ACTION_ID, apply_discount,
         result, sizeof(result));
 }

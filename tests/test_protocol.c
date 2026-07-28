@@ -1,4 +1,4 @@
-#include "hermas2/protocol.h"
+#include "hermas/protocol.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -8,13 +8,13 @@ static int fail(const char *message) {
     return 1;
 }
 
-static int round_trip(const hermas2_frame *source) {
-    uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];
+static int round_trip(const hermas_frame *source) {
+    uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
     size_t size = 0u;
-    hermas2_frame decoded;
-    if (hermas2_protocol_encode(source, packet, sizeof(packet), &size) !=
-            HERMAS2_PROTOCOL_OK ||
-        hermas2_protocol_decode(packet, size, &decoded) != HERMAS2_PROTOCOL_OK) {
+    hermas_frame decoded;
+    if (hermas_protocol_encode(source, packet, sizeof(packet), &size) !=
+            HERMAS_PROTOCOL_OK ||
+        hermas_protocol_decode(packet, size, &decoded) != HERMAS_PROTOCOL_OK) {
         return 0;
     }
     return decoded.kind == source->kind &&
@@ -33,19 +33,19 @@ static int round_trip(const hermas2_frame *source) {
 int main(void) {
     uint8_t fingerprint[32] = {1u};
     uint8_t payload[16] = {2u, 3u, 5u, 7u};
-    hermas2_frame frames[] = {
-        {HERMAS2_FRAME_REGISTER_APP, 0u, 0u, 1u, 2u, 0u, 0u,
-         HERMAS2_OUTCOME_NONE, fingerprint, sizeof(fingerprint)},
-        {HERMAS2_FRAME_REGISTER_OK, 0u, 0u, 1u, 2u, 0u, 0u,
-         HERMAS2_OUTCOME_NONE, NULL, 0u},
-        {HERMAS2_FRAME_INVOKE, 10u, 20u, 1u, 2u, 3u, 4u,
-         HERMAS2_OUTCOME_NONE, payload, sizeof(payload)},
-        {HERMAS2_FRAME_RESULT, 10u, 20u, 1u, 2u, 4u, 5u,
-         HERMAS2_OUTCOME_SUCCESS, payload, sizeof(payload)},
-        {HERMAS2_FRAME_EXECUTE, 10u, 0u, 0u, 0u, 3u, 0u,
-         HERMAS2_OUTCOME_NONE, payload, sizeof(payload)},
-        {HERMAS2_FRAME_EXECUTION_RESULT, 10u, 0u, 0u, 0u, 3u, 5u,
-         HERMAS2_OUTCOME_SUCCESS, payload, sizeof(payload)}
+    hermas_frame frames[] = {
+        {HERMAS_FRAME_REGISTER_APP, 0u, 0u, 1u, 2u, 0u, 0u,
+         HERMAS_OUTCOME_NONE, fingerprint, sizeof(fingerprint)},
+        {HERMAS_FRAME_REGISTER_OK, 0u, 0u, 1u, 2u, 0u, 0u,
+         HERMAS_OUTCOME_NONE, NULL, 0u},
+        {HERMAS_FRAME_INVOKE, 10u, 20u, 1u, 2u, 3u, 4u,
+         HERMAS_OUTCOME_NONE, payload, sizeof(payload)},
+        {HERMAS_FRAME_RESULT, 10u, 20u, 1u, 2u, 4u, 5u,
+         HERMAS_OUTCOME_SUCCESS, payload, sizeof(payload)},
+        {HERMAS_FRAME_EXECUTE, 10u, 0u, 0u, 0u, 3u, 0u,
+         HERMAS_OUTCOME_NONE, payload, sizeof(payload)},
+        {HERMAS_FRAME_EXECUTION_RESULT, 10u, 0u, 0u, 0u, 3u, 5u,
+         HERMAS_OUTCOME_SUCCESS, payload, sizeof(payload)}
     };
     for (size_t index = 0u; index < sizeof(frames) / sizeof(frames[0]); ++index) {
         if (!round_trip(&frames[index])) {
@@ -53,16 +53,16 @@ int main(void) {
         }
     }
 
-    uint8_t packet[HERMAS2_PROTOCOL_MAX_PACKET_SIZE];
+    uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
     size_t size = 0u;
-    if (hermas2_protocol_encode(&frames[2], packet, sizeof(packet), &size) !=
-        HERMAS2_PROTOCOL_OK) {
+    if (hermas_protocol_encode(&frames[2], packet, sizeof(packet), &size) !=
+        HERMAS_PROTOCOL_OK) {
         return fail("cannot create malformed corpus base");
     }
     for (size_t prefix = 0u; prefix < size; ++prefix) {
-        hermas2_frame decoded;
-        if (hermas2_protocol_decode(packet, prefix, &decoded) ==
-            HERMAS2_PROTOCOL_OK) {
+        hermas_frame decoded;
+        if (hermas_protocol_decode(packet, prefix, &decoded) ==
+            HERMAS_PROTOCOL_OK) {
             return fail("truncated prefix was accepted");
         }
     }
@@ -71,23 +71,23 @@ int main(void) {
         size_t offset = mutations[index];
         uint8_t original = packet[offset];
         packet[offset] ^= 0xffu;
-        hermas2_frame decoded;
-        if (hermas2_protocol_decode(packet, size, &decoded) ==
-            HERMAS2_PROTOCOL_OK) {
+        hermas_frame decoded;
+        if (hermas_protocol_decode(packet, size, &decoded) ==
+            HERMAS_PROTOCOL_OK) {
             return fail("malformed header was accepted");
         }
         packet[offset] = original;
     }
-    hermas2_frame invalid = frames[2];
+    hermas_frame invalid = frames[2];
     invalid.request_id = 0u;
-    if (hermas2_protocol_encode(&invalid, packet, sizeof(packet), &size) ==
-        HERMAS2_PROTOCOL_OK) {
+    if (hermas_protocol_encode(&invalid, packet, sizeof(packet), &size) ==
+        HERMAS_PROTOCOL_OK) {
         return fail("invalid routed identifiers were accepted");
     }
     invalid = frames[3];
-    invalid.outcome = HERMAS2_OUTCOME_UNKNOWN;
-    if (hermas2_protocol_encode(&invalid, packet, sizeof(packet), &size) ==
-        HERMAS2_PROTOCOL_OK) {
+    invalid.outcome = HERMAS_OUTCOME_UNKNOWN;
+    if (hermas_protocol_encode(&invalid, packet, sizeof(packet), &size) ==
+        HERMAS_PROTOCOL_OK) {
         return fail("invalid app result outcome was accepted");
     }
     return 0;

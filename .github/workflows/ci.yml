@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p herma2
+      - run: cargo build -p hermas
       - run: tools/generate_test_fixtures.sh
       - run: tools/configure_gate_build.sh build-${{ matrix.compiler }} ${{ matrix.compiler }} target/gate-fixtures
       - run: cmake --build build-${{ matrix.compiler }} -j2
@@ -42,7 +42,7 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
       - if: matrix.compiler == 'clang'
-        run: python3 tests/check_image_parity.py target/debug/herma2 build-clang/hermas2_image_check target/gate-fixtures/*.h2gi
+        run: python3 tests/check_image_parity.py target/debug/hermas build-clang/hermas_image_check target/gate-fixtures/*.hgi
 
   integration:
     runs-on: ubuntu-24.04

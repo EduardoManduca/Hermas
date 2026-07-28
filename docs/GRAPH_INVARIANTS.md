@@ -1,9 +1,9 @@
-# Hermas2 Graph Kernel Invariants
+# Hermas Graph Kernel Invariants
 
 Status: normative through the bounded-parallel graph slice.
 
 The first kernel represents sequential Action graphs directly in Rust. It does
-not encode a graph image yet. HSchema2 and sequential HScript2 now construct
+not encode a graph image yet. HSchema and sequential HScript now construct
 this same kernel rather than defining parallel execution models.
 
 ## Source provenance

@@ -1,9 +1,9 @@
-#include "hermas2/compensation.h"
-#include "hermas2/image.h"
-#include "hermas2/journal.h"
-#include "hermas2/protocol.h"
-#include "hermas2/result.h"
-#include "hermas2/saga_log.h"
+#include "hermas/compensation.h"
+#include "hermas/image.h"
+#include "hermas/journal.h"
+#include "hermas/protocol.h"
+#include "hermas/result.h"
+#include "hermas/saga_log.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,37 +16,37 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     size_t payload_size = size - 1u;
     switch (data[0] % 6u) {
         case 0u: {
-            (void)hermas2_image_validate(
+            (void)hermas_image_validate(
                 payload, payload_size, NULL);
             break;
         }
         case 1u: {
-            hermas2_frame frame;
-            (void)hermas2_protocol_decode(
+            hermas_frame frame;
+            (void)hermas_protocol_decode(
                 payload, payload_size, &frame);
             break;
         }
         case 2u: {
-            hermas2_journal_summary summary;
-            (void)hermas2_journal_scan(
+            hermas_journal_summary summary;
+            (void)hermas_journal_scan(
                 payload, payload_size, NULL, NULL, &summary);
             break;
         }
         case 3u: {
-            hermas2_result_summary summary;
-            (void)hermas2_result_scan(
+            hermas_result_summary summary;
+            (void)hermas_result_scan(
                 payload, payload_size, NULL, NULL, &summary);
             break;
         }
         case 4u: {
-            hermas2_compensation_summary summary;
-            (void)hermas2_compensation_scan(
+            hermas_compensation_summary summary;
+            (void)hermas_compensation_scan(
                 payload, payload_size, NULL, NULL, &summary);
             break;
         }
         default: {
-            hermas2_saga_log_summary summary;
-            (void)hermas2_saga_log_scan(
+            hermas_saga_log_summary summary;
+            (void)hermas_saga_log_scan(
                 payload, payload_size, &summary);
             break;
         }

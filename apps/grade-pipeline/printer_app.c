@@ -38,7 +38,7 @@ static int print_mean(
         return 0;
     }
     result[0] = 1u;
-    *outcome = HERMAS2_OUTCOME_SUCCESS;
+    *outcome = HERMAS_OUTCOME_SUCCESS;
     *result_type = PRINTED_TYPE_ID;
     *result_length = 1u;
     return 1;
@@ -46,7 +46,7 @@ static int print_mean(
 
 int main(int argc, char **argv) {
     uint8_t result[1];
-    return hermas2_example_app_run_once(
+    return hermas_example_app_run_once(
         argc, argv, PRINTER_APP_ID, PRINT_ACTION_ID, print_mean,
         result, sizeof(result));
 }
