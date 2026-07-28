@@ -28,9 +28,20 @@ use:
 
 ```text
 hermas_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
+hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE
+hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --hex INPUT_HEX
 ```
 
-It prints the exact terminal outcome, nominal source and destination Type IDs,
-and canonical value bytes in lowercase hexadecimal. Exit status is `0` for
-Success, `10` for AppError, `11` for NotSent, and `12` for Unknown. Transport,
-protocol, and argument failures remain distinct non-domain failures.
+Image mode derives the workflow input Type and accepts human-readable scalar
+values: `unit`, decimal `Integer`, `true` or `false`, unquoted `String` text,
+and `0x`-prefixed `Bytes`. Record, List, and variant input remains available
+through `--hex`; the CLI never guesses a composite layout. Both forms are
+validated against the image's canonical Type descriptor before any connection
+or delivery attempt.
+
+The runner always prints the exact terminal outcome, nominal source and
+destination Type IDs, and canonical value bytes in lowercase hexadecimal.
+When an image is present and the result is scalar, it also appends a
+human-readable `display=` value. Exit status is `0` for Success, `10` for
+AppError, `11` for NotSent, and `12` for Unknown. Transport, protocol, and
+argument failures remain distinct non-domain failures.

@@ -145,6 +145,27 @@ int main(int argc, char **argv) {
         memcmp(summary.workflow_name, "grade_pipeline", 14u) != 0) {
         return fail("decoded summary differs");
     }
+    hermas_image_type_summary type;
+    if (hermas_image_describe_type(
+            bytes, (size_t)length, 1u, &type) != HERMAS_IMAGE_OK ||
+        type.kind != HERMAS_IMAGE_VALUE_UNIT || type.bound != 0u ||
+        hermas_image_describe_type(
+            bytes, (size_t)length, 4u, &type) != HERMAS_IMAGE_OK ||
+        type.kind != HERMAS_IMAGE_VALUE_LIST || type.bound != 32u ||
+        hermas_image_describe_type(
+            bytes, (size_t)length, 6u, &type) != HERMAS_IMAGE_OK ||
+        type.kind != HERMAS_IMAGE_VALUE_INTEGER || type.bound != 0u ||
+        hermas_image_describe_type(
+            bytes, (size_t)length, 11u, &type) != HERMAS_IMAGE_OK ||
+        type.kind != HERMAS_IMAGE_VALUE_BOOLEAN || type.bound != 0u ||
+        hermas_image_describe_type(
+            bytes, (size_t)length, UINT16_MAX, &type) ==
+            HERMAS_IMAGE_OK ||
+        hermas_image_describe_type(
+            bytes, (size_t)length, 1u, NULL) ==
+            HERMAS_IMAGE_OK) {
+        return fail("type representation inspection differs");
+    }
     uint8_t grades[32] = {0u};
     grades[0] = 3u;
     grades[8] = 70u;

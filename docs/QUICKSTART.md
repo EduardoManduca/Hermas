@@ -35,9 +35,12 @@ Install the compiler directly from a checkout with:
 cargo install --path compiler/hermas
 ```
 
-`hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE [INPUT_HEX]` derives
-the nominal workflow input Type from the independently validated image.
-Advanced callers may still pass an explicit Type ID.
+`hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE` derives
+the nominal workflow input Type from the independently validated image and
+encodes scalar HSchema values without manual wire bytes. For example, the
+Order Total test passes `--value 10000`. Exact canonical bytes remain
+available through `--hex`; advanced callers may still pass an explicit Type
+ID.
 
 ## Independent architecture check
 

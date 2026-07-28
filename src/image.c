@@ -1010,6 +1010,33 @@ hermas_image_result hermas_image_validate(
     return HERMAS_IMAGE_OK;
 }
 
+hermas_image_result hermas_image_describe_type(
+    const uint8_t *image,
+    size_t image_size,
+    uint16_t type_id,
+    hermas_image_type_summary *summary) {
+    if (summary == NULL) {
+        return HERMAS_IMAGE_INVALID_VALUE;
+    }
+    hermas_image_result result =
+        hermas_image_validate(image, image_size, NULL);
+    if (result != HERMAS_IMAGE_OK) {
+        return result;
+    }
+    size_t descriptor = 0u;
+    size_t descriptor_end = 0u;
+    if (!type_descriptor(
+            image, read_u32(image, 44u), read_u16(image, 34u),
+            read_u32(image, 60u), type_id, &descriptor,
+            &descriptor_end)) {
+        return HERMAS_IMAGE_INVALID_VALUE;
+    }
+    (void)descriptor_end;
+    summary->kind = (hermas_image_value_kind)image[descriptor];
+    summary->bound = read_u32(image, descriptor + 4u);
+    return HERMAS_IMAGE_OK;
+}
+
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
     size_t image_size,

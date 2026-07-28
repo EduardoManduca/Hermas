@@ -33,10 +33,36 @@ typedef struct hermas_image_summary {
     uint16_t edge_count;
 } hermas_image_summary;
 
+typedef enum hermas_image_value_kind {
+    HERMAS_IMAGE_VALUE_UNIT = 1,
+    HERMAS_IMAGE_VALUE_INTEGER = 2,
+    HERMAS_IMAGE_VALUE_BOOLEAN = 3,
+    HERMAS_IMAGE_VALUE_STRING = 4,
+    HERMAS_IMAGE_VALUE_BYTES = 5,
+    HERMAS_IMAGE_VALUE_RECORD = 6,
+    HERMAS_IMAGE_VALUE_LIST = 7,
+    HERMAS_IMAGE_VALUE_VARIANT = 8
+} hermas_image_value_kind;
+
+typedef struct hermas_image_type_summary {
+    hermas_image_value_kind kind;
+    uint32_t bound;
+} hermas_image_type_summary;
+
 hermas_image_result hermas_image_validate(
     const uint8_t *bytes,
     size_t size,
     hermas_image_summary *summary);
+
+/*
+ * Describes the outer canonical representation of one nominal Type.
+ * `bound` is meaningful for String, Bytes, and List; it is zero otherwise.
+ */
+hermas_image_result hermas_image_describe_type(
+    const uint8_t *image,
+    size_t image_size,
+    uint16_t type_id,
+    hermas_image_type_summary *summary);
 
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
