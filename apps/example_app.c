@@ -65,6 +65,15 @@ int hermas_example_app_run_once(
                 hermas_workspace_result_name(opened));
             return 2;
         }
+        hermas_workspace_binding binding;
+        hermas_workspace_result loaded =
+            hermas_workspace_load(&workspace, &binding);
+        if (loaded != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "workspace binding failed: %s\n",
+                hermas_workspace_result_name(loaded));
+            return 2;
+        }
         socket_path = workspace.app_socket;
         fingerprint_text = argv[3];
     }

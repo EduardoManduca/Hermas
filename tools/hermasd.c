@@ -35,30 +35,39 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
             "Hermas %s (hermasd; graph-image %u, protocol %u, "
-            "journal %u, result %u, compensation %u, saga-log %u)\n",
+            "journal %u, result %u, compensation %u, saga-log %u, "
+            "workspace-manifest %u)\n",
             HERMAS_VERSION, HERMAS_GRAPH_IMAGE_VERSION,
             HERMAS_PROTOCOL_VERSION, HERMAS_JOURNAL_VERSION,
             HERMAS_RESULT_VERSION, HERMAS_COMPENSATION_VERSION,
-            HERMAS_SAGA_LOG_VERSION);
+            HERMAS_SAGA_LOG_VERSION,
+            HERMAS_WORKSPACE_MANIFEST_VERSION);
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         puts(
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
-            "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n\n"
+            "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
+            "       hermasd --workspace DIRECTORY\n\n"
+            "The IMAGE form initializes or verifies the managed workspace. "
+            "Later starts derive its pinned image and workflow ID.\n\n"
             "Run one verified graph image with private durable state.");
         return 0;
     }
-    int workspace_mode =
+    int workspace_bind_mode =
         argc == 5 && strcmp(argv[1], "--workspace") == 0;
+    int workspace_load_mode =
+        argc == 3 && strcmp(argv[1], "--workspace") == 0;
+    int workspace_mode = workspace_bind_mode || workspace_load_mode;
     if (argc != 6 && !workspace_mode) {
         fprintf(
             stderr,
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
-            "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n",
-            argv[0], argv[0]);
+            "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
+            "       %s --workspace DIRECTORY\n",
+            argv[0], argv[0], argv[0]);
         return 2;
     }
     hermas_workspace_paths workspace;
@@ -72,15 +81,37 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    const char *image_path =
-        workspace_mode ? argv[3] : argv[1];
-    const char *workflow_text =
-        workspace_mode ? argv[4] : argv[2];
     uint32_t workflow_id = 0u;
-    if (!parse_workflow_id(workflow_text, &workflow_id)) {
+    hermas_workspace_binding binding;
+    if (workspace_bind_mode) {
+        if (!parse_workflow_id(argv[4], &workflow_id)) {
+            fputs("hermasd: invalid workflow ID\n", stderr);
+            return 2;
+        }
+        hermas_workspace_result bound = hermas_workspace_bind(
+            &workspace, argv[3], workflow_id, &binding);
+        if (bound != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "hermasd: workspace binding failed: %s\n",
+                hermas_workspace_result_name(bound));
+            return 2;
+        }
+    } else if (workspace_load_mode) {
+        hermas_workspace_result loaded =
+            hermas_workspace_load(&workspace, &binding);
+        if (loaded != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr, "hermasd: workspace binding failed: %s\n",
+                hermas_workspace_result_name(loaded));
+            return 2;
+        }
+        workflow_id = binding.workflow_id;
+    } else if (!parse_workflow_id(argv[2], &workflow_id)) {
         fputs("hermasd: invalid workflow ID\n", stderr);
         return 2;
     }
+    const char *image_path =
+        workspace_mode ? workspace.image_path : argv[1];
     struct sigaction action = {
         .sa_handler = request_stop,
         .sa_flags = 0

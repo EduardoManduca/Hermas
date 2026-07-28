@@ -66,6 +66,7 @@ jobs:
       - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
       - run: tools/quickstart.sh build-quickstart
       - run: tools/test_order_total.sh build-order-total
+      - run: tools/test_workspace_compatibility.sh build-workspace-compatibility
 
   static-analysis:
     runs-on: ubuntu-24.04

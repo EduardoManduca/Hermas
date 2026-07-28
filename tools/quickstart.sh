@@ -76,7 +76,7 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$control_socket" ]]
 "$build/hermas_run" \
-    --workspace "$workspace" 1 --image "$image"
+    --workspace "$workspace" 1
 wait "$grade_pid" "$mean_pid" "$printer_pid"
 
 kill "$daemon_pid"
@@ -85,7 +85,7 @@ daemon_pid=
 "$build/hermas_history" --workspace "$workspace"
 
 echo "Restarting the daemon against completed durable state..."
-"$build/hermasd" --workspace "$workspace" "$image" 1 &
+"$build/hermasd" --workspace "$workspace" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$control_socket" ]] && break

@@ -36,9 +36,10 @@ and fingerprint. `hermas_edge_serve_once` validates one invocation before
 calling the handler.
 
 On Linux, `hermas/workspace_linux.h` can resolve the app socket from the same
-private runtime directory used by the daemon. Apps may therefore accept one
-workspace path from their supervisor instead of exposing socket naming as
-application configuration.
+private runtime directory used by the daemon. The helper also verifies the
+managed workspace manifest and image before the app connects. Apps may
+therefore accept one workspace path from their supervisor instead of exposing
+socket naming or graph-version selection as application configuration.
 
 The handler must:
 

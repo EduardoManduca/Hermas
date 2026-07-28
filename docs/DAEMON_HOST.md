@@ -11,13 +11,14 @@ Run it as:
 
 ```text
 hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID
+hermasd --workspace DIRECTORY
 hermasd IMAGE WORKFLOW_ID STATE_DIR APP_SOCKET CONTROL_SOCKET
 ```
 
-Workspace mode is the normal developer/operator interface. It derives the
-private state directory and fixed app/control socket names from one validated
-directory. See `WORKSPACE.md`. The explicit form remains available for
-embedding and tests.
+The first workspace form validates and pins the image and workflow identity.
+Subsequent starts use the shorter form and load the exact managed image,
+workflow ID, and version family before interpreting state. See `WORKSPACE.md`.
+The explicit form remains available for embedding and tests.
 
 The state directory is created with mode `0700` when absent and must remain a
 non-symlink directory owned by the current effective user with no group or

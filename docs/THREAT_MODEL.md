@@ -30,6 +30,10 @@ honest about its domain behavior.
   mode rejects a symlink, foreign owner, group/other access, unsafe state
   directory, or a derived Unix socket path beyond the platform bound before
   any connection or daemon startup.
+  Their versioned manifest pins the exact managed image, workflow identity,
+  protocol, and durable formats. Managed files must also be owner-only
+  regular non-symlinks. Unsupported or changed bindings are refused before
+  state interpretation.
 - **Apps are authorized domain principals, not trusted runtime peers.** Exact
   per-Action fingerprints prevent one endpoint from registering for a
   different contract. Apps still own authorization, validation, side effects,
