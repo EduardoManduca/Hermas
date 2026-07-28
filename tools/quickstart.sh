@@ -50,11 +50,10 @@ if [[ -z "$grade_fp" || -z "$mean_fp" || -z "$printer_fp" ]]; then
     exit 1
 fi
 
-state="$work/state"
-app_socket="$work/apps.sock"
-control_socket="$work/control.sock"
-"$build/hermasd" \
-    "$image" 1 "$state" "$app_socket" "$control_socket" &
+workspace="$work/runtime"
+app_socket="$workspace/apps.sock"
+control_socket="$workspace/control.sock"
+"$build/hermasd" --workspace "$workspace" "$image" 1 &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$app_socket" ]] && break
@@ -63,11 +62,11 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas_grade_list" "$app_socket" "$grade_fp" &
+"$build/hermas_grade_list" --workspace "$workspace" "$grade_fp" &
 grade_pid=$!
-"$build/hermas_mean_calculator" "$app_socket" "$mean_fp" &
+"$build/hermas_mean_calculator" --workspace "$workspace" "$mean_fp" &
 mean_pid=$!
-"$build/hermas_printer" "$app_socket" "$printer_fp" &
+"$build/hermas_printer" --workspace "$workspace" "$printer_fp" &
 printer_pid=$!
 
 for _ in $(seq 1 100); do
@@ -77,17 +76,16 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$control_socket" ]]
 "$build/hermas_run" \
-    "$control_socket" 1 --image "$image"
+    --workspace "$workspace" 1 --image "$image"
 wait "$grade_pid" "$mean_pid" "$printer_pid"
 
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-"$build/hermas_history" "$state/journal.hj"
+"$build/hermas_history" --workspace "$workspace"
 
 echo "Restarting the daemon against completed durable state..."
-"$build/hermasd" \
-    "$image" 1 "$state" "$app_socket" "$control_socket" &
+"$build/hermasd" --workspace "$workspace" "$image" 1 &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$control_socket" ]] && break
@@ -98,6 +96,6 @@ done
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-"$build/hermas_history" "$state/journal.hj"
+"$build/hermas_history" --workspace "$workspace"
 
 echo "Hermas quickstart passed."

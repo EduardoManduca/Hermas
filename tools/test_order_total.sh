@@ -50,11 +50,10 @@ if [[ -z "$discount_fp" || -z "$tax_fp" || -z "$receipt_fp" ]]; then
     exit 1
 fi
 
-state="$work/state"
-app_socket="$work/apps.sock"
-control_socket="$work/control.sock"
-"$build/hermasd" \
-    "$image" 1 "$state" "$app_socket" "$control_socket" &
+workspace="$work/runtime"
+app_socket="$workspace/apps.sock"
+control_socket="$workspace/control.sock"
+"$build/hermasd" --workspace "$workspace" "$image" 1 &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$app_socket" ]] && break
@@ -63,12 +62,12 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas_discount" "$app_socket" "$discount_fp" &
+"$build/hermas_discount" --workspace "$workspace" "$discount_fp" &
 discount_pid=$!
-"$build/hermas_tax" "$app_socket" "$tax_fp" &
+"$build/hermas_tax" --workspace "$workspace" "$tax_fp" &
 tax_pid=$!
 "$build/hermas_receipt" \
-    "$app_socket" "$receipt_fp" >"$work/receipt.out" &
+    --workspace "$workspace" "$receipt_fp" >"$work/receipt.out" &
 receipt_pid=$!
 
 for _ in $(seq 1 100); do
@@ -81,14 +80,15 @@ done
 # The graph-aware runner encodes the decimal HSchema Integer. Canonical
 # hexadecimal remains available through --hex for exact-byte automation.
 if "$build/hermas_run" \
-    "$control_socket" 40 --image "$image" --value not-an-integer \
+    --workspace "$workspace" 40 --image "$image" \
+    --value not-an-integer \
     >"$work/invalid.out" 2>"$work/invalid.err"; then
     echo "order-total: invalid scalar input was accepted" >&2
     exit 1
 fi
 grep -F "invalid argument or value" "$work/invalid.err"
 run_output=$("$build/hermas_run" \
-    "$control_socket" 41 --image "$image" --value 10000)
+    --workspace "$workspace" 41 --image "$image" --value 10000)
 grep -F "outcome=success" <<<"$run_output"
 grep -F "display=true" <<<"$run_output"
 wait "$discount_pid" "$tax_pid" "$receipt_pid"
@@ -97,10 +97,9 @@ grep -Fx "Order total: 9900 cents" "$work/receipt.out"
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-before=$(sha256sum "$state/journal.hj")
+before=$(sha256sum "$workspace/state/journal.hj")
 
-"$build/hermasd" \
-    "$image" 1 "$state" "$app_socket" "$control_socket" &
+"$build/hermasd" --workspace "$workspace" "$image" 1 &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$control_socket" ]] && break
@@ -111,8 +110,8 @@ done
 kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
-after=$(sha256sum "$state/journal.hj")
+after=$(sha256sum "$workspace/state/journal.hj")
 [[ "$before" == "$after" ]]
 
-"$build/hermas_history" "$state/journal.hj"
+"$build/hermas_history" --workspace "$workspace"
 echo "Independent Order Total pipeline passed."

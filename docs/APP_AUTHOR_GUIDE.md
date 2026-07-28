@@ -35,6 +35,11 @@ buffer, and result buffer, and connect with the exact app ID, local Action ID,
 and fingerprint. `hermas_edge_serve_once` validates one invocation before
 calling the handler.
 
+On Linux, `hermas/workspace_linux.h` can resolve the app socket from the same
+private runtime directory used by the daemon. Apps may therefore accept one
+workspace path from their supervisor instead of exposing socket naming as
+application configuration.
+
 The handler must:
 
 - Accept only its declared Action and input nominal Type.

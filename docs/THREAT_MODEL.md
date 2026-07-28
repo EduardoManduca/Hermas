@@ -26,6 +26,10 @@ honest about its domain behavior.
 - **Socket paths and the state directory are hostile filesystem names.** The
   host refuses symlinks, unsafe ownership or permissions, and pre-existing
   socket paths. It removes only paths it successfully bound.
+- **Runtime workspaces are private operator-owned directories.** Workspace
+  mode rejects a symlink, foreign owner, group/other access, unsafe state
+  directory, or a derived Unix socket path beyond the platform bound before
+  any connection or daemon startup.
 - **Apps are authorized domain principals, not trusted runtime peers.** Exact
   per-Action fingerprints prevent one endpoint from registering for a
   different contract. Apps still own authorization, validation, side effects,
