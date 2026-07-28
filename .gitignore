@@ -3,5 +3,6 @@
 /fuzz/artifacts/
 /fuzz/corpus/
 /build-*/
+/dist*/
 **/*.swp
 **/*.tmp
