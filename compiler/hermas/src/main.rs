@@ -1,10 +1,14 @@
 use std::env;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::process::ExitCode;
 
 use hermas::{
-    Catalog, compile_hscript_module, compile_schema, decode_graph_image, encode_graph_image,
+    Catalog, MAX_GRAPH_IMAGE_SIZE, compile_hscript_module, compile_schema, decode_graph_image,
+    encode_graph_image,
 };
+
+const MAX_SOURCE_SIZE: usize = 1024 * 1024;
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = env::args().skip(1).collect();
@@ -39,12 +43,9 @@ fn schema_command(arguments: &[String]) -> ExitCode {
     }
     let mut catalog = Catalog::new();
     for path in &arguments[1..] {
-        let source = match fs::read_to_string(path) {
+        let source = match read_source(path, "schema") {
             Ok(source) => source,
-            Err(error) => {
-                eprintln!("{path}: cannot read schema: {error}");
-                return ExitCode::FAILURE;
-            }
+            Err(code) => return code,
         };
         match compile_schema(&mut catalog, path, &source) {
             Ok(contract) => {
@@ -183,12 +184,9 @@ fn image_command(arguments: &[String]) -> ExitCode {
         usage();
         return ExitCode::from(2);
     }
-    let bytes = match fs::read(&arguments[1]) {
+    let bytes = match read_bounded(&arguments[1], "graph image", MAX_GRAPH_IMAGE_SIZE) {
         Ok(bytes) => bytes,
-        Err(error) => {
-            eprintln!("{}: cannot read graph image: {error}", arguments[1]);
-            return ExitCode::FAILURE;
-        }
+        Err(code) => return code,
     };
     match decode_graph_image(&bytes) {
         Ok(image) => {
@@ -209,10 +207,30 @@ fn image_command(arguments: &[String]) -> ExitCode {
 }
 
 fn read_source(path: &str, kind: &str) -> Result<String, ExitCode> {
-    fs::read_to_string(path).map_err(|error| {
-        eprintln!("{path}: cannot read {kind}: {error}");
+    let bytes = read_bounded(path, kind, MAX_SOURCE_SIZE)?;
+    String::from_utf8(bytes).map_err(|error| {
+        eprintln!("{path}: {kind} is not valid UTF-8: {error}");
         ExitCode::FAILURE
     })
+}
+
+fn read_bounded(path: &str, kind: &str, limit: usize) -> Result<Vec<u8>, ExitCode> {
+    let file = File::open(path).map_err(|error| {
+        eprintln!("{path}: cannot read {kind}: {error}");
+        ExitCode::FAILURE
+    })?;
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            eprintln!("{path}: cannot read {kind}: {error}");
+            ExitCode::FAILURE
+        })?;
+    if bytes.len() > limit {
+        eprintln!("{path}: {kind} exceeds the 1 MiB input limit");
+        return Err(ExitCode::FAILURE);
+    }
+    Ok(bytes)
 }
 
 fn usage() {

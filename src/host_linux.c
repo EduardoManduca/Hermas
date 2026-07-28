@@ -39,6 +39,7 @@ static hermas_host_result load_image(
     if (descriptor < 0 || fstat(descriptor, &status) != 0 ||
         !S_ISREG(status.st_mode) || status.st_size <= 0 ||
         (uint64_t)status.st_size > SIZE_MAX ||
+        (uint64_t)status.st_size > HERMAS_IMAGE_MAX_SIZE ||
         (status.st_mode & 022u) != 0u) {
         if (descriptor >= 0) {
             close(descriptor);

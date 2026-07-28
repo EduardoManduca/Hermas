@@ -76,7 +76,9 @@ static int image_input_type(
         return 0;
     }
     long length = ftell(file);
-    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (length <= 0 ||
+        (uint64_t)length > HERMAS_IMAGE_MAX_SIZE ||
+        fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return 0;
     }

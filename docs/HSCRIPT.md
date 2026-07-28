@@ -3,6 +3,9 @@
 Status: implemented sequential, typed-choice, bounded-`all`, deadline-region,
 and bounded-`each`/ordered-`collect` language slices.
 
+The alpha compiler accepts UTF-8 workflow source files up to 1 MiB each. It
+rejects a larger file before parsing so source ingestion remains bounded.
+
 HScript is notation for constructing verified Action graphs. One source file
 is a module containing one or more workflow declarations. Each declaration
 produces an independent graph with its own contract, resources, deadlines,

@@ -116,6 +116,12 @@ int main(int argc, char **argv) {
     if (argc < 2 || argc > 4) {
         return fail("expected graph image and optional parallel/saga fixtures");
     }
+    uint8_t oversized_marker = 0u;
+    if (hermas_image_validate(
+            &oversized_marker, HERMAS_IMAGE_MAX_SIZE + 1u, NULL) !=
+        HERMAS_IMAGE_INVALID_HEADER) {
+        return fail("oversized graph image was not rejected before decoding");
+    }
     FILE *file = fopen(argv[1], "rb");
     if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
         return fail("cannot open fixture");

@@ -26,6 +26,9 @@ UTF-8 workflow name
 There are no trailing bytes. Every table offset must equal the canonical
 offset calculated from preceding counts. Version 1 contains no source map;
 source provenance remains compiler-side data under the current open decision.
+An encoded image is limited to 1 MiB. The compiler refuses to emit a larger
+image, and every runtime or inspection decoder rejects one before processing
+its header or allocating storage for its contents.
 
 ## Header
 

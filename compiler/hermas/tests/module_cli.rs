@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use hermas::decode_graph_image;
+use hermas::{MAX_GRAPH_IMAGE_SIZE, decode_graph_image};
 
 fn repository_path(relative: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -91,4 +91,29 @@ fn cli_has_no_built_in_workflows() {
     let error = String::from_utf8(result.stderr).unwrap();
     assert!(error.contains("hermas schema check"));
     assert!(!error.contains("grade-pipeline"));
+}
+
+#[test]
+fn cli_rejects_oversized_source_and_image_files() {
+    let temporary = std::env::temp_dir().join(format!("hermas-oversized-{}", std::process::id()));
+    fs::write(&temporary, vec![b'a'; MAX_GRAPH_IMAGE_SIZE + 1])
+        .expect("oversized fixture is written");
+
+    for arguments in [
+        vec!["schema", "check", temporary.to_str().unwrap()],
+        vec!["image", "check", temporary.to_str().unwrap()],
+    ] {
+        let result = Command::new(env!("CARGO_BIN_EXE_hermas"))
+            .args(arguments)
+            .output()
+            .expect("bounded CLI command runs");
+        assert!(!result.status.success());
+        assert!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .contains("exceeds the 1 MiB input limit")
+        );
+    }
+
+    fs::remove_file(temporary).expect("oversized fixture is removed");
 }

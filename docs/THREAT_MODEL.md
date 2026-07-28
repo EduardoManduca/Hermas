@@ -13,7 +13,8 @@ honest about its domain behavior.
 
 - **Graph images are untrusted.** Rust produces them, but the allocation-free
   C decoder independently validates the complete byte layout before runtime
-  use. Unsupported versions and noncanonical layouts are refused.
+  use. Unsupported versions, images larger than 1 MiB, and noncanonical
+  layouts are refused before runtime admission.
 - **App and caller packets are untrusted.** `SOCK_SEQPACKET` preserves packet
   boundaries, not correctness. Every frame is decoded field-by-field and
   checked against its connection role, Action identity, nominal types, and

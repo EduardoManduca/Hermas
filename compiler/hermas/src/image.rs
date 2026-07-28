@@ -11,6 +11,7 @@ use crate::graph::{
 const MAGIC: &[u8; 4] = b"HGI1";
 const VERSION: u16 = 1;
 const HEADER_SIZE: usize = 80;
+pub const MAX_GRAPH_IMAGE_SIZE: usize = 1024 * 1024;
 const ACTION_CONTRACT_RECORD_SIZE: usize = 36;
 const MAX_ACTION_CONTRACTS: usize = MAX_GRAPH_NODES + 16;
 const TYPE_RECORD_SIZE: usize = 8;
@@ -221,6 +222,13 @@ pub fn encode_graph_image(graph: &VerifiedGraph, catalog: &Catalog) -> Result<Ve
     let total_size = strings_offset
         .checked_add(view.name.len())
         .ok_or_else(|| ImageError::new(ImageErrorCode::SizeOverflow, None, "size overflow"))?;
+    if total_size > MAX_GRAPH_IMAGE_SIZE {
+        return Err(ImageError::new(
+            ImageErrorCode::SizeOverflow,
+            None,
+            "graph image exceeds the 1 MiB format limit",
+        ));
+    }
     let mut output = Vec::with_capacity(total_size);
     output.extend_from_slice(MAGIC);
     put_u16(&mut output, VERSION);
@@ -503,6 +511,13 @@ pub fn decode_graph_image(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
             ImageErrorCode::Truncated,
             None,
             "image is smaller than its fixed header",
+        ));
+    }
+    if bytes.len() > MAX_GRAPH_IMAGE_SIZE {
+        return Err(ImageError::new(
+            ImageErrorCode::SizeOverflow,
+            None,
+            "graph image exceeds the 1 MiB format limit",
         ));
     }
     if bytes.get(0..4) != Some(MAGIC) {
