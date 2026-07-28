@@ -31,6 +31,8 @@ installation details.
 `tools/test_order_total.sh` independently exercises a second architecture
 with a caller-provided integer, three unrelated contracts, different business
 logic, and its own restart proof. It prints `Order total: 9900 cents`.
+The graph-aware runner accepts that input as `--value 10000`; callers do not
+need to construct the canonical little-endian bytes for scalar values.
 
 ## Safety model
 

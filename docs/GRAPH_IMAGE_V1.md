@@ -224,3 +224,8 @@ The C decoder in `src/image.c` uses fixed arrays bounded by the image limits,
 performs no allocation, and reads every integer explicitly. Its parity test
 validates the Rust-produced golden image, every truncated prefix, and focused
 header/offset mutations under both GCC and Clang with warnings as errors.
+
+After complete validation, `hermas_image_describe_type` exposes only the
+outer representation kind and declared bound of a nominal Type. Developer
+tools use this narrow accessor for scalar presentation instead of duplicating
+graph-image offsets or treating representation bytes as native structures.

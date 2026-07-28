@@ -78,9 +78,19 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$control_socket" ]]
 
-# 10,000 cents as a canonical little-endian HSchema Integer.
-"$build/hermas_run" \
-    "$control_socket" 41 --image "$image" 1027000000000000
+# The graph-aware runner encodes the decimal HSchema Integer. Canonical
+# hexadecimal remains available through --hex for exact-byte automation.
+if "$build/hermas_run" \
+    "$control_socket" 40 --image "$image" --value not-an-integer \
+    >"$work/invalid.out" 2>"$work/invalid.err"; then
+    echo "order-total: invalid scalar input was accepted" >&2
+    exit 1
+fi
+grep -F "invalid argument or value" "$work/invalid.err"
+run_output=$("$build/hermas_run" \
+    "$control_socket" 41 --image "$image" --value 10000)
+grep -F "outcome=success" <<<"$run_output"
+grep -F "display=true" <<<"$run_output"
 wait "$discount_pid" "$tax_pid" "$receipt_pid"
 grep -Fx "Order total: 9900 cents" "$work/receipt.out"
 
