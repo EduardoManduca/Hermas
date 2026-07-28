@@ -1,6 +1,9 @@
 mod support;
 
-use hermas::{ImageErrorCode, decode_graph_image, encode_graph_image, validate_graph_value};
+use hermas::{
+    ImageErrorCode, MAX_GRAPH_IMAGE_SIZE, decode_graph_image, encode_graph_image,
+    validate_graph_value,
+};
 use sha2::{Digest, Sha256};
 use support::build_grade_pipeline;
 
@@ -49,6 +52,15 @@ fn every_truncated_prefix_is_rejected() {
             "accepted prefix of length {length}"
         );
     }
+}
+
+#[test]
+fn oversized_images_are_rejected_before_header_decoding() {
+    let bytes = vec![0; MAX_GRAPH_IMAGE_SIZE + 1];
+    assert_eq!(
+        decode_graph_image(&bytes).unwrap_err().code,
+        ImageErrorCode::SizeOverflow
+    );
 }
 
 #[test]

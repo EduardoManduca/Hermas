@@ -7,18 +7,26 @@ on:
   schedule:
     - cron: "41 4 * * 3"
 
+concurrency:
+  group: hermas-codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   security-events: write
 
 jobs:
   analyze:
+    name: CodeQL checks
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@adfda868f108ac4222129de456ea554034a27db7 # v4
         with:
           languages: c-cpp
       - run: cmake -S . -B build-codeql -DBUILD_TESTING=OFF
       - run: cmake --build build-codeql -j2
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@adfda868f108ac4222129de456ea554034a27db7 # v4

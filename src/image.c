@@ -343,6 +343,9 @@ hermas_image_result hermas_image_validate(
     if (bytes == NULL || size < HERMAS_HEADER_SIZE) {
         return HERMAS_IMAGE_TRUNCATED;
     }
+    if (size > HERMAS_IMAGE_MAX_SIZE) {
+        return HERMAS_IMAGE_INVALID_HEADER;
+    }
     if (memcmp(bytes, "HGI1", 4u) != 0) {
         return HERMAS_IMAGE_BAD_MAGIC;
     }

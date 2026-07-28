@@ -1,6 +1,7 @@
 #include "hermas/image.h"
 #include "hermas/version.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +49,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     long length = ftell(file);
-    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    if (length <= 0 ||
+        (uint64_t)length > HERMAS_IMAGE_MAX_SIZE ||
+        fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return 1;
     }

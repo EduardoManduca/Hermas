@@ -17,7 +17,7 @@ pub use hscript::{
     compile_hscript_workflow,
 };
 pub use image::{
-    DecodedImage, ImageError, ImageErrorCode, decode_graph_image, encode_graph_image,
-    validate_graph_value,
+    DecodedImage, ImageError, ImageErrorCode, MAX_GRAPH_IMAGE_SIZE, decode_graph_image,
+    encode_graph_image, validate_graph_value,
 };
 pub use schema::{ContractFingerprint, SchemaContract, SchemaDiagnostic, Span, compile_schema};

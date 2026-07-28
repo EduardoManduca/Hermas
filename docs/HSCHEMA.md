@@ -2,6 +2,9 @@
 
 Status: implemented language contract for Milestone 2.
 
+The alpha compiler accepts UTF-8 schema source files up to 1 MiB each. It
+rejects a larger file before parsing so source ingestion remains bounded.
+
 The standard source form is exactly one HSchema file per application. That
 file describes the application's identity, shared nominal boundary types,
 Action ports, and public compensation capabilities. It contains no workflow,
