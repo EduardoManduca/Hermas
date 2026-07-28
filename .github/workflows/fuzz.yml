@@ -16,23 +16,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo install cargo-fuzz --locked
+      - run: cargo build -p herma2
+      - run: tools/generate_test_fixtures.sh
       - name: Rust fuzz smoke
         if: github.event_name == 'pull_request'
         run: |
-          cargo fuzz run image -- -runs=500
-          cargo fuzz run schema -- -runs=500
-          cargo fuzz run hscript -- -runs=500
+          cargo fuzz run image target/gate-fixtures -- -runs=500
+          cargo fuzz run schema fuzz/seeds/schema -- -runs=500
+          cargo fuzz run hscript fuzz/seeds/hscript -- -runs=500
       - name: Rust scheduled fuzz
         if: github.event_name != 'pull_request'
         run: |
-          cargo fuzz run image -- -max_total_time=300
-          cargo fuzz run schema -- -max_total_time=300
-          cargo fuzz run hscript -- -max_total_time=300
+          cargo fuzz run image target/gate-fixtures -- -max_total_time=300
+          cargo fuzz run schema fuzz/seeds/schema -- -max_total_time=300
+          cargo fuzz run hscript fuzz/seeds/hscript -- -max_total_time=300
       - run: cmake -S . -B build-fuzz -DCMAKE_C_COMPILER=clang -DHERMAS2_BUILD_FUZZERS=ON
       - run: cmake --build build-fuzz --target hermas2_c_fuzz -j2
       - name: C fuzz smoke
         if: github.event_name == 'pull_request'
-        run: build-fuzz/hermas2_c_fuzz -runs=1000
+        run: build-fuzz/hermas2_c_fuzz -runs=1000 target/gate-fixtures
       - name: C scheduled fuzz
         if: github.event_name != 'pull_request'
-        run: build-fuzz/hermas2_c_fuzz -max_total_time=600
+        run: build-fuzz/hermas2_c_fuzz -max_total_time=600 target/gate-fixtures

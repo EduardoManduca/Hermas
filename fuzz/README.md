@@ -4,9 +4,10 @@ Fuzzing is a Linux release gate. Rust targets use `cargo-fuzz`:
 
 ```text
 cargo install cargo-fuzz
-cargo fuzz run image -- -max_total_time=60
-cargo fuzz run schema -- -max_total_time=60
-cargo fuzz run hscript -- -max_total_time=60
+tools/generate_test_fixtures.sh
+cargo fuzz run image target/gate-fixtures -- -max_total_time=60
+cargo fuzz run schema fuzz/seeds/schema -- -max_total_time=60
+cargo fuzz run hscript fuzz/seeds/hscript -- -max_total_time=60
 ```
 
 The C target multiplexes graph images, protocol packets, journals, terminal
@@ -23,6 +24,8 @@ build-fuzz/hermas2_c_fuzz -max_total_time=60 CORPUS_DIR
 
 Pull requests run bounded smoke sessions. Scheduled CI runs longer sessions.
 Any crashing input is retained as a regression fixture before a fix merges.
+The text-parser seeds are versioned under `fuzz/seeds`; image fuzzing starts
+from every deterministic release-gate graph.
 
 `tests/check_image_parity.py` generates a shared deterministic malformed-image
 corpus from the valid gate fixtures and requires the independent Rust and C

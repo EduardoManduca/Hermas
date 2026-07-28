@@ -1,4 +1,7 @@
 /target/
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/
 /build-*/
 **/*.swp
 **/*.tmp

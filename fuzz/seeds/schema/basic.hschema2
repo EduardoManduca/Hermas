@@ -1,0 +1,12 @@
+app seed
+
+type Input = Integer
+type Output = Boolean
+type Failure = Unit
+
+action run {
+    input Input
+    success Output
+    error Failure
+    compensation none
+}

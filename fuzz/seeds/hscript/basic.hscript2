@@ -1,0 +1,5 @@
+workflow seed(input: seed::Input) -> seed::Output
+errors { seed::Failure }
+{
+    return input |> seed/run()
+}
