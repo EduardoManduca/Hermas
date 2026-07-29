@@ -2,6 +2,7 @@
 
 #include "hermas/workspace_linux.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,27 @@ static int private_directory(const char *path) {
     return lstat(path, &status) == 0 &&
            S_ISDIR(status.st_mode) &&
            (status.st_mode & 0777u) == 0700u;
+}
+
+static int private_file(const char *path) {
+    struct stat status;
+    return lstat(path, &status) == 0 &&
+           S_ISREG(status.st_mode) &&
+           (status.st_mode & 0777u) == 0600u;
+}
+
+static int replace_byte(
+    const char *path,
+    off_t offset,
+    unsigned char value) {
+    int descriptor = open(path, O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (descriptor < 0) {
+        return 0;
+    }
+    ssize_t written = pwrite(descriptor, &value, 1u, offset);
+    int synced = fsync(descriptor);
+    int closed = close(descriptor);
+    return written == 1 && synced == 0 && closed == 0;
 }
 
 static int join_expected(
@@ -38,7 +60,7 @@ static int join_expected(
     return 1;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     char base[] = "/tmp/hermas-workspace-XXXXXX";
     if (mkdtemp(base) == NULL) {
         return fail("cannot create test root");
@@ -135,9 +157,98 @@ int main(void) {
             HERMAS_WORKSPACE_INVALID_ARGUMENT) {
         return fail("invalid arguments were accepted");
     }
+    if (hermas_workspace_open(workspace, false, &paths) !=
+            HERMAS_WORKSPACE_OK) {
+        return fail("workspace did not reopen before binding");
+    }
+    if (hermas_workspace_load(&paths, NULL) !=
+            HERMAS_WORKSPACE_INVALID_ARGUMENT) {
+        return fail("invalid binding arguments were accepted");
+    }
+    if (argc == 2) {
+        hermas_workspace_binding binding;
+        if (hermas_workspace_load(&paths, &binding) !=
+                HERMAS_WORKSPACE_NOT_INITIALIZED ||
+            hermas_workspace_bind(&paths, argv[1], 7u, &binding) !=
+                HERMAS_WORKSPACE_OK ||
+            binding.workflow_id != 7u ||
+            binding.image_fingerprint == 0u ||
+            binding.image_size == 0u ||
+            !private_file(paths.image_path) ||
+            !private_file(paths.manifest_path)) {
+            return fail("workspace binding was not created");
+        }
+        hermas_workspace_binding loaded;
+        if (hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_OK ||
+            loaded.workflow_id != binding.workflow_id ||
+            loaded.image_fingerprint != binding.image_fingerprint ||
+            loaded.image_size != binding.image_size ||
+            hermas_workspace_bind(&paths, argv[1], 7u, &loaded) !=
+                HERMAS_WORKSPACE_OK ||
+            hermas_workspace_bind(&paths, argv[1], 8u, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE) {
+            return fail("binding identity was not enforced");
+        }
+        if (!replace_byte(paths.manifest_path, 4, 2u) ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            !replace_byte(paths.manifest_path, 4, 1u) ||
+            !replace_byte(paths.manifest_path, 63, 1u) ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_INVALID_MANIFEST ||
+            !replace_byte(paths.manifest_path, 63, 0u) ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_OK) {
+            return fail("manifest compatibility was not enforced");
+        }
+        char image_backup[PATH_MAX];
+        if (!join_expected(
+                image_backup, sizeof(image_backup),
+                workspace, "/workflow.backup") ||
+            rename(paths.image_path, image_backup) != 0 ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_NOT_INITIALIZED ||
+            hermas_workspace_bind(&paths, argv[1], 7u, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            access(paths.image_path, F_OK) == 0 ||
+            rename(image_backup, paths.image_path) != 0 ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_OK) {
+            return fail("missing managed image was silently recreated");
+        }
+        char legacy_workspace[PATH_MAX];
+        if (!join_expected(
+                legacy_workspace, sizeof(legacy_workspace),
+                base, "/legacy-runtime")) {
+            return fail("cannot construct legacy workspace path");
+        }
+        hermas_workspace_paths legacy_paths;
+        if (hermas_workspace_open(
+                legacy_workspace, true, &legacy_paths) !=
+                HERMAS_WORKSPACE_OK) {
+            return fail("cannot create legacy workspace");
+        }
+        FILE *legacy_journal =
+            fopen(legacy_paths.journal_path, "wb");
+        if (legacy_journal == NULL ||
+            fclose(legacy_journal) != 0 ||
+            hermas_workspace_bind(
+                &legacy_paths, argv[1], 7u, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            access(legacy_paths.manifest_path, F_OK) == 0 ||
+            access(legacy_paths.image_path, F_OK) == 0) {
+            return fail("unbound durable state was silently adopted");
+        }
+        (void)unlink(legacy_paths.journal_path);
+        (void)rmdir(legacy_paths.state_directory);
+        (void)rmdir(legacy_workspace);
+    }
     (void)rmdir(long_path);
     (void)unlink(file_path);
     (void)unlink(link_path);
+    (void)unlink(paths.manifest_path);
+    (void)unlink(paths.image_path);
     (void)join_expected(
         expected, sizeof(expected), workspace, "/state");
     (void)rmdir(expected);

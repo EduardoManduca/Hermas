@@ -18,7 +18,8 @@ the daemon rather than deferred until invocation.
 
 The example Action processes accept `--workspace DIRECTORY FINGERPRINT` and
 derive the fixed private app-registration socket through
-`hermas_workspace_open`. Production bindings may use the same helper or call
+`hermas_workspace_open`, then reject an invalid binding through
+`hermas_workspace_load`. Production bindings may use the same helpers or call
 `hermas_edge_connect` with an explicit socket supplied by their supervisor.
 
 `hermas_edge_serve_once`:

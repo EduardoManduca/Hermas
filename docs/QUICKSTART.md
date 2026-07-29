@@ -21,6 +21,9 @@ It then stops the daemon, validates the durable journal with
 is not replayed. All sockets and temporary state are private and removed at
 the end. The daemon, apps, caller, and history tool share one `--workspace`
 directory; users do not construct its internal socket paths.
+The first daemon start pins the image and workflow ID into the workspace.
+The caller and restart then derive the image, workflow, socket paths, and
+format compatibility from that binding.
 
 To install C artifacts under a prefix:
 
@@ -36,12 +39,12 @@ Install the compiler directly from a checkout with:
 cargo install --path compiler/hermas
 ```
 
-`hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE` derives
-the nominal workflow input Type from the independently validated image and
+`hermas_run --workspace DIRECTORY EXECUTION_ID --value VALUE` derives the
+nominal workflow input Type from the independently validated managed image and
 encodes scalar HSchema values without manual wire bytes. For example, the
 Order Total test passes `--value 10000`. Exact canonical bytes remain
-available through `--hex`; advanced callers may still pass an explicit Type
-ID.
+available through `--hex`; advanced callers may still pass an explicit image,
+socket, and Type ID.
 
 ## Independent architecture check
 
@@ -56,3 +59,7 @@ Order total: 9900 cents
 This test has its own HSchema contracts, HScript graph, C processes, durable
 state, and restart proof. It guards against accidentally specializing the
 runtime or tooling to the Grade Pipeline.
+
+`tools/test_workspace_compatibility.sh` independently verifies the managed
+boundary. It refuses a changed workflow ID, a different graph image, and an
+unsupported manifest version across daemon, history, and caller entry points.

@@ -37,8 +37,10 @@ static hermas_journal_result print_record(
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
-            "Hermas %s (hermas_history; journal %u)\n",
-            HERMAS_VERSION, HERMAS_JOURNAL_VERSION);
+            "Hermas %s (hermas_history; journal %u, "
+            "workspace-manifest %u)\n",
+            HERMAS_VERSION, HERMAS_JOURNAL_VERSION,
+            HERMAS_WORKSPACE_MANIFEST_VERSION);
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
@@ -68,6 +70,22 @@ int main(int argc, char **argv) {
                 hermas_workspace_result_name(opened));
             return 2;
         }
+        hermas_workspace_binding binding;
+        hermas_workspace_result loaded =
+            hermas_workspace_load(&workspace, &binding);
+        if (loaded != HERMAS_WORKSPACE_OK) {
+            fprintf(
+                stderr,
+                "hermas_history: workspace binding failed: %s\n",
+                hermas_workspace_result_name(loaded));
+            return 2;
+        }
+        fprintf(
+            stderr,
+            "workspace workflow=%u image=%016" PRIx64
+            " manifest=%u\n",
+            binding.workflow_id, binding.image_fingerprint,
+            HERMAS_WORKSPACE_MANIFEST_VERSION);
         path = workspace.journal_path;
     }
     puts("sequence\texecution\tworkflow\tkind\toutcome\trequest"

@@ -8,6 +8,9 @@ promise.
 - Every binary protocol and durable format carries an explicit version.
   Unsupported versions are rejected; they are never guessed or silently
   reinterpreted.
+- Managed workspaces bind one exact graph image and workflow ID to all current
+  protocol and durable-state versions. Daemon, Action, caller, and history
+  entry points validate this binding before using sockets or state.
 - An alpha release may change HSchema, HScript, C APIs, protocol frames,
   graph images, or durable state when the change materially improves safety
   or coherence.
@@ -21,3 +24,4 @@ promise.
 
 Within one format version, decoders remain strict and deterministic. Adding a
 fallback that accepts ambiguous old bytes is a breaking safety regression.
+Changing manifest fields by hand is not a migration.

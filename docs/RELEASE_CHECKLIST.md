@@ -7,7 +7,8 @@ A release commit must have a clean tree and atomic reviewed history.
 - Rust/C image decoder parity passes over every deterministic fixture.
 - Rust and C fuzz smoke sessions report no crash.
 - Static analysis and dependency/security scans report no unresolved finding.
-- Grade Pipeline and independent Order Total integration tests pass.
+- Grade Pipeline, independent Order Total, and hostile managed-workspace
+  compatibility integration tests pass.
 - Both restart proofs preserve the exact completed journal.
 - Installation into an empty prefix contains headers, libraries, daemon,
   client, history and image tools, examples, documentation, and licenses.

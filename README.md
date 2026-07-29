@@ -22,18 +22,20 @@ Install a C17 compiler, CMake 3.20 or newer, Rust, and Cargo, then run:
 tools/quickstart.sh
 ```
 
-The reproducible quickstart compiles the Grade Pipeline, starts three
+The reproducible quickstart compiles the Grade Pipeline, creates a managed
+workspace, starts three
 independent Action processes and `hermasd`, executes the workflow, prints
 `Mean: 80`, inspects durable history, and proves a clean restart does not
 replay completed work. All processes share one private runtime workspace, so
-users do not coordinate internal socket paths. See
+users do not coordinate socket paths or repeat graph identity after
+initialization. See
 [the quickstart guide](docs/QUICKSTART.md) for installation details.
 
 `tools/test_order_total.sh` independently exercises a second architecture
 with a caller-provided integer, three unrelated contracts, different business
 logic, and its own restart proof. It prints `Order total: 9900 cents`.
 The graph-aware runner accepts that input as `--value 10000`; callers do not
-need to construct the canonical little-endian bytes for scalar values.
+need to construct canonical scalar bytes or supply the graph path again.
 
 ## Safety model
 
@@ -80,6 +82,7 @@ admission. Key executable specifications include:
 - [Protocol v1](docs/PROTOCOL_V1.md)
 - [C Action app guide](docs/APP_AUTHOR_GUIDE.md)
 - [Runtime workspace](docs/WORKSPACE.md)
+- [Workspace manifest v1](docs/WORKSPACE_MANIFEST_V1.md)
 - [Compatibility policy](docs/COMPATIBILITY.md)
 
 Community growth should primarily add Actions, bindings, diagnostics, test

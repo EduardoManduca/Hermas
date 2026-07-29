@@ -1,42 +1,67 @@
 # Hermas runtime workspace
 
-Status: implemented Linux alpha operator convention.
+Status: implemented managed Linux alpha workspace.
 
 A runtime workspace gives the daemon, Action processes, callers, and history
-tool one directory name instead of requiring users to coordinate internal
-socket and state paths:
+tool one directory name. It also pins the exact graph and format family that
+owns its durable state:
 
 ```text
 runtime/
-├── apps.sock
-├── control.sock
-└── state/
-    ├── journal.hj
-    ├── results.hr
-    ├── compensation.hc
-    └── saga.hs
+|-- manifest.hwm
+|-- workflow.hgi
+|-- apps.sock
+|-- control.sock
+`-- state/
+    |-- journal.hj
+    |-- results.hr
+    |-- compensation.hc
+    `-- saga.hs
 ```
 
-The socket names and state layout are fixed for the alpha. They are runtime
-implementation details, not HScript resources or application manifests.
-
-Start and use a workspace with:
+Initialize and start a workspace once with:
 
 ```text
 hermasd --workspace ./runtime workflow.hgi 1
+```
+
+The daemon validates the source image, copies its exact bytes into
+`workflow.hgi`, and durably creates `manifest.hwm`. The manifest binds the
+workspace to the workflow ID, image fingerprint and size, graph-image and
+protocol versions, and every current durable-state format version.
+
+All later processes derive that binding:
+
+```text
+hermasd --workspace ./runtime
 my_action --workspace ./runtime ACTION_FINGERPRINT
-hermas_run --workspace ./runtime 1 --image workflow.hgi --value 42
+hermas_run --workspace ./runtime 2 --value 42
 hermas_history --workspace ./runtime
 ```
 
-`hermasd` creates the workspace and state directories with mode `0700` when
-absent. Every tool rejects a directory that is a symlink, is not owned by the
-effective user, grants any group or other permission, or would create a Unix
-socket path that does not fit the platform bound. Existing paths are never
-replaced. Durable files retain their independent `O_NOFOLLOW`, ownership,
-permission, format, checksum, and lock validation.
+The initialization command is idempotent only when the workflow ID and exact
+image bytes are unchanged. It never replaces an existing managed image or
+manifest. A different workflow, different image, unsupported format version,
+malformed manifest, missing managed image, changed image, or unsafe file is
+rejected before sockets open or durable execution state is interpreted.
+An unbound workspace containing any durable state is also rejected; Hermas
+does not silently adopt state created without a manifest.
+
+`hermasd` creates the workspace and state directories with mode `0700`.
+Managed files use mode `0600`. Every tool rejects a directory that is a
+symlink, is not owned by the effective user, grants any group or other
+permission, or would create a Unix socket path beyond the platform bound.
+Managed files are regular, owner-only, non-symlink files. Durable state files
+retain their independent ownership, permission, format, checksum, and lock
+validation.
+
+The manifest and image are published only after complete writes and `fsync`.
+An interrupted initialization may leave an unpublished temporary file or a
+complete managed image without a manifest. Repeating the same initialization
+can finish the latter case; different bytes are refused.
 
 The explicit daemon, edge, client, and journal paths remain supported for
-embedding, isolated tests, and advanced operators. The workspace convention
+embedding, isolated tests, and advanced diagnostics. The managed convention
 does not change protocol frames, execution identities, delivery semantics, or
-recovery classification.
+recovery classification. See `WORKSPACE_MANIFEST_V1.md` for the canonical
+manifest layout.

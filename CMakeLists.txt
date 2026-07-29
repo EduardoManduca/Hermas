@@ -97,6 +97,8 @@ endif()
 if(UNIX)
     add_library(hermas_workspace STATIC src/workspace_linux.c)
     target_include_directories(hermas_workspace PUBLIC include)
+    target_link_libraries(hermas_workspace PUBLIC
+        hermas_image hermas_journal)
     target_compile_options(hermas_workspace PRIVATE
         -Wall -Wextra -Wpedantic -Werror)
     if(HERMAS_SANITIZE)
@@ -334,8 +336,14 @@ if(BUILD_TESTING)
             target_link_options(hermas_workspace_tests PRIVATE
                 -fsanitize=address,undefined)
         endif()
-        add_test(NAME hermas_workspace_tests
-                 COMMAND hermas_workspace_tests)
+        if(DEFINED HERMAS_TEST_IMAGE)
+            add_test(NAME hermas_workspace_tests
+                     COMMAND hermas_workspace_tests
+                             "${HERMAS_TEST_IMAGE}")
+        else()
+            add_test(NAME hermas_workspace_tests
+                     COMMAND hermas_workspace_tests)
+        endif()
         add_executable(hermas_compensation_linux_tests
                        tests/test_compensation_linux.c)
         target_link_libraries(hermas_compensation_linux_tests
@@ -642,7 +650,9 @@ if(UNIX)
             hermas_discount hermas_tax hermas_receipt
         RUNTIME DESTINATION
             ${CMAKE_INSTALL_LIBEXECDIR}/hermas/examples)
-    install(PROGRAMS tools/quickstart.sh tools/test_order_total.sh
+    install(PROGRAMS
+            tools/quickstart.sh tools/test_order_total.sh
+            tools/test_workspace_compatibility.sh
         DESTINATION ${CMAKE_INSTALL_DATADIR}/hermas)
 endif()
 
@@ -650,7 +660,7 @@ install(FILES
         README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md ROADMAP.md
         LICENSE-MIT LICENSE-APACHE
         docs/QUICKSTART.md docs/APP_AUTHOR_GUIDE.md
-        docs/WORKSPACE.md
+        docs/WORKSPACE.md docs/WORKSPACE_MANIFEST_V1.md
         docs/COMPATIBILITY.md docs/THREAT_MODEL.md
         docs/CRASH_RECOVERY_MATRIX.md docs/FEATURE_ADMISSION.md
         docs/RELEASE_CHECKLIST.md

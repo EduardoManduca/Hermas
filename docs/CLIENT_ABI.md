@@ -31,11 +31,13 @@ hermas_run CONTROL_SOCKET EXECUTION_ID INPUT_TYPE [INPUT_HEX]
 hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE
 hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --hex INPUT_HEX
 hermas_run --workspace DIRECTORY EXECUTION_ID --image IMAGE --value VALUE
+hermas_run --workspace DIRECTORY EXECUTION_ID --value VALUE
 ```
 
-Workspace mode derives the private control socket, so ordinary callers do not
-name or coordinate socket files. The explicit socket form remains the direct
-ABI diagnostic interface.
+Managed workspace mode derives both the private control socket and its pinned
+image, so ordinary callers do not name socket files or repeat graph identity.
+It rejects an incompatible workspace before connecting. The explicit image
+and socket forms remain direct diagnostic interfaces.
 
 Image mode derives the workflow input Type and accepts human-readable scalar
 values: `unit`, decimal `Integer`, `true` or `false`, unquoted `String` text,

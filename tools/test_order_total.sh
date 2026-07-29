@@ -80,15 +80,14 @@ done
 # The graph-aware runner encodes the decimal HSchema Integer. Canonical
 # hexadecimal remains available through --hex for exact-byte automation.
 if "$build/hermas_run" \
-    --workspace "$workspace" 40 --image "$image" \
-    --value not-an-integer \
+    --workspace "$workspace" 40 --value not-an-integer \
     >"$work/invalid.out" 2>"$work/invalid.err"; then
     echo "order-total: invalid scalar input was accepted" >&2
     exit 1
 fi
 grep -F "invalid argument or value" "$work/invalid.err"
 run_output=$("$build/hermas_run" \
-    --workspace "$workspace" 41 --image "$image" --value 10000)
+    --workspace "$workspace" 41 --value 10000)
 grep -F "outcome=success" <<<"$run_output"
 grep -F "display=true" <<<"$run_output"
 wait "$discount_pid" "$tax_pid" "$receipt_pid"
@@ -99,7 +98,7 @@ wait "$daemon_pid"
 daemon_pid=
 before=$(sha256sum "$workspace/state/journal.hj")
 
-"$build/hermasd" --workspace "$workspace" "$image" 1 &
+"$build/hermasd" --workspace "$workspace" &
 daemon_pid=$!
 for _ in $(seq 1 100); do
     [[ -S "$control_socket" ]] && break
