@@ -407,13 +407,11 @@ hermas_workspace_result hermas_workspace_load(
     return HERMAS_WORKSPACE_OK;
 }
 
-hermas_workspace_result hermas_workspace_action_fingerprint(
+static hermas_workspace_result load_bound_image(
     const hermas_workspace_paths *paths,
-    uint16_t app_id,
-    uint16_t action_id,
-    uint8_t fingerprint[32]) {
-    if (paths == NULL || app_id == 0u || action_id == 0u ||
-        fingerprint == NULL) {
+    uint8_t **image,
+    size_t *image_size) {
+    if (paths == NULL || image == NULL || image_size == NULL) {
         return HERMAS_WORKSPACE_INVALID_ARGUMENT;
     }
     hermas_workspace_binding binding;
@@ -422,34 +420,81 @@ hermas_workspace_result hermas_workspace_action_fingerprint(
     if (result != HERMAS_WORKSPACE_OK) {
         return result;
     }
-    uint8_t *image = malloc(HERMAS_IMAGE_MAX_SIZE);
-    if (image == NULL) {
+    uint8_t *loaded = malloc(HERMAS_IMAGE_MAX_SIZE);
+    if (loaded == NULL) {
         return HERMAS_WORKSPACE_IO_ERROR;
     }
-    size_t image_size = 0u;
+    size_t loaded_size = 0u;
     result = read_owned_file(
-        paths->image_path, image, HERMAS_IMAGE_MAX_SIZE, &image_size);
+        paths->image_path, loaded, HERMAS_IMAGE_MAX_SIZE, &loaded_size);
     uint64_t image_fingerprint = 0u;
     if (result == HERMAS_WORKSPACE_OK) {
         result = validate_image_bytes(
-            image, image_size, &image_fingerprint);
+            loaded, loaded_size, &image_fingerprint);
     }
     if (result == HERMAS_WORKSPACE_OK &&
-        (image_size != binding.image_size ||
+        (loaded_size != binding.image_size ||
          image_fingerprint != binding.image_fingerprint)) {
         result = HERMAS_WORKSPACE_INCOMPATIBLE;
     }
-    if (result == HERMAS_WORKSPACE_OK) {
-        hermas_image_result found = hermas_image_action_fingerprint(
-            image, image_size, app_id, action_id, fingerprint);
-        if (found == HERMAS_IMAGE_ACTION_NOT_FOUND) {
-            result = HERMAS_WORKSPACE_ACTION_NOT_FOUND;
-        } else if (found != HERMAS_IMAGE_OK) {
-            result = HERMAS_WORKSPACE_INVALID_IMAGE;
-        }
+    if (result != HERMAS_WORKSPACE_OK) {
+        free(loaded);
+        return result;
     }
+    *image = loaded;
+    *image_size = loaded_size;
+    return HERMAS_WORKSPACE_OK;
+}
+
+hermas_workspace_result hermas_workspace_action_fingerprint(
+    const hermas_workspace_paths *paths,
+    uint16_t app_id,
+    uint16_t action_id,
+    uint8_t fingerprint[32]) {
+    if (app_id == 0u || action_id == 0u || fingerprint == NULL) {
+        return HERMAS_WORKSPACE_INVALID_ARGUMENT;
+    }
+    uint8_t *image = NULL;
+    size_t image_size = 0u;
+    hermas_workspace_result result =
+        load_bound_image(paths, &image, &image_size);
+    if (result != HERMAS_WORKSPACE_OK) {
+        return result;
+    }
+    hermas_image_result found = hermas_image_action_fingerprint(
+        image, image_size, app_id, action_id, fingerprint);
     free(image);
-    return result;
+    if (found == HERMAS_IMAGE_ACTION_NOT_FOUND) {
+        return HERMAS_WORKSPACE_ACTION_NOT_FOUND;
+    }
+    return found == HERMAS_IMAGE_OK
+               ? HERMAS_WORKSPACE_OK
+               : HERMAS_WORKSPACE_INVALID_IMAGE;
+}
+
+hermas_workspace_result hermas_workspace_find_action_contract(
+    const hermas_workspace_paths *paths,
+    const uint8_t fingerprint[32],
+    hermas_image_action_contract *contract) {
+    if (fingerprint == NULL || contract == NULL) {
+        return HERMAS_WORKSPACE_INVALID_ARGUMENT;
+    }
+    uint8_t *image = NULL;
+    size_t image_size = 0u;
+    hermas_workspace_result result =
+        load_bound_image(paths, &image, &image_size);
+    if (result != HERMAS_WORKSPACE_OK) {
+        return result;
+    }
+    hermas_image_result found = hermas_image_find_action_contract(
+        image, image_size, fingerprint, contract);
+    free(image);
+    if (found == HERMAS_IMAGE_ACTION_NOT_FOUND) {
+        return HERMAS_WORKSPACE_ACTION_NOT_FOUND;
+    }
+    return found == HERMAS_IMAGE_OK
+               ? HERMAS_WORKSPACE_OK
+               : HERMAS_WORKSPACE_INVALID_IMAGE;
 }
 
 hermas_workspace_result hermas_workspace_bind(

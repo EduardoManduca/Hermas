@@ -80,6 +80,12 @@ from a fingerprinted HSchema contract. The digest covers that Action's name,
 ports, compensation declaration, and transitively referenced nominal types;
 unrelated declarations in the same app do not change it.
 
+The C image API can locate this record by fingerprint and derive the
+graph-local app, Action, input, success, and error Type IDs from the validated
+node, edge, and saga-region topology. This is an interpretation of existing
+v1 records, not an additional serialized field. A missing or ambiguous
+fingerprint is refused.
+
 ## Types and representations
 
 Each type record stores a nonzero graph-local Type ID, a zero reserved field,

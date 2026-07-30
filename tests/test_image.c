@@ -90,6 +90,64 @@ static int validate_saga_fixture(const char *path) {
         HERMAS_IMAGE_OK) {
         result = fail("valid saga image was rejected");
     } else {
+        uint16_t contract_count =
+            (uint16_t)bytes[
+                HERMAS_IMAGE_HEADER_ACTION_CONTRACT_COUNT_OFFSET] |
+            ((uint16_t)bytes[
+                HERMAS_IMAGE_HEADER_ACTION_CONTRACT_COUNT_OFFSET + 1u]
+             << 8u);
+        size_t contracts = read_u32(
+            bytes, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
+        size_t nodes =
+            read_u32(bytes, HERMAS_IMAGE_HEADER_NODES_OFFSET);
+        uint16_t node_count =
+            (uint16_t)bytes[HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET] |
+            ((uint16_t)bytes[
+                HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET + 1u]
+             << 8u);
+        bool resolved_compensation_only = false;
+        for (size_t index = 0u; index < contract_count; ++index) {
+            size_t record =
+                contracts +
+                index * HERMAS_IMAGE_ACTION_CONTRACT_RECORD_SIZE;
+            uint16_t app =
+                (uint16_t)bytes[record] |
+                ((uint16_t)bytes[record + 1u] << 8u);
+            uint16_t action =
+                (uint16_t)bytes[record + 2u] |
+                ((uint16_t)bytes[record + 3u] << 8u);
+            bool has_forward_node = false;
+            for (size_t node = 0u; node < node_count; ++node) {
+                size_t node_record =
+                    nodes + node * HERMAS_IMAGE_NODE_RECORD_SIZE;
+                if (bytes[node_record] == 1u &&
+                    ((uint16_t)bytes[node_record + 2u] |
+                     ((uint16_t)bytes[node_record + 3u] << 8u)) ==
+                        action &&
+                    ((uint16_t)bytes[node_record + 4u] |
+                     ((uint16_t)bytes[node_record + 5u] << 8u)) ==
+                        app) {
+                    has_forward_node = true;
+                    break;
+                }
+            }
+            hermas_image_action_contract contract;
+            if (hermas_image_find_action_contract(
+                    bytes, (size_t)length, bytes + record + 4u,
+                    &contract) != HERMAS_IMAGE_OK ||
+                contract.app_id != app ||
+                contract.action_id != action ||
+                contract.input_type == 0u ||
+                contract.success_type == 0u ||
+                contract.error_type == 0u) {
+                result = fail("Saga Action contract did not resolve");
+                break;
+            }
+            resolved_compensation_only |= !has_forward_node;
+        }
+        if (result == 0 && !resolved_compensation_only) {
+            result = fail("saga fixture has no compensation-only contract");
+        }
         size_t regions = read_u32(bytes, 72u);
         uint16_t region_count =
             (uint16_t)bytes[68] | ((uint16_t)bytes[69] << 8u);
@@ -146,6 +204,7 @@ int main(int argc, char **argv) {
         return fail("decoded summary differs");
     }
     uint8_t action_fingerprint[32];
+    hermas_image_action_contract action_contract;
     size_t action_contracts =
         read_u32(bytes, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
     if (hermas_image_action_fingerprint(
@@ -165,6 +224,48 @@ int main(int argc, char **argv) {
             HERMAS_IMAGE_INVALID_VALUE) {
         return fail("Action fingerprint lookup differs");
     }
+    if (hermas_image_find_action_contract(
+            bytes, (size_t)length, action_fingerprint,
+            &action_contract) != HERMAS_IMAGE_OK ||
+        action_contract.app_id != 1u ||
+        action_contract.action_id != 1u ||
+        action_contract.input_type != 1u ||
+        action_contract.success_type != 4u ||
+        action_contract.error_type != 3u ||
+        memcmp(
+            action_contract.fingerprint, action_fingerprint,
+            sizeof(action_fingerprint)) != 0) {
+        return fail("Action contract resolution differs");
+    }
+    uint8_t second_fingerprint[32];
+    memcpy(
+        second_fingerprint,
+        bytes + action_contracts +
+            HERMAS_IMAGE_ACTION_CONTRACT_RECORD_SIZE + 4u,
+        sizeof(second_fingerprint));
+    memcpy(
+        bytes + action_contracts +
+            HERMAS_IMAGE_ACTION_CONTRACT_RECORD_SIZE + 4u,
+        action_fingerprint, sizeof(action_fingerprint));
+    if (hermas_image_find_action_contract(
+            bytes, (size_t)length, action_fingerprint,
+            &action_contract) != HERMAS_IMAGE_INVALID_RECORD) {
+        return fail("ambiguous Action fingerprint was resolved");
+    }
+    memcpy(
+        bytes + action_contracts +
+            HERMAS_IMAGE_ACTION_CONTRACT_RECORD_SIZE + 4u,
+        second_fingerprint, sizeof(second_fingerprint));
+    action_fingerprint[0] ^= 0xffu;
+    if (hermas_image_find_action_contract(
+            bytes, (size_t)length, action_fingerprint,
+            &action_contract) != HERMAS_IMAGE_ACTION_NOT_FOUND ||
+        hermas_image_find_action_contract(
+            bytes, (size_t)length, NULL, &action_contract) !=
+            HERMAS_IMAGE_INVALID_VALUE) {
+        return fail("unknown Action contract was resolved");
+    }
+    action_fingerprint[0] ^= 0xffu;
     hermas_image_type_summary type;
     if (hermas_image_describe_type(
             bytes, (size_t)length, 1u, &type) != HERMAS_IMAGE_OK ||

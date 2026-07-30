@@ -40,10 +40,10 @@ hermas_history --workspace ./runtime
 ```
 
 An Action binary carries the semantic fingerprint generated from its HSchema.
-Workspace startup finds the graph-image assignment by numeric app and Action
-ID, then requires that fingerprint to match the compiled value. Operators do
-not copy fingerprints into command lines, and numeric IDs alone do not
-authorize an unrelated binary to register.
+Workspace startup finds that fingerprint in the graph image and returns its
+app, Action, input, success, and error Type assignments. Operators do not copy
+fingerprints or numeric IDs into command lines. Reordering schema inputs may
+change graph-local assignments without requiring an Action binary rebuild.
 
 The initialization command is idempotent only when the workflow ID and exact
 image bytes are unchanged. It never replaces an existing managed image or

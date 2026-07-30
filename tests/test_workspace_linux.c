@@ -180,6 +180,7 @@ int main(int argc, char **argv) {
         }
         hermas_workspace_binding loaded;
         uint8_t action_fingerprint[32];
+        hermas_image_action_contract action_contract;
         if (hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_OK ||
             loaded.workflow_id != binding.workflow_id ||
@@ -197,7 +198,15 @@ int main(int argc, char **argv) {
                 HERMAS_WORKSPACE_ACTION_NOT_FOUND ||
             hermas_workspace_action_fingerprint(
                 &paths, 0u, 1u, action_fingerprint) !=
-                HERMAS_WORKSPACE_INVALID_ARGUMENT) {
+                HERMAS_WORKSPACE_INVALID_ARGUMENT ||
+            hermas_workspace_find_action_contract(
+                &paths, action_fingerprint, &action_contract) !=
+                HERMAS_WORKSPACE_OK ||
+            action_contract.app_id != 1u ||
+            action_contract.action_id != 1u ||
+            action_contract.input_type != 1u ||
+            action_contract.success_type != 4u ||
+            action_contract.error_type != 3u) {
             return fail("binding identity was not enforced");
         }
         if (!replace_byte(paths.manifest_path, 4, 2u) ||

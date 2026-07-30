@@ -50,6 +50,15 @@ typedef struct hermas_image_type_summary {
     uint32_t bound;
 } hermas_image_type_summary;
 
+typedef struct hermas_image_action_contract {
+    uint16_t app_id;
+    uint16_t action_id;
+    uint16_t input_type;
+    uint16_t success_type;
+    uint16_t error_type;
+    uint8_t fingerprint[32];
+} hermas_image_action_contract;
+
 hermas_image_result hermas_image_validate(
     const uint8_t *bytes,
     size_t size,
@@ -75,6 +84,16 @@ hermas_image_result hermas_image_action_fingerprint(
     uint16_t app_id,
     uint16_t action_id,
     uint8_t fingerprint[32]);
+
+/*
+ * Resolves graph-local IDs and port Types from an independently compiled
+ * semantic Action fingerprint. The complete image is validated first.
+ */
+hermas_image_result hermas_image_find_action_contract(
+    const uint8_t *image,
+    size_t image_size,
+    const uint8_t fingerprint[32],
+    hermas_image_action_contract *contract);
 
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
