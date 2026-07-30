@@ -8,8 +8,7 @@ tools/quickstart.sh
 ```
 
 The script builds the Rust compiler and C runtime, compiles the real Grade
-Pipeline contracts and workflow, discovers its input Type and per-Action
-fingerprints from the validated image, starts three independent apps and
+Pipeline contracts and workflow, starts three independent apps and
 `hermasd`, executes the workflow, and prints:
 
 ```text
@@ -57,7 +56,10 @@ Order total: 9900 cents
 ```
 
 This test has its own HSchema contracts, HScript graph, C processes, durable
-state, and restart proof. It guards against accidentally specializing the
+state, and restart proof. Its schemas are intentionally supplied in a
+different order from its execution pipeline, proving that Action binaries
+resolve graph-local IDs and Types by semantic fingerprint rather than
+embedding catalog numbers. It guards against accidentally specializing the
 runtime or tooling to the Grade Pipeline.
 
 `tools/test_workspace_compatibility.sh` independently verifies the managed

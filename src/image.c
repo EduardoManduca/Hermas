@@ -1067,6 +1067,141 @@ hermas_image_result hermas_image_action_fingerprint(
     return HERMAS_IMAGE_ACTION_NOT_FOUND;
 }
 
+static bool assign_contract_type(uint16_t *slot, uint16_t value) {
+    if (value == 0u) {
+        return false;
+    }
+    if (*slot == 0u) {
+        *slot = value;
+        return true;
+    }
+    return *slot == value;
+}
+
+hermas_image_result hermas_image_find_action_contract(
+    const uint8_t *image,
+    size_t image_size,
+    const uint8_t fingerprint[32],
+    hermas_image_action_contract *contract) {
+    if (fingerprint == NULL || contract == NULL) {
+        return HERMAS_IMAGE_INVALID_VALUE;
+    }
+    hermas_image_result validated =
+        hermas_image_validate(image, image_size, NULL);
+    if (validated != HERMAS_IMAGE_OK) {
+        return validated;
+    }
+    size_t contracts = read_u32(
+        image, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
+    uint16_t contract_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_ACTION_CONTRACT_COUNT_OFFSET);
+    hermas_image_action_contract found;
+    memset(&found, 0, sizeof(found));
+    bool matched = false;
+    for (size_t index = 0u; index < contract_count; ++index) {
+        size_t record =
+            contracts + index * HERMAS_ACTION_CONTRACT_RECORD_SIZE;
+        if (memcmp(image + record + 4u, fingerprint, 32u) != 0) {
+            continue;
+        }
+        if (matched) {
+            return HERMAS_IMAGE_INVALID_RECORD;
+        }
+        found.app_id = read_u16(image, record);
+        found.action_id = read_u16(image, record + 2u);
+        memcpy(found.fingerprint, fingerprint, 32u);
+        matched = true;
+    }
+    if (!matched) {
+        return HERMAS_IMAGE_ACTION_NOT_FOUND;
+    }
+
+    uint16_t node_count =
+        read_u16(image, HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET);
+    uint16_t edge_count =
+        read_u16(image, HERMAS_IMAGE_HEADER_EDGE_COUNT_OFFSET);
+    size_t nodes =
+        read_u32(image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
+    size_t edges =
+        read_u32(image, HERMAS_IMAGE_HEADER_EDGES_OFFSET);
+    for (size_t index = 0u; index < node_count; ++index) {
+        size_t node_record =
+            nodes + index * HERMAS_IMAGE_NODE_RECORD_SIZE;
+        if (image[node_record] != 1u ||
+            read_u16(image, node_record + 2u) != found.action_id ||
+            read_u16(image, node_record + 4u) != found.app_id) {
+            continue;
+        }
+        uint16_t node = (uint16_t)(index + 1u);
+        uint16_t input = 0u;
+        uint16_t success = 0u;
+        uint16_t error = 0u;
+        for (size_t edge_index = 0u;
+             edge_index < edge_count; ++edge_index) {
+            size_t edge =
+                edges + edge_index * HERMAS_IMAGE_EDGE_RECORD_SIZE;
+            if (image[edge + 1u] == 1u &&
+                read_u16(image, edge + 6u) == node) {
+                input = read_u16(image, edge + 10u);
+            }
+            if (read_u16(image, edge + 4u) == node) {
+                if (image[edge] == 1u) {
+                    success = read_u16(image, edge + 8u);
+                } else if (image[edge] == 2u) {
+                    error = read_u16(image, edge + 8u);
+                }
+            }
+        }
+        if (!assign_contract_type(&found.input_type, input) ||
+            !assign_contract_type(&found.success_type, success) ||
+            !assign_contract_type(&found.error_type, error)) {
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
+        }
+    }
+
+    uint16_t region_count =
+        read_u16(image, HERMAS_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t regions =
+        read_u32(image, HERMAS_IMAGE_HEADER_REGIONS_OFFSET);
+    for (size_t index = 0u; index < region_count; ++index) {
+        size_t region =
+            regions + index * HERMAS_IMAGE_REGION_RECORD_SIZE;
+        if (image[region] != 3u ||
+            read_u16(image, region + 4u) != found.app_id ||
+            read_u16(image, region + 6u) != found.action_id) {
+            continue;
+        }
+        uint16_t forward = read_u16(image, region + 2u);
+        uint16_t success = 0u;
+        uint16_t error = 0u;
+        for (size_t outcome_index = 0u;
+             outcome_index < region_count; ++outcome_index) {
+            size_t outcome =
+                regions +
+                outcome_index * HERMAS_IMAGE_REGION_RECORD_SIZE;
+            if (image[outcome] == 4u &&
+                read_u16(image, outcome + 2u) == forward) {
+                success = read_u16(image, outcome + 4u);
+                error = read_u16(image, outcome + 6u);
+                break;
+            }
+        }
+        if (!assign_contract_type(
+                &found.input_type,
+                read_u16(image, region + 10u)) ||
+            !assign_contract_type(&found.success_type, success) ||
+            !assign_contract_type(&found.error_type, error)) {
+            return HERMAS_IMAGE_INVALID_TOPOLOGY;
+        }
+    }
+    if (found.input_type == 0u || found.success_type == 0u ||
+        found.error_type == 0u) {
+        return HERMAS_IMAGE_INVALID_TOPOLOGY;
+    }
+    *contract = found;
+    return HERMAS_IMAGE_OK;
+}
+
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
     size_t image_size,

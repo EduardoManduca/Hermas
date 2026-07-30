@@ -3,13 +3,6 @@
 
 #include <stdint.h>
 
-enum {
-    DISCOUNT_APP_ID = 1,
-    APPLY_ACTION_ID = 1,
-    SUBTOTAL_TYPE_ID = 3,
-    DISCOUNTED_TYPE_ID = 2
-};
-
 static const uint8_t APPLY_ACTION_FINGERPRINT[32] =
     HERMAS_DISCOUNT_ACTION_APPLY_FINGERPRINT;
 
@@ -29,19 +22,13 @@ static void write_i64(uint8_t *bytes, int64_t value) {
 }
 
 static int apply_discount(
-    void *user_data,
-    uint16_t action_id,
-    uint16_t input_type,
     const uint8_t *input,
     size_t input_length,
     uint16_t *outcome,
-    uint16_t *result_type,
     uint8_t *result,
     size_t result_capacity,
     size_t *result_length) {
-    (void)user_data;
-    if (action_id != APPLY_ACTION_ID ||
-        input_type != SUBTOTAL_TYPE_ID || input_length != 8u ||
+    if (input_length != 8u ||
         result_capacity < 8u) {
         return 0;
     }
@@ -51,7 +38,6 @@ static int apply_discount(
     }
     write_i64(result, subtotal * 9 / 10);
     *outcome = HERMAS_OUTCOME_SUCCESS;
-    *result_type = DISCOUNTED_TYPE_ID;
     *result_length = 8u;
     return 1;
 }
@@ -59,7 +45,6 @@ static int apply_discount(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
-        argc, argv, DISCOUNT_APP_ID, APPLY_ACTION_ID,
-        APPLY_ACTION_FINGERPRINT, apply_discount,
+        argc, argv, APPLY_ACTION_FINGERPRINT, apply_discount,
         result, sizeof(result));
 }

@@ -1,6 +1,8 @@
 #ifndef HERMAS_WORKSPACE_LINUX_H
 #define HERMAS_WORKSPACE_LINUX_H
 
+#include "hermas/image.h"
+
 #include <stdbool.h>
 #include <linux/limits.h>
 #include <stddef.h>
@@ -79,6 +81,15 @@ hermas_workspace_result hermas_workspace_action_fingerprint(
     uint16_t app_id,
     uint16_t action_id,
     uint8_t fingerprint[32]);
+
+/*
+ * Finds an installed Action by semantic identity and returns its graph-local
+ * IDs and port Types. Numeric assignments are outputs, never caller claims.
+ */
+hermas_workspace_result hermas_workspace_find_action_contract(
+    const hermas_workspace_paths *paths,
+    const uint8_t fingerprint[32],
+    hermas_image_action_contract *contract);
 
 const char *hermas_workspace_result_name(
     hermas_workspace_result result);

@@ -3,13 +3,6 @@
 
 #include <stdint.h>
 
-enum {
-    MEAN_CALCULATOR_APP_ID = 2,
-    CALCULATE_ACTION_ID = 2,
-    MEAN_INPUT_TYPE_ID = 8,
-    MEAN_TYPE_ID = 6
-};
-
 static const uint8_t CALCULATE_ACTION_FINGERPRINT[32] =
     HERMAS_MEAN_CALCULATOR_ACTION_CALCULATE_FINGERPRINT;
 
@@ -36,20 +29,13 @@ static void write_i64(uint8_t *bytes, int64_t value) {
 }
 
 static int calculate_mean(
-    void *user_data,
-    uint16_t action_id,
-    uint16_t input_type,
     const uint8_t *input,
     size_t input_length,
     uint16_t *outcome,
-    uint16_t *result_type,
     uint8_t *result,
     size_t result_capacity,
     size_t *result_length) {
-    (void)user_data;
-    if (action_id != CALCULATE_ACTION_ID ||
-        input_type != MEAN_INPUT_TYPE_ID ||
-        input_length != 32u || read_u32(input, 0u) != 3u ||
+    if (input_length != 32u || read_u32(input, 0u) != 3u ||
         read_u32(input, 4u) != 0u || result_capacity < 8u) {
         return 0;
     }
@@ -58,7 +44,6 @@ static int calculate_mean(
         read_i64(input + 24u);
     write_i64(result, total / 3);
     *outcome = HERMAS_OUTCOME_SUCCESS;
-    *result_type = MEAN_TYPE_ID;
     *result_length = 8u;
     return 1;
 }
@@ -66,7 +51,6 @@ static int calculate_mean(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
-        argc, argv, MEAN_CALCULATOR_APP_ID, CALCULATE_ACTION_ID,
-        CALCULATE_ACTION_FINGERPRINT, calculate_mean,
+        argc, argv, CALCULATE_ACTION_FINGERPRINT, calculate_mean,
         result, sizeof(result));
 }

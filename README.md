@@ -33,7 +33,9 @@ initialization. See
 
 `tools/test_order_total.sh` independently exercises a second architecture
 with a caller-provided integer, three unrelated contracts, different business
-logic, and its own restart proof. It prints `Order total: 9900 cents`.
+logic, reordered schema compilation, and its own restart proof. It prints
+`Order total: 9900 cents`. The unchanged Action binaries resolve their
+graph-local app, Action, and Type assignments by semantic identity.
 The graph-aware runner accepts that input as `--value 10000`; callers do not
 need to construct canonical scalar bytes or supply the graph path again.
 

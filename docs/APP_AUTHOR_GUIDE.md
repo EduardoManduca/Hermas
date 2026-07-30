@@ -41,19 +41,22 @@ deliberately does not present them as stable contract identities.
 ## 2. Own the handler
 
 Include `hermas/edge.h`, allocate a caller-owned `hermas_edge`, packet
-buffer, and result buffer, and connect with the exact app ID, local Action ID,
-and fingerprint. `hermas_edge_serve_once` validates one invocation before
-calling the handler.
+buffer, and result buffer. The low-level ABI connects with graph-local IDs
+and the semantic fingerprint, but an app must not embed those numeric IDs.
 
 On Linux, `hermas/workspace_linux.h` can resolve the app socket from the same
 private runtime directory used by the daemon. The helper also verifies the
-managed workspace manifest and image before the app connects. Apps may
-therefore accept one workspace path from their supervisor instead of exposing
-socket naming or graph-version selection as application configuration.
+managed workspace manifest and image before the app connects.
+`hermas_workspace_find_action_contract` takes the generated fingerprint and
+returns the installed app ID, Action ID, input Type, success Type, and error
+Type. These are validated deployment outputs, not application configuration.
+Apps may therefore accept one workspace path from their supervisor instead of
+exposing socket naming, graph-version selection, or catalog numbering.
 
 The handler must:
 
-- Accept only its declared Action and input nominal Type.
+- Accept only its declared Action and input nominal Type; a shared bootstrap
+  may enforce the resolved IDs before entering business code.
 - Treat input bytes as the canonical representation documented by HSchema.
 - Return either `HERMAS_OUTCOME_SUCCESS` with the success Type or
   `HERMAS_OUTCOME_APP_ERROR` with the error Type.
@@ -61,7 +64,9 @@ The handler must:
   policy inside the app.
 
 The Grade Pipeline and Order Total apps are complete independent examples.
-They share connection bootstrap code, never business handlers.
+Their shared bootstrap resolves and enforces deployment IDs, then selects the
+resolved success or error Type from the handler outcome. Business handlers
+see canonical values and never graph-local numbers.
 
 ## 3. Understand delivery ownership
 

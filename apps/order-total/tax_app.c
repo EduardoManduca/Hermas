@@ -3,13 +3,6 @@
 
 #include <stdint.h>
 
-enum {
-    TAX_APP_ID = 2,
-    CALCULATE_ACTION_ID = 2,
-    TAX_INPUT_TYPE_ID = 5,
-    TOTAL_TYPE_ID = 6
-};
-
 static const uint8_t CALCULATE_ACTION_FINGERPRINT[32] =
     HERMAS_TAX_ACTION_CALCULATE_FINGERPRINT;
 
@@ -29,19 +22,13 @@ static void write_i64(uint8_t *bytes, int64_t value) {
 }
 
 static int calculate_tax(
-    void *user_data,
-    uint16_t action_id,
-    uint16_t input_type,
     const uint8_t *input,
     size_t input_length,
     uint16_t *outcome,
-    uint16_t *result_type,
     uint8_t *result,
     size_t result_capacity,
     size_t *result_length) {
-    (void)user_data;
-    if (action_id != CALCULATE_ACTION_ID ||
-        input_type != TAX_INPUT_TYPE_ID || input_length != 8u ||
+    if (input_length != 8u ||
         result_capacity < 8u) {
         return 0;
     }
@@ -51,7 +38,6 @@ static int calculate_tax(
     }
     write_i64(result, discounted + discounted / 10);
     *outcome = HERMAS_OUTCOME_SUCCESS;
-    *result_type = TOTAL_TYPE_ID;
     *result_length = 8u;
     return 1;
 }
@@ -59,7 +45,6 @@ static int calculate_tax(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
-        argc, argv, TAX_APP_ID, CALCULATE_ACTION_ID,
-        CALCULATE_ACTION_FINGERPRINT, calculate_tax,
+        argc, argv, CALCULATE_ACTION_FINGERPRINT, calculate_tax,
         result, sizeof(result));
 }

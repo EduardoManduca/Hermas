@@ -4,13 +4,6 @@
 #include <stdint.h>
 #include <string.h>
 
-enum {
-    GRADE_LIST_APP_ID = 1,
-    GET_ACTION_ID = 1,
-    EMPTY_TYPE_ID = 1,
-    GRADES_TYPE_ID = 4
-};
-
 static const uint8_t GET_ACTION_FINGERPRINT[32] =
     HERMAS_GRADE_LIST_ACTION_GET_FINGERPRINT;
 
@@ -22,21 +15,14 @@ static void write_i64(uint8_t *bytes, int64_t value) {
 }
 
 static int get_grades(
-    void *user_data,
-    uint16_t action_id,
-    uint16_t input_type,
     const uint8_t *input,
     size_t input_length,
     uint16_t *outcome,
-    uint16_t *result_type,
     uint8_t *result,
     size_t result_capacity,
     size_t *result_length) {
-    (void)user_data;
     (void)input;
-    if (action_id != GET_ACTION_ID ||
-        input_type != EMPTY_TYPE_ID || input_length != 0u ||
-        result_capacity < 32u) {
+    if (input_length != 0u || result_capacity < 32u) {
         return 0;
     }
     memset(result, 0, 32u);
@@ -45,7 +31,6 @@ static int get_grades(
     write_i64(result + 16u, 80);
     write_i64(result + 24u, 90);
     *outcome = HERMAS_OUTCOME_SUCCESS;
-    *result_type = GRADES_TYPE_ID;
     *result_length = 32u;
     return 1;
 }
@@ -53,7 +38,6 @@ static int get_grades(
 int main(int argc, char **argv) {
     uint8_t result[32];
     return hermas_example_app_run_once(
-        argc, argv, GRADE_LIST_APP_ID, GET_ACTION_ID,
-        GET_ACTION_FINGERPRINT, get_grades,
+        argc, argv, GET_ACTION_FINGERPRINT, get_grades,
         result, sizeof(result));
 }

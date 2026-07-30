@@ -7,8 +7,33 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+
+static uint32_t read_u32(const uint8_t *bytes, size_t offset) {
+    return (uint32_t)bytes[offset] |
+           ((uint32_t)bytes[offset + 1u] << 8u) |
+           ((uint32_t)bytes[offset + 2u] << 16u) |
+           ((uint32_t)bytes[offset + 3u] << 24u);
+}
+
+static void fuzz_image(const uint8_t *bytes, size_t size) {
+    hermas_image_summary summary;
+    if (hermas_image_validate(bytes, size, &summary) !=
+            HERMAS_IMAGE_OK ||
+        summary.action_contract_count == 0u) {
+        return;
+    }
+    size_t contracts = read_u32(
+        bytes, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
+    uint8_t fingerprint[32];
+    memcpy(fingerprint, bytes + contracts + 4u, 32u);
+    hermas_image_action_contract contract;
+    (void)hermas_image_find_action_contract(
+        bytes, size, fingerprint, &contract);
+}
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    fuzz_image(data, size);
     if (size == 0u) {
         return 0;
     }
@@ -16,8 +41,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     size_t payload_size = size - 1u;
     switch (data[0] % 6u) {
         case 0u: {
-            (void)hermas_image_validate(
-                payload, payload_size, NULL);
+            fuzz_image(payload, payload_size);
             break;
         }
         case 1u: {

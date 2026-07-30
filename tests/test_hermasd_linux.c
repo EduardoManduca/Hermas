@@ -70,18 +70,6 @@ static int write_all(int descriptor, const uint8_t *bytes, size_t size) {
     return 1;
 }
 
-static void fingerprint_hex(
-    const uint8_t fingerprint[32],
-    char text[65]) {
-    static const char digits[] = "0123456789abcdef";
-    for (size_t index = 0u; index < 32u; ++index) {
-        text[index * 2u] = digits[fingerprint[index] >> 4u];
-        text[index * 2u + 1u] =
-            digits[fingerprint[index] & 0x0fu];
-    }
-    text[64] = '\0';
-}
-
 static pid_t spawn_daemon(
     const char *daemon,
     const char *image,
@@ -101,11 +89,11 @@ static pid_t spawn_daemon(
 static pid_t spawn_app(
     const char *executable,
     const char *socket_path,
-    const char *fingerprint) {
+    const char *image) {
     pid_t child = fork();
     if (child == 0) {
         execl(
-            executable, executable, socket_path, fingerprint,
+            executable, executable, socket_path, image,
             (char *)NULL);
         _exit(127);
     }
@@ -201,7 +189,6 @@ static int run_cycle(
     const char *app_socket,
     const char *control_socket,
     const char *const app_paths[3],
-    char fingerprints[4][65],
     uint16_t input_type,
     uint64_t execution_id,
     int use_runner) {
@@ -223,8 +210,7 @@ static int run_cycle(
     pid_t apps[3];
     for (size_t index = 0u; index < 3u; ++index) {
         apps[index] = spawn_app(
-            app_paths[index], app_socket,
-            fingerprints[index + 1u]);
+            app_paths[index], app_socket, image_path);
         if (apps[index] <= 0) {
             hermas_client_close(&client);
             (void)kill(daemon, SIGTERM);
@@ -300,16 +286,6 @@ int main(int argc, char **argv) {
         free(image);
         return fail("unexpected grade graph layout");
     }
-    char fingerprints[4][65] = {{0}};
-    for (size_t index = 0u; index < 3u; ++index) {
-        size_t offset = apps_offset + index * 36u;
-        uint16_t app_id = read_u16(image, offset);
-        if (app_id == 0u || app_id > 3u) {
-            free(image);
-            return fail("unexpected app identity");
-        }
-        fingerprint_hex(image + offset + 4u, fingerprints[app_id]);
-    }
     const char *app_paths[3] = {argv[4], argv[5], argv[6]};
     char secure_image[] = "/tmp/hermasd-image-XXXXXX";
     int secure_descriptor = mkstemp(secure_image);
@@ -344,11 +320,11 @@ int main(int argc, char **argv) {
     if (!run_cycle(
             argv[2], argv[3], secure_image, state,
             app_socket, control_socket, app_paths,
-            fingerprints, input_type, 1u, 0) ||
+            input_type, 1u, 0) ||
         !run_cycle(
             argv[2], argv[3], secure_image, state,
             app_socket, control_socket, app_paths,
-            fingerprints, input_type, 2u, 1)) {
+            input_type, 2u, 1)) {
         remove_state(state);
         unlink(secure_image);
         free(image);
