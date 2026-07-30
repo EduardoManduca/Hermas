@@ -17,12 +17,13 @@ fingerprint before accepting work. A mismatched registration is rejected by
 the daemon rather than deferred until invocation.
 
 The example Action processes accept `--workspace DIRECTORY`, derive the fixed
-private app-registration socket through `hermas_workspace_open`, and validate
-the managed graph's Action fingerprint against the compiler-generated value
-embedded in that binary. A process cannot acquire registration authority by
-claiming another Action's numeric IDs. Production bindings may use the same
-helpers or call `hermas_edge_connect` with an explicit socket supplied by
-their supervisor, but must still carry and verify their compiled identity.
+private app-registration socket through `hermas_workspace_open`, and resolve
+the managed graph's complete Action contract from the compiler-generated
+fingerprint embedded in that binary. App, Action, and port Type IDs come from
+the validated graph and are not claimed by the process. Production bindings
+may use the same helpers or call `hermas_edge_connect` with an explicit socket
+supplied by their supervisor, but must still resolve and verify their compiled
+identity.
 
 `hermas_edge_serve_once`:
 
@@ -34,10 +35,12 @@ their supervisor, but must still carry and verify their compiled identity.
 6. Requires exact success or app-error outcome metadata.
 7. Encodes and sends one `RESULT`.
 
-The handler receives only Action ID, destination input Type ID, and canonical
-payload bytes. It returns an explicit result Type ID and outcome. The library
-does not interpret business meaning, convert payloads, retry, supervise, or
-allocate.
+The low-level handler receives Action ID, destination input Type ID, and
+canonical payload bytes. It returns an explicit result Type ID and outcome.
+The example bootstrap checks those IDs against the resolved contract and
+chooses its success or error Type from the outcome, keeping graph-local
+numbers out of business handlers. The library does not interpret business
+meaning, convert payloads, retry, supervise, or allocate.
 
 The Linux integration test uses a real `SOCK_SEQPACKET` socket and separate
 client/server processes. It proves registration, invocation, result framing,

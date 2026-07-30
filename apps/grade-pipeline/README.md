@@ -17,10 +17,10 @@ Each app owns a separate implementation file:
 They share only the small
 [example bootstrap](../example_app.c), which validates each binary's
 compiler-generated contract fingerprint, connects through `libhermas_edge`,
-and serves one Action. App IDs, Action checks, nominal Type IDs, buffers, and
-business logic remain in their owning app source. This is the same boundary
-future apps are expected to use: reuse the stable edge ABI, not another app's
-handler.
+resolves graph-local IDs and port Types from the managed image, and serves one
+Action. Business handlers own buffers and domain logic but contain no catalog
+numbers. This is the same boundary future apps are expected to use: reuse the
+stable edge ABI and semantic contract identity, not another app's handler.
 
 No calculation or printing is performed by HScript or the daemon. The
 workflow graph only routes the canonical values and nominal presentation

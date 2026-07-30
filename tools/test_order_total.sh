@@ -26,9 +26,9 @@ cmake --build "$build" -j2
 image="$work/order-total.hgi"
 "$hermas" workflow image \
     apps/order-total/order-total.hscript "$image" \
+    apps/order-total/receipt.hschema \
     apps/order-total/discount.hschema \
-    apps/order-total/tax.hschema \
-    apps/order-total/receipt.hschema
+    apps/order-total/tax.hschema
 chmod 600 "$image"
 
 workspace="$work/runtime"
@@ -43,15 +43,15 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-# App/action numbers are not authority. A different binary using the same
-# numeric pair must be rejected against its compiler-generated contract.
+# Semantic identity resolves graph-local assignments. A binary whose
+# contract is absent must be rejected without claiming numeric IDs.
 if "$build/hermas_grade_list" --workspace "$workspace" \
     >"$work/wrong-app.out" 2>"$work/wrong-app.err"; then
     echo "order-total: wrong Action binary was accepted" >&2
     exit 1
 fi
 grep -F \
-    "workspace Action contract does not match this binary" \
+    "workspace Action identity failed: action-not-found" \
     "$work/wrong-app.err"
 
 "$build/hermas_discount" --workspace "$workspace" &

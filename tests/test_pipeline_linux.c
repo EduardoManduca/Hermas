@@ -67,17 +67,6 @@ static void run_bad_registration(
     _exit(0);
 }
 
-static void fingerprint_hex(
-    const uint8_t fingerprint[32],
-    char text[65]) {
-    static const char digits[] = "0123456789abcdef";
-    for (size_t index = 0u; index < 32u; ++index) {
-        text[index * 2u] = digits[fingerprint[index] >> 4u];
-        text[index * 2u + 1u] = digits[fingerprint[index] & 0x0fu];
-    }
-    text[64] = '\0';
-}
-
 static int create_listener(const char *path) {
     int descriptor = socket(AF_UNIX, SOCK_SEQPACKET, 0);
     if (descriptor < 0) {
@@ -156,7 +145,6 @@ int main(int argc, char **argv) {
         return fail("cannot read graph image");
     }
     uint8_t fingerprints[4][32] = {{0u}};
-    char fingerprint_text[4][65] = {{0}};
     size_t action_contract_count = read_u16(image, 28u);
     size_t apps_offset = read_u32(image, 40u);
     for (size_t index = 0u; index < action_contract_count; ++index) {
@@ -167,7 +155,6 @@ int main(int argc, char **argv) {
             return fail("fixture app IDs differ");
         }
         memcpy(fingerprints[app_id], image + offset + 4u, 32u);
-        fingerprint_hex(fingerprints[app_id], fingerprint_text[app_id]);
     }
 
     char socket_path[96];
@@ -216,8 +203,9 @@ int main(int argc, char **argv) {
             }
             close(output_pipe[1]);
             const char *executable = argv[(size_t)app + 1u];
-            execl(executable, executable, socket_path,
-                  fingerprint_text[app], (char *)NULL);
+            execl(
+                executable, executable, socket_path, argv[1],
+                (char *)NULL);
             _exit(1);
         }
         if (children[app - 1u] < 0) {

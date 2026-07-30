@@ -9,6 +9,8 @@ A release commit must have a clean tree and atomic reviewed history.
 - Static analysis and dependency/security scans report no unresolved finding.
 - Grade Pipeline, independent Order Total, and hostile managed-workspace
   compatibility integration tests pass.
+- Action binaries remain valid when schema compilation order changes every
+  graph-local app, Action, and Type assignment.
 - Both restart proofs preserve the exact completed journal.
 - Installation into an empty prefix contains headers, libraries, daemon,
   client, history and image tools, examples, documentation, and licenses.
