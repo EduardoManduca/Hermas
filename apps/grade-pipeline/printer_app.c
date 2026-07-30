@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "printer.contract.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -9,6 +10,9 @@ enum {
     PRINT_INPUT_TYPE_ID = 10,
     PRINTED_TYPE_ID = 11
 };
+
+static const uint8_t PRINT_ACTION_FINGERPRINT[32] =
+    HERMAS_PRINTER_ACTION_PRINT_FINGERPRINT;
 
 static int64_t read_i64(const uint8_t *bytes) {
     uint64_t value = 0u;
@@ -47,6 +51,7 @@ static int print_mean(
 int main(int argc, char **argv) {
     uint8_t result[1];
     return hermas_example_app_run_once(
-        argc, argv, PRINTER_APP_ID, PRINT_ACTION_ID, print_mean,
+        argc, argv, PRINTER_APP_ID, PRINT_ACTION_ID,
+        PRINT_ACTION_FINGERPRINT, print_mean,
         result, sizeof(result));
 }

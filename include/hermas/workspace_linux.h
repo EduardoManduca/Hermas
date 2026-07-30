@@ -19,7 +19,8 @@ typedef enum hermas_workspace_result {
     HERMAS_WORKSPACE_INVALID_MANIFEST,
     HERMAS_WORKSPACE_INCOMPATIBLE,
     HERMAS_WORKSPACE_INVALID_IMAGE,
-    HERMAS_WORKSPACE_IO_ERROR
+    HERMAS_WORKSPACE_IO_ERROR,
+    HERMAS_WORKSPACE_ACTION_NOT_FOUND
 } hermas_workspace_result;
 
 typedef struct hermas_workspace_paths {
@@ -67,6 +68,17 @@ hermas_workspace_result hermas_workspace_bind(
 hermas_workspace_result hermas_workspace_load(
     const hermas_workspace_paths *paths,
     hermas_workspace_binding *binding);
+
+/*
+ * Resolves one Action's semantic fingerprint from the validated managed image.
+ * App and Action IDs are graph-image assignments, not authority. The caller
+ * must compare the result with its independently compiled expected identity.
+ */
+hermas_workspace_result hermas_workspace_action_fingerprint(
+    const hermas_workspace_paths *paths,
+    uint16_t app_id,
+    uint16_t action_id,
+    uint8_t fingerprint[32]);
 
 const char *hermas_workspace_result_name(
     hermas_workspace_result result);

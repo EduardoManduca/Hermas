@@ -16,11 +16,13 @@ thread. The application owns:
 fingerprint before accepting work. A mismatched registration is rejected by
 the daemon rather than deferred until invocation.
 
-The example Action processes accept `--workspace DIRECTORY FINGERPRINT` and
-derive the fixed private app-registration socket through
-`hermas_workspace_open`, then reject an invalid binding through
-`hermas_workspace_load`. Production bindings may use the same helpers or call
-`hermas_edge_connect` with an explicit socket supplied by their supervisor.
+The example Action processes accept `--workspace DIRECTORY`, derive the fixed
+private app-registration socket through `hermas_workspace_open`, and validate
+the managed graph's Action fingerprint against the compiler-generated value
+embedded in that binary. A process cannot acquire registration authority by
+claiming another Action's numeric IDs. Production bindings may use the same
+helpers or call `hermas_edge_connect` with an explicit socket supplied by
+their supervisor, but must still carry and verify their compiled identity.
 
 `hermas_edge_serve_once`:
 

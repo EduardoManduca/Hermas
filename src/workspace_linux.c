@@ -407,6 +407,51 @@ hermas_workspace_result hermas_workspace_load(
     return HERMAS_WORKSPACE_OK;
 }
 
+hermas_workspace_result hermas_workspace_action_fingerprint(
+    const hermas_workspace_paths *paths,
+    uint16_t app_id,
+    uint16_t action_id,
+    uint8_t fingerprint[32]) {
+    if (paths == NULL || app_id == 0u || action_id == 0u ||
+        fingerprint == NULL) {
+        return HERMAS_WORKSPACE_INVALID_ARGUMENT;
+    }
+    hermas_workspace_binding binding;
+    hermas_workspace_result result =
+        hermas_workspace_load(paths, &binding);
+    if (result != HERMAS_WORKSPACE_OK) {
+        return result;
+    }
+    uint8_t *image = malloc(HERMAS_IMAGE_MAX_SIZE);
+    if (image == NULL) {
+        return HERMAS_WORKSPACE_IO_ERROR;
+    }
+    size_t image_size = 0u;
+    result = read_owned_file(
+        paths->image_path, image, HERMAS_IMAGE_MAX_SIZE, &image_size);
+    uint64_t image_fingerprint = 0u;
+    if (result == HERMAS_WORKSPACE_OK) {
+        result = validate_image_bytes(
+            image, image_size, &image_fingerprint);
+    }
+    if (result == HERMAS_WORKSPACE_OK &&
+        (image_size != binding.image_size ||
+         image_fingerprint != binding.image_fingerprint)) {
+        result = HERMAS_WORKSPACE_INCOMPATIBLE;
+    }
+    if (result == HERMAS_WORKSPACE_OK) {
+        hermas_image_result found = hermas_image_action_fingerprint(
+            image, image_size, app_id, action_id, fingerprint);
+        if (found == HERMAS_IMAGE_ACTION_NOT_FOUND) {
+            result = HERMAS_WORKSPACE_ACTION_NOT_FOUND;
+        } else if (found != HERMAS_IMAGE_OK) {
+            result = HERMAS_WORKSPACE_INVALID_IMAGE;
+        }
+    }
+    free(image);
+    return result;
+}
+
 hermas_workspace_result hermas_workspace_bind(
     const hermas_workspace_paths *paths,
     const char *image_path,
@@ -525,7 +570,8 @@ const char *hermas_workspace_result_name(
     static const char *const names[] = {
         "ok", "invalid-argument", "path-too-long",
         "unsafe-directory", "not-initialized", "invalid-manifest",
-        "incompatible", "invalid-image", "io-error"
+        "incompatible", "invalid-image", "io-error",
+        "action-not-found"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0])

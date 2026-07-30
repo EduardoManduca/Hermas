@@ -1037,6 +1037,36 @@ hermas_image_result hermas_image_describe_type(
     return HERMAS_IMAGE_OK;
 }
 
+hermas_image_result hermas_image_action_fingerprint(
+    const uint8_t *image,
+    size_t image_size,
+    uint16_t app_id,
+    uint16_t action_id,
+    uint8_t fingerprint[32]) {
+    if (app_id == 0u || action_id == 0u || fingerprint == NULL) {
+        return HERMAS_IMAGE_INVALID_VALUE;
+    }
+    hermas_image_result result =
+        hermas_image_validate(image, image_size, NULL);
+    if (result != HERMAS_IMAGE_OK) {
+        return result;
+    }
+    size_t contracts = read_u32(
+        image, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
+    uint16_t count = read_u16(
+        image, HERMAS_IMAGE_HEADER_ACTION_CONTRACT_COUNT_OFFSET);
+    for (size_t index = 0u; index < count; ++index) {
+        size_t record =
+            contracts + index * HERMAS_ACTION_CONTRACT_RECORD_SIZE;
+        if (read_u16(image, record) == app_id &&
+            read_u16(image, record + 2u) == action_id) {
+            memcpy(fingerprint, image + record + 4u, 32u);
+            return HERMAS_IMAGE_OK;
+        }
+    }
+    return HERMAS_IMAGE_ACTION_NOT_FOUND;
+}
+
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,
     size_t image_size,
@@ -1133,7 +1163,8 @@ const char *hermas_image_result_name(hermas_image_result result) {
     static const char *const names[] = {
         "ok", "truncated", "bad-magic", "unsupported-version",
         "invalid-header", "invalid-offset", "invalid-count", "invalid-string",
-        "invalid-record", "duplicate-record", "invalid-topology", "invalid-value"
+        "invalid-record", "duplicate-record", "invalid-topology",
+        "invalid-value", "action-not-found"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0]) ? names[index] : "unknown";

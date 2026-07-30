@@ -25,8 +25,18 @@ Every Action explicitly publishes either `compensation none` or the name of
 another local Action that accepts its success value. This is a capability
 declaration, not a claim that side effects are literally reversible.
 
-Run `hermas schema check FILE` to obtain the semantic per-Action fingerprint.
-The graph image embeds the same fingerprint for runtime registration.
+Generate the C identity header beside the app:
+
+```sh
+hermas schema c-header example.hschema example.contract.h EXAMPLE
+```
+
+Include that generated header and initialize the app's expected fingerprint
+from `EXAMPLE_ACTION_PROCESS_FINGERPRINT`. Regenerate and commit the header
+whenever the schema changes. The graph image embeds the independently
+compiled fingerprint and registration succeeds only when both agree. Numeric
+app, Action, and Type IDs are graph-image assignments; the generated header
+deliberately does not present them as stable contract identities.
 
 ## 2. Own the handler
 
@@ -50,8 +60,8 @@ The handler must:
 - Keep business validation, authorization, side effects, and internal retry
   policy inside the app.
 
-The Grade Pipeline apps are complete small examples. They share connection
-bootstrap code, never business handlers.
+The Grade Pipeline and Order Total apps are complete independent examples.
+They share connection bootstrap code, never business handlers.
 
 ## 3. Understand delivery ownership
 

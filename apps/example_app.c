@@ -40,22 +40,25 @@ int hermas_example_app_run_once(
     char **argv,
     uint16_t app_id,
     uint16_t action_id,
+    const uint8_t expected_fingerprint[32],
     hermas_action_handler handler,
     uint8_t *result,
     size_t result_capacity) {
     int workspace_mode =
-        argc == 4 && strcmp(argv[1], "--workspace") == 0;
-    if (argc != 3 && !workspace_mode) {
+        argc >= 2 && strcmp(argv[1], "--workspace") == 0;
+    if ((!workspace_mode && argc != 3) ||
+        (workspace_mode && argc != 3) ||
+        expected_fingerprint == NULL) {
         fprintf(
             stderr,
             "usage: %s SOCKET CONTRACT_SHA256\n"
-            "       %s --workspace DIRECTORY CONTRACT_SHA256\n",
+            "       %s --workspace DIRECTORY\n",
             argv[0], argv[0]);
         return 2;
     }
     hermas_workspace_paths workspace;
     const char *socket_path = argv[1];
-    const char *fingerprint_text = argv[2];
+    uint8_t fingerprint[32];
     if (workspace_mode) {
         hermas_workspace_result opened =
             hermas_workspace_open(argv[2], false, &workspace);
@@ -65,26 +68,39 @@ int hermas_example_app_run_once(
                 hermas_workspace_result_name(opened));
             return 2;
         }
-        hermas_workspace_binding binding;
-        hermas_workspace_result loaded =
-            hermas_workspace_load(&workspace, &binding);
-        if (loaded != HERMAS_WORKSPACE_OK) {
+        hermas_workspace_result resolved =
+            hermas_workspace_action_fingerprint(
+                &workspace, app_id, action_id, fingerprint);
+        if (resolved != HERMAS_WORKSPACE_OK) {
             fprintf(
-                stderr, "workspace binding failed: %s\n",
-                hermas_workspace_result_name(loaded));
+                stderr, "workspace Action identity failed: %s\n",
+                hermas_workspace_result_name(resolved));
             return 2;
         }
         socket_path = workspace.app_socket;
-        fingerprint_text = argv[3];
-    }
-    uint8_t fingerprint[32];
-    if (!parse_fingerprint(fingerprint_text, fingerprint)) {
+        if (memcmp(
+                expected_fingerprint, fingerprint,
+                sizeof(fingerprint)) != 0) {
+            fputs(
+                "workspace Action contract does not match this binary\n",
+                stderr);
+            return 2;
+        }
+    } else if (!parse_fingerprint(argv[2], fingerprint)) {
         fputs("invalid contract fingerprint\n", stderr);
+        return 2;
+    } else if (memcmp(
+                   expected_fingerprint, fingerprint,
+                   sizeof(fingerprint)) != 0) {
+        fputs(
+            "supplied Action contract does not match this binary\n",
+            stderr);
         return 2;
     }
     hermas_edge edge;
     if (hermas_edge_connect(
-            &edge, socket_path, app_id, action_id, fingerprint) !=
+            &edge, socket_path, app_id, action_id,
+            expected_fingerprint) !=
         HERMAS_EDGE_OK) {
         return 1;
     }

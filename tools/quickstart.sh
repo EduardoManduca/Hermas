@@ -31,25 +31,6 @@ image="$work/grade-pipeline.hgi"
     apps/grade-pipeline/printer.hschema
 chmod 600 "$image"
 
-description=$("$build/hermas_image_check" --describe "$image")
-fingerprint() {
-    local app=$1
-    local action=$2
-    awk -v app="app=$app" -v action="id=$action" \
-        '$1 == "action" && $2 == app && $3 == action {
-            sub(/^fingerprint=/, "", $4)
-            print $4
-        }' <<<"$description"
-}
-
-grade_fp=$(fingerprint 1 1)
-mean_fp=$(fingerprint 2 2)
-printer_fp=$(fingerprint 3 3)
-if [[ -z "$grade_fp" || -z "$mean_fp" || -z "$printer_fp" ]]; then
-    echo "quickstart: could not discover Action fingerprints" >&2
-    exit 1
-fi
-
 workspace="$work/runtime"
 app_socket="$workspace/apps.sock"
 control_socket="$workspace/control.sock"
@@ -62,11 +43,11 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas_grade_list" --workspace "$workspace" "$grade_fp" &
+"$build/hermas_grade_list" --workspace "$workspace" &
 grade_pid=$!
-"$build/hermas_mean_calculator" --workspace "$workspace" "$mean_fp" &
+"$build/hermas_mean_calculator" --workspace "$workspace" &
 mean_pid=$!
-"$build/hermas_printer" --workspace "$workspace" "$printer_fp" &
+"$build/hermas_printer" --workspace "$workspace" &
 printer_pid=$!
 
 for _ in $(seq 1 100); do

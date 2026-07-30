@@ -36,8 +36,11 @@ honest about its domain behavior.
   state interpretation.
 - **Apps are authorized domain principals, not trusted runtime peers.** Exact
   per-Action fingerprints prevent one endpoint from registering for a
-  different contract. Apps still own authorization, validation, side effects,
-  retries, and the truth of their returned domain result.
+  different contract. Workspace lookup does not grant authority from numeric
+  app/Action IDs: the looked-up graph identity must match an independently
+  compiler-generated fingerprint embedded in the binary. Apps still own
+  authorization, validation, side effects, retries, and the truth of their
+  returned domain result.
 
 ## Protected guarantees
 

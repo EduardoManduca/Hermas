@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "grade-list.contract.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -9,6 +10,9 @@ enum {
     EMPTY_TYPE_ID = 1,
     GRADES_TYPE_ID = 4
 };
+
+static const uint8_t GET_ACTION_FINGERPRINT[32] =
+    HERMAS_GRADE_LIST_ACTION_GET_FINGERPRINT;
 
 static void write_i64(uint8_t *bytes, int64_t value) {
     uint64_t bits = (uint64_t)value;
@@ -49,6 +53,7 @@ static int get_grades(
 int main(int argc, char **argv) {
     uint8_t result[32];
     return hermas_example_app_run_once(
-        argc, argv, GRADE_LIST_APP_ID, GET_ACTION_ID, get_grades,
+        argc, argv, GRADE_LIST_APP_ID, GET_ACTION_ID,
+        GET_ACTION_FINGERPRINT, get_grades,
         result, sizeof(result));
 }
