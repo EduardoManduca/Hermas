@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "discount.contract.h"
 
 #include <stdint.h>
 
@@ -8,6 +9,9 @@ enum {
     SUBTOTAL_TYPE_ID = 3,
     DISCOUNTED_TYPE_ID = 2
 };
+
+static const uint8_t APPLY_ACTION_FINGERPRINT[32] =
+    HERMAS_DISCOUNT_ACTION_APPLY_FINGERPRINT;
 
 static int64_t read_i64(const uint8_t *bytes) {
     uint64_t value = 0u;
@@ -55,6 +59,7 @@ static int apply_discount(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
-        argc, argv, DISCOUNT_APP_ID, APPLY_ACTION_ID, apply_discount,
+        argc, argv, DISCOUNT_APP_ID, APPLY_ACTION_ID,
+        APPLY_ACTION_FINGERPRINT, apply_discount,
         result, sizeof(result));
 }

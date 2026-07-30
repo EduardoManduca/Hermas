@@ -5,7 +5,7 @@ use std::process::ExitCode;
 
 use hermas::{
     Catalog, MAX_GRAPH_IMAGE_SIZE, compile_hscript_module, compile_schema, decode_graph_image,
-    encode_graph_image,
+    encode_graph_image, generate_c_contract_header,
 };
 
 const MAX_SOURCE_SIZE: usize = 1024 * 1024;
@@ -37,6 +37,37 @@ fn main() -> ExitCode {
 }
 
 fn schema_command(arguments: &[String]) -> ExitCode {
+    if arguments.first().map(String::as_str) == Some("c-header") {
+        if arguments.len() != 4 {
+            usage();
+            return ExitCode::from(2);
+        }
+        let source = match read_source(&arguments[1], "schema") {
+            Ok(source) => source,
+            Err(code) => return code,
+        };
+        let mut catalog = Catalog::new();
+        let contract = match compile_schema(&mut catalog, &arguments[1], &source) {
+            Ok(contract) => contract,
+            Err(error) => {
+                eprintln!("{error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let header = match generate_c_contract_header(&contract, &arguments[3]) {
+            Ok(header) => header,
+            Err(error) => {
+                eprintln!("{}: {error}", arguments[3]);
+                return ExitCode::FAILURE;
+            }
+        };
+        if let Err(error) = fs::write(&arguments[2], header) {
+            eprintln!("{}: cannot write C contract header: {error}", arguments[2]);
+            return ExitCode::FAILURE;
+        }
+        println!("wrote: {}", arguments[2]);
+        return ExitCode::SUCCESS;
+    }
     if arguments.len() < 2 || arguments[0] != "check" {
         usage();
         return ExitCode::from(2);
@@ -235,7 +266,7 @@ fn read_bounded(path: &str, kind: &str, limit: usize) -> Result<Vec<u8>, ExitCod
 
 fn usage() {
     eprintln!(
-        "usage:\n  hermas schema check <file.hschema>...\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
+        "usage:\n  hermas schema check <file.hschema>...\n  hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
     );
 }
 
@@ -243,6 +274,7 @@ fn print_usage() {
     println!(
         "Hermas verified action-graph compiler\n\n\
 usage:\n  hermas schema check <file.hschema>...\n  \
+hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  \
 hermas workflow check <module.hscript> <file.hschema>...\n  \
 hermas workflow <explain|graph|resources|sources> [--workflow NAME] \
 <module.hscript> <file.hschema>...\n  \

@@ -20,4 +20,7 @@ pub use image::{
     DecodedImage, ImageError, ImageErrorCode, MAX_GRAPH_IMAGE_SIZE, decode_graph_image,
     encode_graph_image, validate_graph_value,
 };
-pub use schema::{ContractFingerprint, SchemaContract, SchemaDiagnostic, Span, compile_schema};
+pub use schema::{
+    ContractFingerprint, SchemaContract, SchemaDiagnostic, Span, compile_schema,
+    generate_c_contract_header,
+};

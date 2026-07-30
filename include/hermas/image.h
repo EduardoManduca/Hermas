@@ -18,7 +18,8 @@ typedef enum hermas_image_result {
     HERMAS_IMAGE_INVALID_RECORD,
     HERMAS_IMAGE_DUPLICATE_RECORD,
     HERMAS_IMAGE_INVALID_TOPOLOGY,
-    HERMAS_IMAGE_INVALID_VALUE
+    HERMAS_IMAGE_INVALID_VALUE,
+    HERMAS_IMAGE_ACTION_NOT_FOUND
 } hermas_image_result;
 
 typedef struct hermas_image_summary {
@@ -63,6 +64,17 @@ hermas_image_result hermas_image_describe_type(
     size_t image_size,
     uint16_t type_id,
     hermas_image_type_summary *summary);
+
+/*
+ * Copies the exact semantic fingerprint for one installed Action contract.
+ * The complete image is validated before lookup.
+ */
+hermas_image_result hermas_image_action_fingerprint(
+    const uint8_t *image,
+    size_t image_size,
+    uint16_t app_id,
+    uint16_t action_id,
+    uint8_t fingerprint[32]);
 
 hermas_image_result hermas_image_validate_value(
     const uint8_t *image,

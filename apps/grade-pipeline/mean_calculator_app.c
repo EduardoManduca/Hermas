@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "mean-calculator.contract.h"
 
 #include <stdint.h>
 
@@ -8,6 +9,9 @@ enum {
     MEAN_INPUT_TYPE_ID = 8,
     MEAN_TYPE_ID = 6
 };
+
+static const uint8_t CALCULATE_ACTION_FINGERPRINT[32] =
+    HERMAS_MEAN_CALCULATOR_ACTION_CALCULATE_FINGERPRINT;
 
 static uint32_t read_u32(const uint8_t *bytes, size_t offset) {
     return (uint32_t)bytes[offset] |
@@ -63,6 +67,6 @@ int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
         argc, argv, MEAN_CALCULATOR_APP_ID, CALCULATE_ACTION_ID,
-        calculate_mean,
+        CALCULATE_ACTION_FINGERPRINT, calculate_mean,
         result, sizeof(result));
 }

@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "receipt.contract.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -9,6 +10,9 @@ enum {
     RECEIPT_INPUT_TYPE_ID = 9,
     ISSUED_TYPE_ID = 7
 };
+
+static const uint8_t ISSUE_ACTION_FINGERPRINT[32] =
+    HERMAS_RECEIPT_ACTION_ISSUE_FINGERPRINT;
 
 static int64_t read_i64(const uint8_t *bytes) {
     uint64_t value = 0u;
@@ -48,6 +52,7 @@ static int issue_receipt(
 int main(int argc, char **argv) {
     uint8_t result[1];
     return hermas_example_app_run_once(
-        argc, argv, RECEIPT_APP_ID, ISSUE_ACTION_ID, issue_receipt,
+        argc, argv, RECEIPT_APP_ID, ISSUE_ACTION_ID,
+        ISSUE_ACTION_FINGERPRINT, issue_receipt,
         result, sizeof(result));
 }

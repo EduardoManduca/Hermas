@@ -82,6 +82,30 @@ fn cli_emits_one_selected_graph_image() {
 }
 
 #[test]
+fn cli_emits_a_c_contract_identity_header() {
+    let schema = repository_path("apps/grade-pipeline/grade-list.hschema");
+    let output_path = std::env::temp_dir().join(format!(
+        "hermas-contract-{}-grade-list.h",
+        std::process::id()
+    ));
+    let emitted = Command::new(env!("CARGO_BIN_EXE_hermas"))
+        .args(["schema", "c-header"])
+        .arg(schema)
+        .arg(&output_path)
+        .arg("hermas_grade_list")
+        .output()
+        .expect("C header emission runs");
+    assert!(
+        emitted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&emitted.stderr)
+    );
+    let header = fs::read_to_string(&output_path).expect("C header exists");
+    assert!(header.contains("#define HERMAS_GRADE_LIST_ACTION_GET_FINGERPRINT"));
+    fs::remove_file(output_path).expect("temporary C header is removed");
+}
+
+#[test]
 fn cli_has_no_built_in_workflows() {
     let result = Command::new(env!("CARGO_BIN_EXE_hermas"))
         .args(["check", "grade-pipeline"])

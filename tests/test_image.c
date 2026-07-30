@@ -145,6 +145,26 @@ int main(int argc, char **argv) {
         memcmp(summary.workflow_name, "grade_pipeline", 14u) != 0) {
         return fail("decoded summary differs");
     }
+    uint8_t action_fingerprint[32];
+    size_t action_contracts =
+        read_u32(bytes, HERMAS_IMAGE_HEADER_ACTION_CONTRACTS_OFFSET);
+    if (hermas_image_action_fingerprint(
+            bytes, (size_t)length, 1u, 1u,
+            action_fingerprint) != HERMAS_IMAGE_OK ||
+        memcmp(
+            action_fingerprint, bytes + action_contracts + 4u,
+            sizeof(action_fingerprint)) != 0 ||
+        hermas_image_action_fingerprint(
+            bytes, (size_t)length, 99u, 99u,
+            action_fingerprint) != HERMAS_IMAGE_ACTION_NOT_FOUND ||
+        hermas_image_action_fingerprint(
+            bytes, (size_t)length, 0u, 1u,
+            action_fingerprint) != HERMAS_IMAGE_INVALID_VALUE ||
+        hermas_image_action_fingerprint(
+            bytes, (size_t)length, 1u, 1u, NULL) !=
+            HERMAS_IMAGE_INVALID_VALUE) {
+        return fail("Action fingerprint lookup differs");
+    }
     hermas_image_type_summary type;
     if (hermas_image_describe_type(
             bytes, (size_t)length, 1u, &type) != HERMAS_IMAGE_OK ||

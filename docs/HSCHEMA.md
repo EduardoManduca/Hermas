@@ -135,6 +135,12 @@ but leaves existing Action fingerprints unchanged. Changing a referenced
 nominal name or representation, an Action port, or its compensation capability
 changes that Action's fingerprint.
 
+`hermas schema c-header SCHEMA OUTPUT PREFIX` emits deterministic C macros for
+the schema fingerprint and every Action fingerprint. It intentionally emits
+no numeric IDs: those are assignments of the complete graph compilation, not
+stable semantic identities. Generated headers can be checked into an app
+build and verified for freshness in CI.
+
 An app may declare many Actions in its one file. At deployment, each Action
 registers as its own endpoint. Numeric Action IDs remain catalog-local: the
 daemon matches `(app identity, Action fingerprint)` and translates between the
@@ -144,6 +150,7 @@ graph image's Action ID and the app's current local Action ID.
 
 ```text
 hermas schema check app-one.hschema app-two.hschema
+hermas schema c-header app-one.hschema app-one.contract.h APP_ONE
 ```
 
 Files are installed transactionally into one local compilation catalog. A

@@ -179,6 +179,7 @@ int main(int argc, char **argv) {
             return fail("workspace binding was not created");
         }
         hermas_workspace_binding loaded;
+        uint8_t action_fingerprint[32];
         if (hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_OK ||
             loaded.workflow_id != binding.workflow_id ||
@@ -187,7 +188,16 @@ int main(int argc, char **argv) {
             hermas_workspace_bind(&paths, argv[1], 7u, &loaded) !=
                 HERMAS_WORKSPACE_OK ||
             hermas_workspace_bind(&paths, argv[1], 8u, &loaded) !=
-                HERMAS_WORKSPACE_INCOMPATIBLE) {
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            hermas_workspace_action_fingerprint(
+                &paths, 1u, 1u, action_fingerprint) !=
+                HERMAS_WORKSPACE_OK ||
+            hermas_workspace_action_fingerprint(
+                &paths, 99u, 99u, action_fingerprint) !=
+                HERMAS_WORKSPACE_ACTION_NOT_FOUND ||
+            hermas_workspace_action_fingerprint(
+                &paths, 0u, 1u, action_fingerprint) !=
+                HERMAS_WORKSPACE_INVALID_ARGUMENT) {
             return fail("binding identity was not enforced");
         }
         if (!replace_byte(paths.manifest_path, 4, 2u) ||

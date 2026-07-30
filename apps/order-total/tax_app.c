@@ -1,4 +1,5 @@
 #include "../example_app.h"
+#include "tax.contract.h"
 
 #include <stdint.h>
 
@@ -8,6 +9,9 @@ enum {
     TAX_INPUT_TYPE_ID = 5,
     TOTAL_TYPE_ID = 6
 };
+
+static const uint8_t CALCULATE_ACTION_FINGERPRINT[32] =
+    HERMAS_TAX_ACTION_CALCULATE_FINGERPRINT;
 
 static int64_t read_i64(const uint8_t *bytes) {
     uint64_t value = 0u;
@@ -55,6 +59,7 @@ static int calculate_tax(
 int main(int argc, char **argv) {
     uint8_t result[8];
     return hermas_example_app_run_once(
-        argc, argv, TAX_APP_ID, CALCULATE_ACTION_ID, calculate_tax,
+        argc, argv, TAX_APP_ID, CALCULATE_ACTION_ID,
+        CALCULATE_ACTION_FINGERPRINT, calculate_tax,
         result, sizeof(result));
 }

@@ -31,25 +31,6 @@ image="$work/order-total.hgi"
     apps/order-total/receipt.hschema
 chmod 600 "$image"
 
-description=$("$build/hermas_image_check" --describe "$image")
-fingerprint() {
-    local app=$1
-    local action=$2
-    awk -v app="app=$app" -v action="id=$action" \
-        '$1 == "action" && $2 == app && $3 == action {
-            sub(/^fingerprint=/, "", $4)
-            print $4
-        }' <<<"$description"
-}
-
-discount_fp=$(fingerprint 1 1)
-tax_fp=$(fingerprint 2 2)
-receipt_fp=$(fingerprint 3 3)
-if [[ -z "$discount_fp" || -z "$tax_fp" || -z "$receipt_fp" ]]; then
-    echo "order-total: could not discover Action fingerprints" >&2
-    exit 1
-fi
-
 workspace="$work/runtime"
 app_socket="$workspace/apps.sock"
 control_socket="$workspace/control.sock"
@@ -62,12 +43,23 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$app_socket" ]]
 
-"$build/hermas_discount" --workspace "$workspace" "$discount_fp" &
+# App/action numbers are not authority. A different binary using the same
+# numeric pair must be rejected against its compiler-generated contract.
+if "$build/hermas_grade_list" --workspace "$workspace" \
+    >"$work/wrong-app.out" 2>"$work/wrong-app.err"; then
+    echo "order-total: wrong Action binary was accepted" >&2
+    exit 1
+fi
+grep -F \
+    "workspace Action contract does not match this binary" \
+    "$work/wrong-app.err"
+
+"$build/hermas_discount" --workspace "$workspace" &
 discount_pid=$!
-"$build/hermas_tax" --workspace "$workspace" "$tax_fp" &
+"$build/hermas_tax" --workspace "$workspace" &
 tax_pid=$!
 "$build/hermas_receipt" \
-    --workspace "$workspace" "$receipt_fp" >"$work/receipt.out" &
+    --workspace "$workspace" >"$work/receipt.out" &
 receipt_pid=$!
 
 for _ in $(seq 1 100); do
