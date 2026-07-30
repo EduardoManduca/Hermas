@@ -54,8 +54,23 @@ static hermas_journal_result scan_descriptor(
     if (mapping == MAP_FAILED) {
         return HERMAS_JOURNAL_WRITE_ERROR;
     }
+    /*
+     * Validate the complete fixed-size snapshot before exposing any record
+     * to a visitor. Appends beyond byte_count do not enter this mapping view.
+     * This lets machine consumers discard an errored inspection without ever
+     * having acted on records from a structurally invalid snapshot.
+     */
     hermas_journal_result scanned = hermas_journal_scan(
-        mapping, byte_count, visitor, visitor_context, summary);
+        mapping, byte_count, NULL, NULL, summary);
+    if (scanned == HERMAS_JOURNAL_OK && visitor != NULL) {
+        hermas_journal_summary visited_summary;
+        scanned = hermas_journal_scan(
+            mapping, byte_count, visitor, visitor_context,
+            &visited_summary);
+        if (scanned == HERMAS_JOURNAL_OK) {
+            *summary = visited_summary;
+        }
+    }
     munmap(mapping, byte_count);
     return scanned;
 }

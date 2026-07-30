@@ -78,11 +78,23 @@ and initializes the next sequence. Every append uses a complete record write
 followed by `fdatasync`. Read-only inspection enforces the same file policy.
 
 `hermas_journal_file_inspect` provides read-only validated traversal without
-acquiring the writer lock. The `hermas_history` executable prints one
-tab-separated row per record:
+acquiring the writer lock. It fixes and validates the complete mapped snapshot
+before exposing the first record to a visitor. Appends beyond that snapshot
+are observed by a later inspection.
+
+The `hermas_history` executable prints one tab-separated row per record:
 
 ```text
 hermas_history execution.hjournal
+```
+
+For automation and agent consumers, `--json` emits the versioned
+[`hermas-history-v1`](HISTORY_JSON_V1.md) JSON Lines view. Its terminal summary
+includes the workspace binding, record count, next execution ID, and exact
+interrupted-delivery classification:
+
+```text
+hermas_history --json --workspace ./runtime
 ```
 
 History inspection exposes orchestration facts only. Payload capture,

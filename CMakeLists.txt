@@ -388,6 +388,15 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME hermas_journal_linux_tests
                  COMMAND hermas_journal_linux_tests)
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND)
+            add_test(
+                NAME hermas_history_json_tests
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_history_json.py"
+                        contract
+                        "$<TARGET_FILE:hermas_history>")
+        endif()
         add_executable(hermas_saga_log_linux_tests
                        tests/test_saga_log_linux.c)
         target_link_libraries(hermas_saga_log_linux_tests

@@ -118,12 +118,17 @@ int main(void) {
     }
 
     FILE *corrupt = fopen(path, "ab");
+    inspected = 0u;
     if (corrupt == NULL || fputc(0, corrupt) == EOF ||
         fclose(corrupt) != 0 ||
         hermas_journal_file_open(&file, path, &summary) !=
-            HERMAS_JOURNAL_INVALID_SIZE) {
+            HERMAS_JOURNAL_INVALID_SIZE ||
+        hermas_journal_file_inspect(
+            path, count_record, &inspected, &summary) !=
+            HERMAS_JOURNAL_INVALID_SIZE ||
+        inspected != 0u) {
         unlink(path);
-        return fail("truncated journal was accepted");
+        return fail("truncated journal was exposed to an inspector");
     }
     unlink(path);
 

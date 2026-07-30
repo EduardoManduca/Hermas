@@ -105,4 +105,8 @@ after=$(sha256sum "$workspace/state/journal.hj")
 [[ "$before" == "$after" ]]
 
 "$build/hermas_history" --workspace "$workspace"
+"$build/hermas_history" --json --workspace "$workspace" \
+    >"$work/history.jsonl"
+python3 tests/test_history_json.py completed "$work/history.jsonl" \
+    --workflow 1 --execution 41 --outcome success
 echo "Independent Order Total pipeline passed."

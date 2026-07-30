@@ -64,6 +64,10 @@ kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
 "$build/hermas_history" --workspace "$workspace"
+"$build/hermas_history" --json --workspace "$workspace" \
+    >"$work/history.jsonl"
+python3 tests/test_history_json.py completed "$work/history.jsonl" \
+    --workflow 1 --execution 1 --outcome success
 
 echo "Restarting the daemon against completed durable state..."
 "$build/hermasd" --workspace "$workspace" &
@@ -78,5 +82,9 @@ kill "$daemon_pid"
 wait "$daemon_pid"
 daemon_pid=
 "$build/hermas_history" --workspace "$workspace"
+"$build/hermas_history" --json --workspace "$workspace" \
+    >"$work/restarted-history.jsonl"
+python3 tests/test_history_json.py completed "$work/restarted-history.jsonl" \
+    --workflow 1 --execution 1 --outcome success
 
 echo "Hermas quickstart passed."

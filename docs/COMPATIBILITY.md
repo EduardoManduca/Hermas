@@ -8,6 +8,9 @@ promise.
 - Every binary protocol and durable format carries an explicit version.
   Unsupported versions are rejected; they are never guessed or silently
   reinterpreted.
+- Machine-readable CLI contracts carry their own format identifier.
+  `hermas-history-v1` is a view of journal v1, not a replacement durable
+  format; incompatible output changes require a new identifier.
 - Managed workspaces bind one exact graph image and workflow ID to all current
   protocol and durable-state versions. Daemon, Action, caller, and history
   entry points validate this binding before using sockets or state.
