@@ -25,7 +25,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
@@ -44,7 +44,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - run: cargo build -p hermas
       - run: tools/generate_test_fixtures.sh
       - run: tools/configure_gate_build.sh build-${{ matrix.compiler }} ${{ matrix.compiler }} target/gate-fixtures
@@ -64,7 +64,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - run: tools/quickstart.sh build-quickstart
       - run: tools/test_order_total.sh build-order-total
       - run: tools/test_workspace_compatibility.sh build-workspace-compatibility
