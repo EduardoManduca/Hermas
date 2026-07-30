@@ -52,6 +52,51 @@ fn real_grade_pipeline_is_compiled_with_complete_provenance() {
         13
     );
     assert!(source_map.contains("grade-pipeline.hscript:8:18"));
+    let plan = graph.execution_plan(&catalog);
+    assert!(plan.contains("HScript source order is not a scheduling guarantee"));
+    assert!(plan.contains("stage 1\n    n1 action grade-list/get waits=[input]"));
+    assert!(plan.contains("stage 2\n    n2 action mean-calculator/calculate waits=[n1]"));
+    assert!(plan.contains("stage 3\n    n3 action printer/print waits=[n2]"));
+    assert!(plan.contains("none (maximum ready Action concurrency=1)"));
+}
+
+#[test]
+fn execution_plan_exposes_bounded_parallel_readiness() {
+    let mut catalog = Catalog::new();
+    for (path, source) in [
+        (
+            "source.hschema",
+            include_str!("../../../apps/bounded-all/source.hschema"),
+        ),
+        (
+            "alpha.hschema",
+            include_str!("../../../apps/bounded-all/alpha.hschema"),
+        ),
+        (
+            "beta.hschema",
+            include_str!("../../../apps/bounded-all/beta.hschema"),
+        ),
+        (
+            "sink.hschema",
+            include_str!("../../../apps/bounded-all/sink.hschema"),
+        ),
+    ] {
+        hermas::compile_schema(&mut catalog, path, source).unwrap();
+    }
+    let graph = compile_hscript(
+        &catalog,
+        "cooperate.hscript",
+        include_str!("../../../apps/bounded-all/cooperate.hscript"),
+    )
+    .unwrap();
+    let plan = graph.execution_plan(&catalog);
+
+    assert!(plan.contains("fork n5 branches=2 join-required=yes"));
+    assert!(plan.contains("stage 3"));
+    assert!(plan.contains("n2 action alpha/run waits=[n5]"));
+    assert!(plan.contains("n3 action beta/run waits=[n5]"));
+    assert!(plan.contains("n6 join waits=[n2, n3]"));
+    assert!(plan.contains("graph maximum ready Action concurrency=2"));
 }
 
 #[test]
@@ -86,6 +131,10 @@ errors { mean-calculator::MeanError }
     let first = compile_hscript(&catalog, "mean.hscript", source).unwrap();
     let second = compile_hscript(&catalog, "mean.hscript", source).unwrap();
     assert_eq!(first.explain(&catalog), second.explain(&catalog));
+    assert_eq!(
+        first.execution_plan(&catalog),
+        second.execution_plan(&catalog)
+    );
     assert_eq!(first.to_dot(&catalog), second.to_dot(&catalog));
     assert_eq!(first.source_map(), second.source_map());
 }

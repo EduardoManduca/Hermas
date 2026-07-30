@@ -54,6 +54,16 @@ fn cli_checks_the_module_and_requires_selection_for_one_graph() {
             .unwrap()
             .starts_with("workflow operations::print\n")
     );
+
+    let planned = Command::new(env!("CARGO_BIN_EXE_hermas"))
+        .args(["workflow", "plan", "--workflow", "calculate"])
+        .args(&paths)
+        .output()
+        .expect("selected execution plan runs");
+    assert!(planned.status.success());
+    let plan = String::from_utf8(planned.stdout).unwrap();
+    assert!(plan.starts_with("execution plan operations::calculate\n"));
+    assert!(plan.contains("HScript source order is not a scheduling guarantee"));
 }
 
 #[test]

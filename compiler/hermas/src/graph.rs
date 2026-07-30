@@ -642,6 +642,176 @@ impl VerifiedGraph {
         output
     }
 
+    /// Describes the dependency-derived readiness order without promising a
+    /// particular runtime schedule.
+    pub fn execution_plan(&self, catalog: &Catalog) -> String {
+        let schedulable = |node: &NodeKind| !matches!(node, NodeKind::Terminal(_));
+        let mut levels = vec![0usize; self.graph.nodes.len()];
+
+        for _ in 0..self.graph.nodes.len() {
+            let mut changed = false;
+            for (index, node) in self.graph.nodes.iter().enumerate() {
+                if !schedulable(node) {
+                    continue;
+                }
+                let id = node_id(index);
+                let mut level = 0usize;
+                for edge in &self.graph.edges {
+                    if target_node(edge.target, &self.graph) != Some(id) {
+                        continue;
+                    }
+                    match source_node(edge.source, &self.graph) {
+                        Some(source) if source != id => {
+                            let source_level = levels[usize::from(source.raw() - 1)];
+                            if source_level != 0 {
+                                level = level.max(source_level + 1);
+                            }
+                        }
+                        None if edge.source == EdgeSource::WorkflowInput => {
+                            level = level.max(1);
+                        }
+                        Some(_) | None => {}
+                    }
+                }
+                if level > levels[index] {
+                    levels[index] = level;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        let mut output = format!(
+            "execution plan {}\n\
+             semantics\n\
+             \x20 dependency-driven; HScript source order is not a scheduling guarantee\n\
+             \x20 any ready Action may be selected; same-stage Actions are candidates, not promised parallel work\n",
+            self.graph.name
+        );
+        output.push_str("readiness stages\n");
+        let maximum_level = levels.iter().copied().max().unwrap_or(0);
+        for level in 1..=maximum_level {
+            output.push_str(&format!("  stage {level}\n"));
+            for (index, node) in self.graph.nodes.iter().enumerate() {
+                if levels[index] != level || !schedulable(node) {
+                    continue;
+                }
+                let id = node_id(index);
+                let label = match node {
+                    NodeKind::Action(action) => {
+                        format!("action {}", catalog.action_name(*action))
+                    }
+                    NodeKind::Dispatch(variant) => {
+                        format!("dispatch {}", catalog.type_name(*variant))
+                    }
+                    NodeKind::Fork(_, branches) => format!("fork branches={branches}"),
+                    NodeKind::Join(_) => "join".to_owned(),
+                    NodeKind::Terminal(_) => unreachable!("terminals are not schedulable"),
+                };
+                let mut dependencies = self
+                    .graph
+                    .edges
+                    .iter()
+                    .filter(|edge| target_node(edge.target, &self.graph) == Some(id))
+                    .filter_map(|edge| match source_node(edge.source, &self.graph) {
+                        Some(source) if source != id => Some(format!("n{}", source.raw())),
+                        None if edge.source == EdgeSource::WorkflowInput => {
+                            Some("input".to_owned())
+                        }
+                        Some(_) | None => None,
+                    })
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                if self
+                    .graph
+                    .each_regions
+                    .iter()
+                    .any(|region| region.template == id)
+                {
+                    dependencies.push("each-item".to_owned());
+                }
+                output.push_str(&format!(
+                    "    n{} {} waits=[{}]\n",
+                    id.raw(),
+                    label,
+                    dependencies.join(", ")
+                ));
+            }
+        }
+
+        output.push_str("bounded parallelism\n");
+        let mut region_count = 0usize;
+        for (index, node) in self.graph.nodes.iter().enumerate() {
+            if let NodeKind::Fork(_, branches) = node {
+                region_count += 1;
+                output.push_str(&format!(
+                    "  fork n{} branches={} join-required=yes\n",
+                    index + 1,
+                    branches
+                ));
+            }
+        }
+        for (index, region) in self.graph.each_regions.iter().enumerate() {
+            region_count += 1;
+            output.push_str(&format!(
+                "  each[{}] template=n{} bound={} concurrency={} collect-order=source-index\n",
+                index + 1,
+                region.template.raw(),
+                region.bound,
+                region.concurrency
+            ));
+        }
+        if region_count == 0 {
+            output.push_str("  none (maximum ready Action concurrency=1)\n");
+        } else {
+            output.push_str(&format!(
+                "  graph maximum ready Action concurrency={}\n",
+                self.resources(catalog).maximum_concurrent_actions
+            ));
+        }
+
+        output.push_str("deadlines\n");
+        if self.graph.deadlines.is_empty() {
+            output.push_str("  none\n");
+        } else {
+            for (index, region) in self.graph.deadlines.iter().enumerate() {
+                let scope = if region.first_node == 0 {
+                    "workflow".to_owned()
+                } else {
+                    let last_node = region.first_node + region.node_count - 1;
+                    format!("n{}..n{last_node}", region.first_node)
+                };
+                output.push_str(&format!(
+                    "  deadline[{}] duration-ms={} scope={} parent={}\n",
+                    index + 1,
+                    region.duration_ms,
+                    scope,
+                    if region.parent == 0 {
+                        "none".to_owned()
+                    } else {
+                        format!("deadline[{}]", region.parent)
+                    }
+                ));
+            }
+        }
+
+        if self.graph.saga {
+            let actions = self
+                .graph
+                .nodes
+                .iter()
+                .filter(|node| matches!(node, NodeKind::Action(_)))
+                .count();
+            output.push_str(&format!(
+                "recovery\n  saga steps={actions}; compensation is reverse dependency order\n"
+            ));
+        }
+        output
+    }
+
     pub fn to_dot(&self, catalog: &Catalog) -> String {
         let mut output = format!(
             "digraph \"{}\" {{\n  rankdir=LR;\n",

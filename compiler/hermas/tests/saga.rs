@@ -26,6 +26,8 @@ fn compile_fixture() -> (Catalog, hermas::VerifiedGraph) {
 #[test]
 fn saga_lowers_to_ordered_compensation_records() {
     let (catalog, graph) = compile_fixture();
+    let plan = graph.execution_plan(&catalog);
+    assert!(plan.contains("recovery\n  saga steps=3; compensation is reverse dependency order"));
     let image = encode_graph_image(&graph, &catalog).unwrap();
     assert_eq!(decode_graph_image(&image).unwrap().region_count, 6);
 
