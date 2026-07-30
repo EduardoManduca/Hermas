@@ -24,6 +24,17 @@ The first daemon start pins the image and workflow ID into the workspace.
 The caller and restart then derive the image, workflow, socket paths, and
 format compatibility from that binding.
 
+Automation can inspect the same validated facts without parsing the
+human-readable table:
+
+```text
+hermas_history --json --workspace ./runtime
+```
+
+The versioned JSON Lines stream ends with a summary containing the managed
+workspace identity and any interrupted execution classifications. The
+quickstart validates this machine interface before and after restart.
+
 To install C artifacts under a prefix:
 
 ```text

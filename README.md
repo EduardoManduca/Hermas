@@ -78,6 +78,11 @@ To inspect execution ordering before producing an image, run
 readiness stages, bounded parallel regions, deadline scopes, and saga recovery
 order. HScript source order is not a hidden scheduling guarantee.
 
+Automation can inspect durable execution facts with
+`hermas_history --json --workspace DIRECTORY`. The versioned JSON Lines stream
+preserves 64-bit identifiers without precision loss and ends with the exact
+interrupted-execution classification.
+
 ## Design and extension points
 
 The [master architecture](00_HERMAS_MASTER_PLAN.md) governs component
@@ -90,6 +95,7 @@ admission. Key executable specifications include:
 - [C Action app guide](docs/APP_AUTHOR_GUIDE.md)
 - [Runtime workspace](docs/WORKSPACE.md)
 - [Workspace manifest v1](docs/WORKSPACE_MANIFEST_V1.md)
+- [History JSON Lines v1](docs/HISTORY_JSON_V1.md)
 - [Compatibility policy](docs/COMPATIBILITY.md)
 
 Community growth should primarily add Actions, bindings, diagnostics, test
