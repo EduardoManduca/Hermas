@@ -112,6 +112,64 @@ impl SchemaContract {
     }
 }
 
+fn c_identifier(name: &str) -> String {
+    name.bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() {
+                char::from(byte.to_ascii_uppercase())
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn fingerprint_initializer(fingerprint: ContractFingerprint) -> String {
+    fingerprint
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("0x{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn generate_c_contract_header(
+    contract: &SchemaContract,
+    prefix: &str,
+) -> Result<String, String> {
+    if prefix.is_empty()
+        || !prefix.bytes().enumerate().all(|(index, byte)| {
+            byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
+        })
+    {
+        return Err("C symbol prefix must match [A-Za-z_][A-Za-z0-9_]*".to_owned());
+    }
+    let prefix = prefix.to_ascii_uppercase();
+    let mut symbols = BTreeSet::new();
+    let mut output = format!(
+        "#ifndef {prefix}_HERMAS_CONTRACT_H\n\
+#define {prefix}_HERMAS_CONTRACT_H\n\n\
+#include <stdint.h>\n\n\
+#define {prefix}_SCHEMA_FINGERPRINT \\\n    {{ {} }}\n",
+        fingerprint_initializer(contract.fingerprint)
+    );
+    for name in contract.actions.keys() {
+        let symbol = c_identifier(name);
+        if !symbols.insert(symbol.clone()) {
+            return Err(format!("schema names collide as C identifier `{symbol}`"));
+        }
+        let fingerprint = contract
+            .action_fingerprint(name)
+            .expect("compiled Action has a fingerprint");
+        output.push_str(&format!(
+            "#define {prefix}_ACTION_{symbol}_FINGERPRINT \\\n    {{ {} }}\n",
+            fingerprint_initializer(fingerprint)
+        ));
+    }
+    output.push_str("\n#endif\n");
+    Ok(output)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Symbol {
     LeftBrace,

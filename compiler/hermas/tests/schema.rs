@@ -1,4 +1,4 @@
-use hermas::{Catalog, Compensation, Representation, compile_schema};
+use hermas::{Catalog, Compensation, Representation, compile_schema, generate_c_contract_header};
 
 const COMPLETE_SCHEMA: &str = r#"
 app warehouse
@@ -61,6 +61,44 @@ fn compiles_closed_contracts_and_compensation_capabilities() {
         reserve.compensation,
         Compensation::Action(contract.action_id("release").expect("release ID"))
     );
+}
+
+#[test]
+fn generates_deterministic_c_contract_identity() {
+    let mut catalog = Catalog::new();
+    let contract = compile_schema(&mut catalog, "warehouse.hschema", COMPLETE_SCHEMA).unwrap();
+    let header = generate_c_contract_header(&contract, "warehouse").unwrap();
+    assert!(header.starts_with("#ifndef WAREHOUSE_HERMAS_CONTRACT_H\n"));
+    assert!(!header.contains("_TYPE_"));
+    assert!(!header.contains("_ACTION_RESERVE_ID"));
+    assert!(header.contains("#define WAREHOUSE_ACTION_RESERVE_FINGERPRINT"));
+    assert!(header.ends_with("\n#endif\n"));
+    assert_eq!(
+        header,
+        generate_c_contract_header(&contract, "warehouse").unwrap()
+    );
+    assert!(generate_c_contract_header(&contract, "9invalid").is_err());
+
+    let collision = r#"
+        app collision
+        type Input = Unit
+        type Error = Unit
+        action foo-bar {
+            input Input
+            success Input
+            error Error
+            compensation none
+        }
+        action foo_bar {
+            input Input
+            success Input
+            error Error
+            compensation none
+        }
+    "#;
+    let mut collision_catalog = Catalog::new();
+    let collision = compile_schema(&mut collision_catalog, "collision.hschema", collision).unwrap();
+    assert!(generate_c_contract_header(&collision, "collision").is_err());
 }
 
 #[test]
