@@ -29,6 +29,9 @@ errors { grade-list::GradeError mean-calculator::MeanError }
 "#;
     let graph = compile_hscript(&catalog, "nested.hscript", source).unwrap();
     assert_eq!(graph.resources(&catalog).deadline_regions, 2);
+    let plan = graph.execution_plan(&catalog);
+    assert!(plan.contains("deadline[1] duration-ms=5000 scope=workflow parent=none"));
+    assert!(plan.contains("deadline[2] duration-ms=1000 scope=n2..n2 parent=deadline[1]"));
     let image = encode_graph_image(&graph, &catalog).unwrap();
     let decoded = decode_graph_image(&image).unwrap();
     assert_eq!(decoded.region_count, 2);
@@ -73,6 +76,11 @@ fn root_within_lowers_to_one_deadline_region() {
     assert_eq!(
         graph.resources(&catalog).to_string(),
         "actions=1 dispatches=0 forks=0 joins=0 deadline_regions=1 each_regions=0 terminals=4 edges=5 apps=1 max_concurrent_actions=1 max_payload_bytes=264"
+    );
+    assert!(
+        graph
+            .execution_plan(&catalog)
+            .contains("deadline[1] duration-ms=5000 scope=workflow parent=none")
     );
     let image = encode_graph_image(&graph, &catalog).unwrap();
     let decoded = decode_graph_image(&image).unwrap();

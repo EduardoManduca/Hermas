@@ -106,7 +106,7 @@ fn workflow_command(arguments: &[String]) -> ExitCode {
     let operation = &arguments[0];
     if !matches!(
         operation.as_str(),
-        "check" | "explain" | "graph" | "resources" | "sources" | "image"
+        "check" | "explain" | "plan" | "graph" | "resources" | "sources" | "image"
     ) {
         usage();
         return ExitCode::from(2);
@@ -187,6 +187,7 @@ fn workflow_command(arguments: &[String]) -> ExitCode {
     };
     match operation.as_str() {
         "explain" => print!("{}", graph.explain(&catalog)),
+        "plan" => print!("{}", graph.execution_plan(&catalog)),
         "graph" => print!("{}", graph.to_dot(&catalog)),
         "resources" => println!("{}", graph.resources(&catalog)),
         "sources" => print!("{}", graph.source_map()),
@@ -266,7 +267,7 @@ fn read_bounded(path: &str, kind: &str, limit: usize) -> Result<Vec<u8>, ExitCod
 
 fn usage() {
     eprintln!(
-        "usage:\n  hermas schema check <file.hschema>...\n  hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
+        "usage:\n  hermas schema check <file.hschema>...\n  hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|plan|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
     );
 }
 
@@ -276,7 +277,7 @@ fn print_usage() {
 usage:\n  hermas schema check <file.hschema>...\n  \
 hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  \
 hermas workflow check <module.hscript> <file.hschema>...\n  \
-hermas workflow <explain|graph|resources|sources> [--workflow NAME] \
+hermas workflow <explain|plan|graph|resources|sources> [--workflow NAME] \
 <module.hscript> <file.hschema>...\n  \
 hermas workflow image [--workflow NAME] <module.hscript> \
 <output.hgi> <file.hschema>...\n  \

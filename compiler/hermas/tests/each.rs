@@ -81,6 +81,10 @@ fn bounded_each_lowers_to_a_typed_ordered_collection_region() {
     let explanation = graph.explain(&catalog);
     assert!(explanation.contains("each[1].item"));
     assert!(explanation.contains("each[1].output"));
+    let plan = graph.execution_plan(&catalog);
+    assert!(plan.contains("each[1] template=n2 bound=4 concurrency=3 collect-order=source-index"));
+    assert!(plan.contains("n2 action reporting/create waits=[n1, each-item]"));
+    assert!(plan.contains("n3 action archive/store waits=[n2]"));
 
     let image = encode_graph_image(&graph, &catalog).unwrap();
     let decoded = decode_graph_image(&image).unwrap();
