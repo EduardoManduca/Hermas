@@ -31,6 +31,19 @@ static int parse_workflow_id(const char *text, uint32_t *value) {
     return 1;
 }
 
+static bool daemon_accepts_image(
+    const uint8_t *image,
+    size_t image_size,
+    void *context) {
+    (void)context;
+    return hermas_daemon_image_check(image, image_size) ==
+           HERMAS_LOOP_OK;
+}
+
+static int image_check_exit(hermas_host_result result) {
+    return result == HERMAS_HOST_UNSUPPORTED_GRAPH ? 4 : 1;
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
@@ -48,14 +61,28 @@ int main(int argc, char **argv) {
         puts(
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       hermasd --check-image IMAGE\n"
             "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       hermasd --workspace DIRECTORY\n\n"
+            "--check-image verifies file safety, graph format, and daemon "
+            "capability without creating state or sockets.\n\n"
             "The IMAGE form initializes or verifies the managed workspace. "
             "Later starts derive its pinned image and workflow ID.\n\n"
             "Run one verified graph image with private durable state. "
             "This alpha daemon accepts sequential, typed-choice, deadline, "
             "and saga graphs; bounded all/each graphs fail closed.");
         return 0;
+    }
+    if (argc == 3 && strcmp(argv[1], "--check-image") == 0) {
+        hermas_host_result checked = hermas_host_check_image(argv[2]);
+        if (checked == HERMAS_HOST_OK) {
+            printf("hermasd: supported image: %s\n", argv[2]);
+            return 0;
+        }
+        fprintf(
+            stderr, "hermasd: image check failed: %s\n",
+            hermas_host_result_name(checked));
+        return image_check_exit(checked);
     }
     int workspace_bind_mode =
         argc == 5 && strcmp(argv[1], "--workspace") == 0;
@@ -67,10 +94,25 @@ int main(int argc, char **argv) {
             stderr,
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       %s --check-image IMAGE\n"
             "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       %s --workspace DIRECTORY\n",
-            argv[0], argv[0], argv[0]);
+            argv[0], argv[0], argv[0], argv[0]);
         return 2;
+    }
+    uint32_t workflow_id = 0u;
+    if (workspace_bind_mode) {
+        if (!parse_workflow_id(argv[4], &workflow_id)) {
+            fputs("hermasd: invalid workflow ID\n", stderr);
+            return 2;
+        }
+        hermas_host_result checked = hermas_host_check_image(argv[3]);
+        if (checked != HERMAS_HOST_OK) {
+            fprintf(
+                stderr, "hermasd: image check failed: %s\n",
+                hermas_host_result_name(checked));
+            return image_check_exit(checked);
+        }
     }
     hermas_workspace_paths workspace;
     if (workspace_mode) {
@@ -83,15 +125,11 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    uint32_t workflow_id = 0u;
     hermas_workspace_binding binding;
     if (workspace_bind_mode) {
-        if (!parse_workflow_id(argv[4], &workflow_id)) {
-            fputs("hermasd: invalid workflow ID\n", stderr);
-            return 2;
-        }
-        hermas_workspace_result bound = hermas_workspace_bind(
-            &workspace, argv[3], workflow_id, &binding);
+        hermas_workspace_result bound = hermas_workspace_bind_checked(
+            &workspace, argv[3], workflow_id,
+            daemon_accepts_image, NULL, &binding);
         if (bound != HERMAS_WORKSPACE_OK) {
             fprintf(
                 stderr, "hermasd: workspace binding failed: %s\n",
@@ -146,7 +184,10 @@ int main(int argc, char **argv) {
             stderr, "hermasd: startup failed: %s\n",
             hermas_host_result_name(result));
         free(host);
-        return result == HERMAS_HOST_RECOVERY_REQUIRED ? 3 : 1;
+        if (result == HERMAS_HOST_RECOVERY_REQUIRED) {
+            return 3;
+        }
+        return image_check_exit(result);
     }
     while (!stop_requested) {
         size_t progress = 0u;

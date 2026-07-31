@@ -322,7 +322,7 @@ static int test_group_graphs_fail_closed(
     }
     int rejected =
         hermas_daemon_loop_init(loop, registry, image, image_size) ==
-        HERMAS_LOOP_INVALID_IMAGE;
+        HERMAS_LOOP_UNSUPPORTED_GRAPH;
     free(image);
     return rejected
         ? 0

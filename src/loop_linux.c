@@ -705,19 +705,33 @@ static hermas_loop_result receive_result(
     return HERMAS_LOOP_OK;
 }
 
-hermas_loop_result hermas_daemon_loop_init(
-    hermas_daemon_loop *loop,
-    hermas_daemon_registry *registry,
+hermas_loop_result hermas_daemon_image_check(
     const uint8_t *image,
     size_t image_size) {
-    if (loop == NULL || registry == NULL || image == NULL) {
+    if (image == NULL) {
         return HERMAS_LOOP_INVALID_ARGUMENT;
     }
     if (hermas_image_validate(image, image_size, NULL) != HERMAS_IMAGE_OK) {
         return HERMAS_LOOP_INVALID_IMAGE;
     }
     if (image_requires_group_runtime(image)) {
-        return HERMAS_LOOP_INVALID_IMAGE;
+        return HERMAS_LOOP_UNSUPPORTED_GRAPH;
+    }
+    return HERMAS_LOOP_OK;
+}
+
+hermas_loop_result hermas_daemon_loop_init(
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
+    const uint8_t *image,
+    size_t image_size) {
+    if (loop == NULL || registry == NULL) {
+        return HERMAS_LOOP_INVALID_ARGUMENT;
+    }
+    hermas_loop_result checked =
+        hermas_daemon_image_check(image, image_size);
+    if (checked != HERMAS_LOOP_OK) {
+        return checked;
     }
     memset(loop, 0, sizeof(*loop));
     loop->image = image;
@@ -1074,7 +1088,7 @@ const char *hermas_loop_result_name(hermas_loop_result result) {
         "ok", "invalid-argument", "invalid-image", "capacity-exhausted",
         "duplicate-execution", "unknown-execution", "execution-active",
         "poll-error", "runtime-error", "protocol-error", "journal-error",
-        "compensation-error", "result-error"
+        "compensation-error", "result-error", "unsupported-graph"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0]) ? names[index] : "unknown";

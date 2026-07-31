@@ -25,10 +25,23 @@ Initialize and start a workspace once with:
 hermasd --workspace ./runtime workflow.hgi 1
 ```
 
-The daemon validates the source image, copies its exact bytes into
-`workflow.hgi`, and durably creates `manifest.hwm`. The manifest binds the
-workspace to the workflow ID, image fingerprint and size, graph-image and
-protocol versions, and every current durable-state format version.
+The daemon first checks the source image's file safety, format, and support in
+the current daemon build. It then applies the same capability decision to the
+exact bytes being bound, copies them into `workflow.hgi`, and durably creates
+`manifest.hwm`. An unsupported graph cannot initialize or pin a workspace.
+The manifest binds the workspace to the workflow ID, image fingerprint and
+size, graph-image and protocol versions, and every current durable-state
+format version.
+
+Automation can perform the read-only part independently:
+
+```text
+hermasd --check-image workflow.hgi
+```
+
+This command creates no workspace, durable state, or socket. It exits `0` for
+a supported image and `4` for a valid graph that requires unavailable daemon
+capabilities.
 
 All later processes derive that binding:
 

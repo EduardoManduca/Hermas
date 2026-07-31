@@ -64,6 +64,12 @@ typedef struct hermas_host {
     hermas_control_server control;
 } hermas_host;
 
+/*
+ * Opens and validates an image using the daemon's normal file-safety and
+ * capability rules without creating state or sockets.
+ */
+hermas_host_result hermas_host_check_image(const char *image_path);
+
 hermas_host_result hermas_host_open(
     hermas_host *host,
     const hermas_host_config *config);

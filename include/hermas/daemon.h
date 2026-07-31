@@ -75,7 +75,8 @@ typedef enum hermas_loop_result {
     HERMAS_LOOP_PROTOCOL_ERROR,
     HERMAS_LOOP_JOURNAL_ERROR,
     HERMAS_LOOP_COMPENSATION_ERROR,
-    HERMAS_LOOP_RESULT_ERROR
+    HERMAS_LOOP_RESULT_ERROR,
+    HERMAS_LOOP_UNSUPPORTED_GRAPH
 } hermas_loop_result;
 
 typedef struct hermas_loop_slot {
@@ -118,6 +119,14 @@ typedef struct hermas_daemon_loop {
     uint64_t image_fingerprint;
     uint64_t minimum_execution_id;
 } hermas_daemon_loop;
+
+/*
+ * Validates both the graph-image format and the execution capabilities of
+ * this daemon build without creating runtime or durable state.
+ */
+hermas_loop_result hermas_daemon_image_check(
+    const uint8_t *image,
+    size_t image_size);
 
 hermas_loop_result hermas_daemon_loop_init(
     hermas_daemon_loop *loop,

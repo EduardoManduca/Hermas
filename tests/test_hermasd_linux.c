@@ -267,7 +267,58 @@ static void remove_state(const char *directory) {
     (void)rmdir(directory);
 }
 
-static int test_unsupported_graph(const char *image_path) {
+static int run_unsupported_command(
+    const char *daemon,
+    const char *image,
+    const char *workspace) {
+    int errors[2];
+    if (pipe(errors) != 0) {
+        return 0;
+    }
+    pid_t child = fork();
+    if (child == 0) {
+        close(errors[0]);
+        if (dup2(errors[1], STDERR_FILENO) < 0) {
+            _exit(127);
+        }
+        close(errors[1]);
+        if (workspace == NULL) {
+            execl(
+                daemon, daemon, "--check-image", image,
+                (char *)NULL);
+        } else {
+            execl(
+                daemon, daemon, "--workspace", workspace,
+                image, "7", (char *)NULL);
+        }
+        _exit(127);
+    }
+    close(errors[1]);
+    char text[512];
+    size_t length = 0u;
+    while (length + 1u < sizeof(text)) {
+        ssize_t received = read(
+            errors[0], text + length,
+            sizeof(text) - length - 1u);
+        if (received < 0 && errno == EINTR) {
+            continue;
+        }
+        if (received <= 0) {
+            break;
+        }
+        length += (size_t)received;
+    }
+    close(errors[0]);
+    text[length] = '\0';
+    int status = 0;
+    return waitpid(child, &status, 0) == child &&
+           WIFEXITED(status) && WEXITSTATUS(status) == 4 &&
+           strstr(text, "unsupported-graph") != NULL;
+}
+
+static int test_unsupported_graph(
+    const char *daemon,
+    const char *image_path) {
     size_t image_size = 0u;
     uint8_t *image = read_file(image_path, &image_size);
     char secure_image[] = "/tmp/hermasd-unsupported-image-XXXXXX";
@@ -323,6 +374,18 @@ static int test_unsupported_graph(const char *image_path) {
             "unsupported-graph") == 0;
     hermas_host_close(host);
     free(host);
+    char workspace[] = "/tmp/hermasd-unbound-workspace-XXXXXX";
+    int workspace_ready =
+        mkdtemp(workspace) != NULL && rmdir(workspace) == 0;
+    rejected =
+        rejected &&
+        hermas_host_check_image(secure_image) ==
+            HERMAS_HOST_UNSUPPORTED_GRAPH &&
+        run_unsupported_command(daemon, secure_image, NULL) &&
+        workspace_ready &&
+        run_unsupported_command(
+            daemon, secure_image, workspace) &&
+        access(workspace, F_OK) != 0 && errno == ENOENT;
     (void)rmdir(state);
     (void)unlink(secure_image);
     return rejected;
@@ -349,7 +412,7 @@ int main(int argc, char **argv) {
         return fail("unexpected grade graph layout");
     }
     const char *app_paths[3] = {argv[4], argv[5], argv[6]};
-    if (!test_unsupported_graph(argv[7])) {
+    if (!test_unsupported_graph(argv[2], argv[7])) {
         free(image);
         return fail("bounded-flow graph did not report unsupported-graph");
     }

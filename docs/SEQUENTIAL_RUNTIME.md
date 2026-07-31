@@ -119,6 +119,9 @@ Join, Each, or Collect nodes. This fail-closed boundary prevents a graph from
 being partially executed or reported successful by the sequential
 interpreter. `hermas_host_open` and `hermasd` expose this distinction as
 `unsupported-graph`, rather than conflating it with malformed external bytes.
+`hermasd --check-image IMAGE` exposes the same decision without state or
+socket side effects, and managed-workspace initialization applies it before
+persisting the exact candidate bytes.
 Compiler inspection and the standalone bounded-flow runtime
 remain available while daemon scheduling, durable per-flow delivery facts,
 and restart behavior are integrated as one coherent milestone.

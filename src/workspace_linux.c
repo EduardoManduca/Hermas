@@ -502,6 +502,17 @@ hermas_workspace_result hermas_workspace_bind(
     const char *image_path,
     uint32_t workflow_id,
     hermas_workspace_binding *binding) {
+    return hermas_workspace_bind_checked(
+        paths, image_path, workflow_id, NULL, NULL, binding);
+}
+
+hermas_workspace_result hermas_workspace_bind_checked(
+    const hermas_workspace_paths *paths,
+    const char *image_path,
+    uint32_t workflow_id,
+    hermas_workspace_image_acceptor acceptor,
+    void *acceptor_context,
+    hermas_workspace_binding *binding) {
     if (paths == NULL || image_path == NULL || image_path[0] == '\0' ||
         workflow_id == 0u || binding == NULL) {
         return HERMAS_WORKSPACE_INVALID_ARGUMENT;
@@ -516,6 +527,11 @@ hermas_workspace_result hermas_workspace_bind(
     if (result != HERMAS_WORKSPACE_OK) {
         free(source);
         return result;
+    }
+    if (acceptor != NULL &&
+        !acceptor(source, source_size, acceptor_context)) {
+        free(source);
+        return HERMAS_WORKSPACE_INCOMPATIBLE;
     }
     hermas_workspace_binding wanted = {
         .workflow_id = workflow_id,

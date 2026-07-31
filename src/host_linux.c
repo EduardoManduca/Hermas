@@ -16,6 +16,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+typedef struct hermas_mapped_image {
+    int descriptor;
+    const uint8_t *bytes;
+    size_t size;
+} hermas_mapped_image;
+
 static void initialize_empty(hermas_host *host) {
     memset(host, 0, sizeof(*host));
     host->image_descriptor = -1;
@@ -32,8 +38,11 @@ static bool valid_text(const char *text) {
 }
 
 static hermas_host_result load_image(
-    hermas_host *host,
+    hermas_mapped_image *image,
     const char *path) {
+    image->descriptor = -1;
+    image->bytes = NULL;
+    image->size = 0u;
     int descriptor = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
     struct stat status;
     if (descriptor < 0 || fstat(descriptor, &status) != 0 ||
@@ -58,10 +67,42 @@ static hermas_host_result load_image(
         close(descriptor);
         return HERMAS_HOST_IMAGE_ERROR;
     }
-    host->image_descriptor = descriptor;
-    host->image = mapping;
-    host->image_size = size;
+    image->descriptor = descriptor;
+    image->bytes = mapping;
+    image->size = size;
     return HERMAS_HOST_OK;
+}
+
+static void unload_image(hermas_mapped_image *image) {
+    if (image->bytes != NULL) {
+        (void)munmap((void *)image->bytes, image->size);
+    }
+    if (image->descriptor >= 0) {
+        close(image->descriptor);
+    }
+    image->descriptor = -1;
+    image->bytes = NULL;
+    image->size = 0u;
+}
+
+hermas_host_result hermas_host_check_image(const char *image_path) {
+    if (!valid_text(image_path)) {
+        return HERMAS_HOST_INVALID_ARGUMENT;
+    }
+    hermas_mapped_image image;
+    hermas_host_result loaded = load_image(&image, image_path);
+    if (loaded != HERMAS_HOST_OK) {
+        return loaded;
+    }
+    hermas_loop_result checked =
+        hermas_daemon_image_check(image.bytes, image.size);
+    unload_image(&image);
+    if (checked == HERMAS_LOOP_OK) {
+        return HERMAS_HOST_OK;
+    }
+    return checked == HERMAS_LOOP_UNSUPPORTED_GRAPH
+               ? HERMAS_HOST_UNSUPPORTED_GRAPH
+               : HERMAS_HOST_IMAGE_ERROR;
 }
 
 static hermas_host_result validate_state_directory(const char *path) {
@@ -239,12 +280,15 @@ hermas_host_result hermas_host_open(
         return HERMAS_HOST_INVALID_ARGUMENT;
     }
     initialize_empty(host);
-    hermas_host_result result =
-        load_image(host, config->image_path);
+    hermas_mapped_image image;
+    hermas_host_result result = load_image(&image, config->image_path);
     if (result != HERMAS_HOST_OK) {
         hermas_host_close(host);
         return result;
     }
+    host->image_descriptor = image.descriptor;
+    host->image = image.bytes;
+    host->image_size = image.size;
     if (hermas_daemon_registry_init(
             &host->registry, host->image, host->image_size) !=
             HERMAS_DAEMON_OK) {
@@ -264,7 +308,7 @@ hermas_host_result hermas_host_open(
         host->image, host->image_size);
     if (initialized != HERMAS_LOOP_OK) {
         hermas_host_close(host);
-        return initialized == HERMAS_LOOP_INVALID_IMAGE
+        return initialized == HERMAS_LOOP_UNSUPPORTED_GRAPH
             ? HERMAS_HOST_UNSUPPORTED_GRAPH
             : HERMAS_HOST_IMAGE_ERROR;
     }
