@@ -398,6 +398,11 @@ if(BUILD_TESTING)
                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_history_json.py"
                         contract
                         "$<TARGET_FILE:hermas_history>")
+            add_test(
+                NAME hermas_daemon_capabilities_tests
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_daemon_capabilities.py"
+                        "$<TARGET_FILE:hermasd>")
         endif()
         add_executable(hermas_saga_log_linux_tests
                        tests/test_saga_log_linux.c)

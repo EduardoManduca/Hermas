@@ -44,6 +44,21 @@ static int image_check_exit(hermas_host_result result) {
     return result == HERMAS_HOST_UNSUPPORTED_GRAPH ? 4 : 1;
 }
 
+static void print_capabilities(void) {
+    printf(
+        "{\"format\":\"hermas-daemon-capabilities-v1\","
+        "\"hermas_version\":\"%s\","
+        "\"graph_image_version\":%u,"
+        "\"protocol_version\":%u,"
+        "\"limits\":{\"actions\":%u,\"active_executions\":%u},"
+        "\"flows\":{\"action\":true,\"match\":true,"
+        "\"within\":true,\"saga\":true,"
+        "\"all\":false,\"each\":false}}\n",
+        HERMAS_VERSION, HERMAS_GRAPH_IMAGE_VERSION,
+        HERMAS_PROTOCOL_VERSION, HERMAS_DAEMON_MAX_ACTIONS,
+        HERMAS_DAEMON_MAX_EXECUTIONS);
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
@@ -61,9 +76,11 @@ int main(int argc, char **argv) {
         puts(
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       hermasd --capabilities\n"
             "       hermasd --check-image IMAGE\n"
             "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       hermasd --workspace DIRECTORY\n\n"
+            "--capabilities emits versioned JSON for automation.\n"
             "--check-image verifies file safety, graph format, and daemon "
             "capability without creating state or sockets.\n\n"
             "The IMAGE form initializes or verifies the managed workspace. "
@@ -71,6 +88,10 @@ int main(int argc, char **argv) {
             "Run one verified graph image with private durable state. "
             "This alpha daemon accepts sequential, typed-choice, deadline, "
             "and saga graphs; bounded all/each graphs fail closed.");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--capabilities") == 0) {
+        print_capabilities();
         return 0;
     }
     if (argc == 3 && strcmp(argv[1], "--check-image") == 0) {
@@ -94,10 +115,11 @@ int main(int argc, char **argv) {
             stderr,
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       %s --capabilities\n"
             "       %s --check-image IMAGE\n"
             "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       %s --workspace DIRECTORY\n",
-            argv[0], argv[0], argv[0], argv[0]);
+            argv[0], argv[0], argv[0], argv[0], argv[0]);
         return 2;
     }
     uint32_t workflow_id = 0u;

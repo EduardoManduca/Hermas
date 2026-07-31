@@ -43,6 +43,11 @@ This command creates no workspace, durable state, or socket. It exits `0` for
 a supported image and `4` for a valid graph that requires unavailable daemon
 capabilities.
 
+Before selecting or compiling a workflow shape, automation can query
+`hermasd --capabilities` for the versioned JSON description of supported
+HScript flow families and fixed daemon limits. See
+`DAEMON_CAPABILITIES_V1.md` for that contract.
+
 All later processes derive that binding:
 
 ```text
