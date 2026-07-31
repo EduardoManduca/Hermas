@@ -113,6 +113,14 @@ execution. Independent Actions can be completely delivered concurrently. After a
 undelivered work is cut off while sent work is awaited. Deterministic outcome
 precedence is `Unknown`, known app failure, `NotSent`, then success.
 
+The production daemon loop does not yet embed this bounded-flow arena.
+`hermas_daemon_loop_init` therefore rejects graph images containing Fork,
+Join, Each, or Collect nodes. This fail-closed boundary prevents a graph from
+being partially executed or reported successful by the sequential
+interpreter. Compiler inspection and the standalone bounded-flow runtime
+remain available while daemon scheduling, durable per-flow delivery facts,
+and restart behavior are integrated as one coherent milestone.
+
 For a root deadline region, the daemon reads the relative millisecond budget
 and explicitly calls the expiry transition. Expiry before delivery is
 `NotSent`; expiry after delivery is `Unknown`. The runtime does not claim to

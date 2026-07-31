@@ -311,9 +311,28 @@ static int test_durable_delivery_facts(
     return 0;
 }
 
+static int test_group_graphs_fail_closed(
+    hermas_daemon_loop *loop,
+    hermas_daemon_registry *registry,
+    const char *path) {
+    size_t image_size = 0u;
+    uint8_t *image = read_fixture(path, &image_size);
+    if (image == NULL) {
+        return fail("cannot read bounded-flow fixture");
+    }
+    int rejected =
+        hermas_daemon_loop_init(loop, registry, image, image_size) ==
+        HERMAS_LOOP_INVALID_IMAGE;
+    free(image);
+    return rejected
+        ? 0
+        : fail("daemon accepted a graph requiring bounded-flow execution");
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        return fail("expected graph-image fixture path");
+    if (argc != 4) {
+        return fail(
+            "expected sequential, parallel, and each graph-image fixtures");
     }
     size_t image_size = 0u;
     uint8_t *image = read_fixture(argv[1], &image_size);
@@ -342,6 +361,14 @@ int main(int argc, char **argv) {
     if (result == 0) {
         result = test_durable_delivery_facts(
             loop, &registry, image, image_size);
+    }
+    if (result == 0) {
+        result = test_group_graphs_fail_closed(
+            loop, &registry, argv[2]);
+    }
+    if (result == 0) {
+        result = test_group_graphs_fail_closed(
+            loop, &registry, argv[3]);
     }
     hermas_daemon_registry_close(&registry);
     free(loop);

@@ -336,7 +336,9 @@ if(BUILD_TESTING)
             target_link_options(hermas_workspace_tests PRIVATE
                 -fsanitize=address,undefined)
         endif()
-        if(DEFINED HERMAS_TEST_IMAGE)
+        if(DEFINED HERMAS_TEST_IMAGE
+           AND DEFINED HERMAS_TEST_PARALLEL_IMAGE
+           AND DEFINED HERMAS_TEST_EACH_IMAGE)
             add_test(NAME hermas_workspace_tests
                      COMMAND hermas_workspace_tests
                              "${HERMAS_TEST_IMAGE}")
@@ -478,7 +480,10 @@ if(BUILD_TESTING)
                 endif()
             endif()
             add_test(NAME hermas_loop_tests
-                     COMMAND hermas_loop_tests "${HERMAS_TEST_IMAGE}")
+                     COMMAND hermas_loop_tests
+                         "${HERMAS_TEST_IMAGE}"
+                         "${HERMAS_TEST_PARALLEL_IMAGE}"
+                         "${HERMAS_TEST_EACH_IMAGE}")
             add_test(NAME hermas_pipeline_tests
                      COMMAND hermas_pipeline_tests
                          "${HERMAS_TEST_IMAGE}"
