@@ -44,6 +44,23 @@ static int image_check_exit(hermas_host_result result) {
     return result == HERMAS_HOST_UNSUPPORTED_GRAPH ? 4 : 1;
 }
 
+static const char *image_check_status(hermas_host_result result) {
+    if (result == HERMAS_HOST_OK) {
+        return "supported";
+    }
+    if (result == HERMAS_HOST_UNSUPPORTED_GRAPH) {
+        return "unsupported";
+    }
+    return "invalid";
+}
+
+static void print_image_check_json(hermas_host_result result) {
+    printf(
+        "{\"format\":\"hermas-image-check-v1\","
+        "\"status\":\"%s\",\"reason\":\"%s\"}\n",
+        image_check_status(result), hermas_host_result_name(result));
+}
+
 static const char *feature_boolean(
     hermas_graph_features supported,
     hermas_graph_features feature) {
@@ -97,12 +114,13 @@ int main(int argc, char **argv) {
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
             "       hermasd --capabilities\n"
-            "       hermasd --check-image IMAGE\n"
+            "       hermasd --check-image IMAGE [--json]\n"
             "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       hermasd --workspace DIRECTORY\n\n"
             "--capabilities emits versioned JSON for automation.\n"
             "--check-image verifies file safety, graph format, and daemon "
-            "capability without creating state or sockets.\n\n"
+            "capability without creating state or sockets. --json emits "
+            "hermas-image-check-v1.\n\n"
             "The IMAGE form initializes or verifies the managed workspace. "
             "Later starts derive its pinned image and workflow ID.\n\n"
             "Run one verified graph image with private durable state. "
@@ -114,8 +132,14 @@ int main(int argc, char **argv) {
         print_capabilities();
         return 0;
     }
-    if (argc == 3 && strcmp(argv[1], "--check-image") == 0) {
+    if ((argc == 3 ||
+         (argc == 4 && strcmp(argv[3], "--json") == 0)) &&
+        strcmp(argv[1], "--check-image") == 0) {
         hermas_host_result checked = hermas_host_check_image(argv[2]);
+        if (argc == 4) {
+            print_image_check_json(checked);
+            return checked == HERMAS_HOST_OK ? 0 : image_check_exit(checked);
+        }
         if (checked == HERMAS_HOST_OK) {
             printf("hermasd: supported image: %s\n", argv[2]);
             return 0;
@@ -136,7 +160,7 @@ int main(int argc, char **argv) {
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
             "       %s --capabilities\n"
-            "       %s --check-image IMAGE\n"
+            "       %s --check-image IMAGE [--json]\n"
             "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       %s --workspace DIRECTORY\n",
             argv[0], argv[0], argv[0], argv[0], argv[0]);

@@ -278,13 +278,14 @@ static int run_unsupported_command(
     pid_t child = fork();
     if (child == 0) {
         close(errors[0]);
-        if (dup2(errors[1], STDERR_FILENO) < 0) {
+        int output = workspace == NULL ? STDOUT_FILENO : STDERR_FILENO;
+        if (dup2(errors[1], output) < 0) {
             _exit(127);
         }
         close(errors[1]);
         if (workspace == NULL) {
             execl(
-                daemon, daemon, "--check-image", image,
+                daemon, daemon, "--check-image", image, "--json",
                 (char *)NULL);
         } else {
             execl(
@@ -313,7 +314,11 @@ static int run_unsupported_command(
     int status = 0;
     return waitpid(child, &status, 0) == child &&
            WIFEXITED(status) && WEXITSTATUS(status) == 4 &&
-           strstr(text, "unsupported-graph") != NULL;
+           strstr(text, "unsupported-graph") != NULL &&
+           (workspace != NULL ||
+            strstr(text, "\"format\":\"hermas-image-check-v1\"") != NULL) &&
+           (workspace != NULL ||
+            strstr(text, "\"status\":\"unsupported\"") != NULL);
 }
 
 static int test_unsupported_graph(

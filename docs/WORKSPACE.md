@@ -37,6 +37,7 @@ Automation can perform the read-only part independently:
 
 ```text
 hermasd --check-image workflow.hgi
+hermasd --check-image workflow.hgi --json
 ```
 
 This command creates no workspace, durable state, or socket. It exits `0` for
