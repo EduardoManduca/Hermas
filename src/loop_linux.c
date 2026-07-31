@@ -24,35 +24,6 @@ static size_t image_u32(
            ((size_t)image[offset + 3u] << 24u);
 }
 
-static bool image_requires_group_runtime(
-    const uint8_t *image) {
-    uint16_t node_count = image_u16(
-        image, HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET);
-    size_t nodes = image_u32(
-        image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
-    for (uint16_t index = 0u; index < node_count; ++index) {
-        uint8_t kind =
-            image[nodes + (size_t)index *
-                              HERMAS_IMAGE_NODE_RECORD_SIZE];
-        if (kind >= 4u && kind <= 7u) {
-            return true;
-        }
-    }
-    uint16_t region_count = image_u16(
-        image, HERMAS_IMAGE_HEADER_REGION_COUNT_OFFSET);
-    size_t regions = image_u32(
-        image, HERMAS_IMAGE_HEADER_REGIONS_OFFSET);
-    for (uint16_t index = 0u; index < region_count; ++index) {
-        uint8_t kind =
-            image[regions + (size_t)index *
-                                HERMAS_IMAGE_REGION_RECORD_SIZE];
-        if (kind == 2u) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static hermas_loop_slot *find_execution(
     hermas_daemon_loop *loop,
     uint64_t execution_id) {
@@ -711,13 +682,22 @@ hermas_loop_result hermas_daemon_image_check(
     if (image == NULL) {
         return HERMAS_LOOP_INVALID_ARGUMENT;
     }
-    if (hermas_image_validate(image, image_size, NULL) != HERMAS_IMAGE_OK) {
+    hermas_graph_features required = 0u;
+    if (hermas_image_features(image, image_size, &required) !=
+        HERMAS_IMAGE_OK) {
         return HERMAS_LOOP_INVALID_IMAGE;
     }
-    if (image_requires_group_runtime(image)) {
+    if ((required & ~hermas_daemon_supported_graph_features()) != 0u) {
         return HERMAS_LOOP_UNSUPPORTED_GRAPH;
     }
     return HERMAS_LOOP_OK;
+}
+
+hermas_graph_features hermas_daemon_supported_graph_features(void) {
+    return HERMAS_GRAPH_FEATURE_ACTION |
+           HERMAS_GRAPH_FEATURE_MATCH |
+           HERMAS_GRAPH_FEATURE_WITHIN |
+           HERMAS_GRAPH_FEATURE_SAGA;
 }
 
 hermas_loop_result hermas_daemon_loop_init(

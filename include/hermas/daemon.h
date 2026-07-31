@@ -1,6 +1,7 @@
 #ifndef HERMAS_DAEMON_H
 #define HERMAS_DAEMON_H
 
+#include "hermas/image.h"
 #include "hermas/runtime.h"
 #include "hermas/journal.h"
 #include "hermas/compensation.h"
@@ -127,6 +128,9 @@ typedef struct hermas_daemon_loop {
 hermas_loop_result hermas_daemon_image_check(
     const uint8_t *image,
     size_t image_size);
+
+/* The authoritative flow-feature mask implemented by this daemon build. */
+hermas_graph_features hermas_daemon_supported_graph_features(void);
 
 hermas_loop_result hermas_daemon_loop_init(
     hermas_daemon_loop *loop,

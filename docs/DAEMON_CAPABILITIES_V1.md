@@ -56,3 +56,7 @@ capacity at the instant of the query.
 This document describes static build capabilities. To decide whether one
 specific graph can run, use `hermasd --check-image IMAGE`; that command also
 applies graph validation and safe-file rules.
+The `flows` object is emitted from the same supported-feature mask used by
+image admission. Required graph features are derived by the validated image
+API, so the scheduler and command-line tool do not maintain separate format
+interpretations for this decision.

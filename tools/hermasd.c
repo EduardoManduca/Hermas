@@ -44,7 +44,15 @@ static int image_check_exit(hermas_host_result result) {
     return result == HERMAS_HOST_UNSUPPORTED_GRAPH ? 4 : 1;
 }
 
+static const char *feature_boolean(
+    hermas_graph_features supported,
+    hermas_graph_features feature) {
+    return (supported & feature) != 0u ? "true" : "false";
+}
+
 static void print_capabilities(void) {
+    hermas_graph_features supported =
+        hermas_daemon_supported_graph_features();
     printf(
         "{\"format\":\"hermas-daemon-capabilities-v1\","
         "\"hermas_version\":\"%s\","
@@ -54,15 +62,21 @@ static void print_capabilities(void) {
         "\"compensation\":%u,\"saga_log\":%u,"
         "\"workspace_manifest\":%u},"
         "\"limits\":{\"actions\":%u,\"active_executions\":%u},"
-        "\"flows\":{\"action\":true,\"match\":true,"
-        "\"within\":true,\"saga\":true,"
-        "\"all\":false,\"each\":false}}\n",
+        "\"flows\":{\"action\":%s,\"match\":%s,"
+        "\"within\":%s,\"saga\":%s,"
+        "\"all\":%s,\"each\":%s}}\n",
         HERMAS_VERSION, HERMAS_GRAPH_IMAGE_VERSION,
         HERMAS_PROTOCOL_VERSION, HERMAS_JOURNAL_VERSION,
         HERMAS_RESULT_VERSION, HERMAS_COMPENSATION_VERSION,
         HERMAS_SAGA_LOG_VERSION, HERMAS_WORKSPACE_MANIFEST_VERSION,
         HERMAS_DAEMON_MAX_ACTIONS,
-        HERMAS_DAEMON_MAX_EXECUTIONS);
+        HERMAS_DAEMON_MAX_EXECUTIONS,
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_ACTION),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_MATCH),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_WITHIN),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_SAGA),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_ALL),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_EACH));
 }
 
 int main(int argc, char **argv) {

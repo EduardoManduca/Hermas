@@ -1010,6 +1010,57 @@ hermas_image_result hermas_image_validate(
     return HERMAS_IMAGE_OK;
 }
 
+hermas_image_result hermas_image_features(
+    const uint8_t *image,
+    size_t image_size,
+    hermas_graph_features *features) {
+    if (features == NULL) {
+        return HERMAS_IMAGE_INVALID_VALUE;
+    }
+    hermas_image_result validated =
+        hermas_image_validate(image, image_size, NULL);
+    if (validated != HERMAS_IMAGE_OK) {
+        return validated;
+    }
+
+    hermas_graph_features required = 0u;
+    uint16_t node_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET);
+    size_t nodes = read_u32(
+        image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
+    for (size_t index = 0u; index < node_count; ++index) {
+        uint8_t kind = image[
+            nodes + index * HERMAS_IMAGE_NODE_RECORD_SIZE];
+        if (kind == HERMAS_IMAGE_NODE_ACTION) {
+            required |= HERMAS_GRAPH_FEATURE_ACTION;
+        } else if (kind == HERMAS_IMAGE_NODE_DISPATCH) {
+            required |= HERMAS_GRAPH_FEATURE_MATCH;
+        } else if (kind == HERMAS_IMAGE_NODE_FORK ||
+                   kind == HERMAS_IMAGE_NODE_JOIN) {
+            required |= HERMAS_GRAPH_FEATURE_ALL;
+        }
+    }
+
+    uint16_t region_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t regions = read_u32(
+        image, HERMAS_IMAGE_HEADER_REGIONS_OFFSET);
+    for (size_t index = 0u; index < region_count; ++index) {
+        uint8_t kind = image[
+            regions + index * HERMAS_IMAGE_REGION_RECORD_SIZE];
+        if (kind == HERMAS_IMAGE_REGION_DEADLINE) {
+            required |= HERMAS_GRAPH_FEATURE_WITHIN;
+        } else if (kind == HERMAS_IMAGE_REGION_EACH) {
+            required |= HERMAS_GRAPH_FEATURE_EACH;
+        } else if (kind == HERMAS_IMAGE_REGION_SAGA_STEP ||
+                   kind == HERMAS_IMAGE_REGION_SAGA_OUTCOME) {
+            required |= HERMAS_GRAPH_FEATURE_SAGA;
+        }
+    }
+    *features = required;
+    return HERMAS_IMAGE_OK;
+}
+
 hermas_image_result hermas_image_describe_type(
     const uint8_t *image,
     size_t image_size,
