@@ -52,7 +52,9 @@ int main(int argc, char **argv) {
             "       hermasd --workspace DIRECTORY\n\n"
             "The IMAGE form initializes or verifies the managed workspace. "
             "Later starts derive its pinned image and workflow ID.\n\n"
-            "Run one verified graph image with private durable state.");
+            "Run one verified graph image with private durable state. "
+            "This alpha daemon accepts sequential, typed-choice, deadline, "
+            "and saga graphs; bounded all/each graphs fail closed.");
         return 0;
     }
     int workspace_bind_mode =

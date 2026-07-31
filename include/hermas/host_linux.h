@@ -22,7 +22,8 @@ typedef enum hermas_host_result {
     HERMAS_HOST_SOCKET_ERROR,
     HERMAS_HOST_REGISTRATION_ERROR,
     HERMAS_HOST_CONTROL_ERROR,
-    HERMAS_HOST_POLL_ERROR
+    HERMAS_HOST_POLL_ERROR,
+    HERMAS_HOST_UNSUPPORTED_GRAPH
 } hermas_host_result;
 
 typedef struct hermas_host_config {

@@ -496,7 +496,7 @@ if(BUILD_TESTING)
                 hermasd hermas_run hermas_grade_list
                 hermas_mean_calculator hermas_printer)
             target_link_libraries(hermasd_tests PRIVATE
-                hermas_client hermas_journal)
+                hermas_client hermas_journal hermas_host)
             target_compile_options(hermasd_tests PRIVATE
                 -Wall -Wextra -Wpedantic -Werror)
             if(HERMAS_SANITIZE)
@@ -513,7 +513,8 @@ if(BUILD_TESTING)
                          "$<TARGET_FILE:hermas_run>"
                          "$<TARGET_FILE:hermas_grade_list>"
                          "$<TARGET_FILE:hermas_mean_calculator>"
-                         "$<TARGET_FILE:hermas_printer>")
+                         "$<TARGET_FILE:hermas_printer>"
+                         "${HERMAS_TEST_PARALLEL_IMAGE}")
         endif()
         if(DEFINED HERMAS_TEST_SAGA_IMAGE)
             add_executable(hermas_host_recovery_tests

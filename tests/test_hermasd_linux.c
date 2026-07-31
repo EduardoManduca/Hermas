@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "hermas/client.h"
+#include "hermas/host_linux.h"
 #include "hermas/journal_linux.h"
 
 #include <errno.h>
@@ -266,10 +267,71 @@ static void remove_state(const char *directory) {
     (void)rmdir(directory);
 }
 
+static int test_unsupported_graph(const char *image_path) {
+    size_t image_size = 0u;
+    uint8_t *image = read_file(image_path, &image_size);
+    char secure_image[] = "/tmp/hermasd-unsupported-image-XXXXXX";
+    int descriptor = mkstemp(secure_image);
+    int prepared = 0;
+    if (image != NULL && descriptor >= 0) {
+        int written = write_all(descriptor, image, image_size);
+        int closed = close(descriptor) == 0;
+        descriptor = -1;
+        prepared =
+            written && closed &&
+            chmod(secure_image, 0600) == 0;
+    }
+    free(image);
+    if (!prepared) {
+        if (descriptor >= 0) {
+            close(descriptor);
+        }
+        (void)unlink(secure_image);
+        return 0;
+    }
+    char state[] = "/tmp/hermasd-unsupported-state-XXXXXX";
+    if (mkdtemp(state) == NULL) {
+        (void)unlink(secure_image);
+        return 0;
+    }
+    char app_socket[512];
+    char control_socket[512];
+    (void)snprintf(
+        app_socket, sizeof(app_socket), "%s/apps.sock", state);
+    (void)snprintf(
+        control_socket, sizeof(control_socket),
+        "%s/control.sock", state);
+    hermas_host *host = calloc(1u, sizeof(*host));
+    if (host == NULL) {
+        (void)rmdir(state);
+        (void)unlink(secure_image);
+        return 0;
+    }
+    hermas_host_result result = hermas_host_open(
+        host,
+        &(hermas_host_config){
+            .image_path = secure_image,
+            .state_directory = state,
+            .app_socket_path = app_socket,
+            .control_socket_path = control_socket,
+            .workflow_id = 7u,
+        });
+    int rejected =
+        result == HERMAS_HOST_UNSUPPORTED_GRAPH &&
+        strcmp(
+            hermas_host_result_name(result),
+            "unsupported-graph") == 0;
+    hermas_host_close(host);
+    free(host);
+    (void)rmdir(state);
+    (void)unlink(secure_image);
+    return rejected;
+}
+
 int main(int argc, char **argv) {
-    if (argc != 7) {
+    if (argc != 8) {
         return fail(
-            "expected image, daemon, runner, and three app executables");
+            "expected image, daemon, runner, three apps, and parallel image");
     }
     size_t image_size = 0u;
     uint8_t *image = read_file(argv[1], &image_size);
@@ -287,6 +349,10 @@ int main(int argc, char **argv) {
         return fail("unexpected grade graph layout");
     }
     const char *app_paths[3] = {argv[4], argv[5], argv[6]};
+    if (!test_unsupported_graph(argv[7])) {
+        free(image);
+        return fail("bounded-flow graph did not report unsupported-graph");
+    }
     char secure_image[] = "/tmp/hermasd-image-XXXXXX";
     int secure_descriptor = mkstemp(secure_image);
     int image_written =

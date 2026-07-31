@@ -259,11 +259,14 @@ hermas_host_result hermas_host_open(
         return HERMAS_HOST_REGISTRATION_ERROR;
     }
     host->registration_initialized = true;
-    if (hermas_daemon_loop_init(
-            &host->loop, &host->registry,
-            host->image, host->image_size) != HERMAS_LOOP_OK) {
+    hermas_loop_result initialized = hermas_daemon_loop_init(
+        &host->loop, &host->registry,
+        host->image, host->image_size);
+    if (initialized != HERMAS_LOOP_OK) {
         hermas_host_close(host);
-        return HERMAS_HOST_IMAGE_ERROR;
+        return initialized == HERMAS_LOOP_INVALID_IMAGE
+            ? HERMAS_HOST_UNSUPPORTED_GRAPH
+            : HERMAS_HOST_IMAGE_ERROR;
     }
     hermas_journal_summary journal_summary;
     hermas_saga_log_summary saga_summary;
@@ -501,7 +504,7 @@ const char *hermas_host_result_name(hermas_host_result result) {
     static const char *const names[] = {
         "ok", "invalid-argument", "image-error", "state-error",
         "recovery-required", "socket-error", "registration-error",
-        "control-error", "poll-error"
+        "control-error", "poll-error", "unsupported-graph"
     };
     size_t index = (size_t)result;
     return index < sizeof(names) / sizeof(names[0])
