@@ -228,6 +228,10 @@ int main(int argc, char **argv) {
             hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_INCOMPATIBLE ||
             !replace_byte(paths.manifest_path, 4, 1u) ||
+            !replace_byte(paths.manifest_path, 16, 1u) ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            !replace_byte(paths.manifest_path, 16, 2u) ||
             !replace_byte(paths.manifest_path, 63, 1u) ||
             hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_INVALID_MANIFEST ||

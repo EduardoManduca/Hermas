@@ -50,12 +50,18 @@ static void print_capabilities(void) {
         "\"hermas_version\":\"%s\","
         "\"graph_image_version\":%u,"
         "\"protocol_version\":%u,"
+        "\"formats\":{\"journal\":%u,\"result\":%u,"
+        "\"compensation\":%u,\"saga_log\":%u,"
+        "\"workspace_manifest\":%u},"
         "\"limits\":{\"actions\":%u,\"active_executions\":%u},"
         "\"flows\":{\"action\":true,\"match\":true,"
         "\"within\":true,\"saga\":true,"
         "\"all\":false,\"each\":false}}\n",
         HERMAS_VERSION, HERMAS_GRAPH_IMAGE_VERSION,
-        HERMAS_PROTOCOL_VERSION, HERMAS_DAEMON_MAX_ACTIONS,
+        HERMAS_PROTOCOL_VERSION, HERMAS_JOURNAL_VERSION,
+        HERMAS_RESULT_VERSION, HERMAS_COMPENSATION_VERSION,
+        HERMAS_SAGA_LOG_VERSION, HERMAS_WORKSPACE_MANIFEST_VERSION,
+        HERMAS_DAEMON_MAX_ACTIONS,
         HERMAS_DAEMON_MAX_EXECUTIONS);
 }
 

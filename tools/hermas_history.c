@@ -50,7 +50,7 @@ static hermas_journal_result print_json_record(
     const hermas_journal_record *record) {
     (void)context;
     printf(
-        "{\"format\":\"hermas-history-v1\",\"type\":\"record\","
+        "{\"format\":\"hermas-history-v2\",\"type\":\"record\","
         "\"sequence\":\"%" PRIu64 "\","
         "\"execution_id\":\"%" PRIu64 "\","
         "\"workflow_id\":%u,"
@@ -81,7 +81,7 @@ static void print_json_summary(
     const hermas_journal_summary *summary,
     const hermas_workspace_binding *binding) {
     fputs(
-        "{\"format\":\"hermas-history-v1\",\"type\":\"summary\",",
+        "{\"format\":\"hermas-history-v2\",\"type\":\"summary\",",
         stdout);
     printf(
         "\"journal_version\":%u,\"record_count\":\"%" PRIu64
@@ -110,24 +110,25 @@ static void print_json_summary(
             "{\"execution_id\":\"%" PRIu64 "\","
             "\"workflow_id\":%u,"
             "\"image_fingerprint\":\"%016" PRIx64 "\","
-            "\"has_open_delivery\":%s,"
-            "\"delivery_was_sent\":%s,",
+            "\"open_deliveries\":[",
             item->execution_id, item->workflow_id,
-            item->image_fingerprint,
-            item->has_open_delivery != 0u ? "true" : "false",
-            item->delivery_was_sent != 0u ? "true" : "false");
-        if (item->has_open_delivery == 0u) {
-            fputs(
-                "\"request_id\":null,\"node_id\":null,"
-                "\"app_id\":null,\"action_id\":null}",
-                stdout);
-        } else {
+            item->image_fingerprint);
+        for (size_t delivery = 0u;
+             delivery < item->open_delivery_count; ++delivery) {
+            const hermas_journal_open_delivery *open =
+                &item->open_deliveries[delivery];
+            if (delivery != 0u) {
+                fputc(',', stdout);
+            }
             printf(
+                "{\"delivery_was_sent\":%s,"
                 "\"request_id\":\"%" PRIu64 "\","
                 "\"node_id\":%u,\"app_id\":%u,\"action_id\":%u}",
-                item->request_id, item->node_id,
-                item->app_id, item->action_id);
+                open->delivery_was_sent != 0u ? "true" : "false",
+                open->request_id, open->node_id,
+                open->app_id, open->action_id);
         }
+        fputs("]}", stdout);
     }
     fputs("]}\n", stdout);
 }

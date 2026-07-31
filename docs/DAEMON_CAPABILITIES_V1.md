@@ -13,6 +13,13 @@ The v1 document is:
   "hermas_version": "0.1.0-alpha.1",
   "graph_image_version": 1,
   "protocol_version": 1,
+  "formats": {
+    "journal": 2,
+    "result": 1,
+    "compensation": 1,
+    "saga_log": 1,
+    "workspace_manifest": 1
+  },
   "limits": {
     "actions": 80,
     "active_executions": 16

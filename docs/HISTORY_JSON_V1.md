@@ -1,7 +1,9 @@
 # Hermas history JSON Lines v1
 
-Status: stable machine-readable view of a validated journal snapshot for the
-pre-1.0 alpha.
+Status: historical alpha contract, superseded by `hermas-history-v2`.
+
+Current binaries reject journal v1 and emit `hermas-history-v2`. This file is
+retained only to identify the old contract; it is not a compatibility claim.
 
 `hermas_history --json` emits UTF-8 JSON Lines. Each line is one complete JSON
 object and carries `"format":"hermas-history-v1"`. The command accepts either

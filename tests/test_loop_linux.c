@@ -273,7 +273,9 @@ static int test_durable_delivery_facts(
             HERMAS_JOURNAL_OK ||
         summary.record_count != 3u ||
         summary.interrupted_count != 1u ||
-        summary.interrupted[0].delivery_was_sent != 1u) {
+        summary.interrupted[0].open_delivery_count != 1u ||
+        summary.interrupted[0].open_deliveries[0]
+                .delivery_was_sent != 1u) {
         close(sockets[1]);
         return fail("sent delivery facts were not durable");
     }

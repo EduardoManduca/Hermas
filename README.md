@@ -100,7 +100,7 @@ admission. Key executable specifications include:
 - [C Action app guide](docs/APP_AUTHOR_GUIDE.md)
 - [Runtime workspace](docs/WORKSPACE.md)
 - [Workspace manifest v1](docs/WORKSPACE_MANIFEST_V1.md)
-- [History JSON Lines v1](docs/HISTORY_JSON_V1.md)
+- [History JSON Lines v2](docs/HISTORY_JSON_V2.md)
 - [Compatibility policy](docs/COMPATIBILITY.md)
 
 Community growth should primarily add Actions, bindings, diagnostics, test

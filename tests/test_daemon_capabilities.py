@@ -33,6 +33,14 @@ def main() -> None:
         fail("unexpected graph-image version")
     if document.get("protocol_version") != 1:
         fail("unexpected protocol version")
+    if document.get("formats") != {
+        "journal": 2,
+        "result": 1,
+        "compensation": 1,
+        "saga_log": 1,
+        "workspace_manifest": 1,
+    }:
+        fail("durable format versions differ")
     if document.get("limits") != {
         "actions": 80,
         "active_executions": 16,
