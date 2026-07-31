@@ -113,18 +113,20 @@ execution. Independent Actions can be completely delivered concurrently. After a
 undelivered work is cut off while sent work is awaited. Deterministic outcome
 precedence is `Unknown`, known app failure, `NotSent`, then success.
 
-The production daemon loop does not yet embed this bounded-flow arena.
-`hermas_daemon_loop_init` therefore rejects graph images containing Fork,
-Join, Each, or Collect nodes. This fail-closed boundary prevents a graph from
-being partially executed or reported successful by the sequential
-interpreter. `hermas_host_open` and `hermasd` expose this distinction as
+The production daemon embeds two fixed group arenas and executes Fork/Join
+(`all`) graphs with up to eight flows each. Every branch is prepared and sent
+under its own journal delivery identity; independently registered Actions can
+overlap, while the same Action remains single-flight. `each`, Collect, and
+graphs combining `all` with saga recovery remain fail-closed. This prevents a
+graph from being partially executed under semantics the daemon does not yet
+claim. `hermas_host_open` and `hermasd` expose this distinction as
 `unsupported-graph`, rather than conflating it with malformed external bytes.
 `hermasd --check-image IMAGE` exposes the same decision without state or
 socket side effects, and managed-workspace initialization applies it before
 persisting the exact candidate bytes.
-Compiler inspection and the standalone bounded-flow runtime
-remain available while daemon scheduling, durable per-flow delivery facts,
-and restart behavior are integrated as one coherent milestone.
+Compiler inspection and the standalone bounded-flow runtime remain available
+for the larger `each` surface while its daemon scheduling and durable restart
+invariants are integrated as one coherent milestone.
 
 For a root deadline region, the daemon reads the relative millisecond budget
 and explicitly calls the expiry transition. Expiry before delivery is

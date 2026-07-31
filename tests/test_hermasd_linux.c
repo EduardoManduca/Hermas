@@ -397,9 +397,9 @@ static int test_unsupported_graph(
 }
 
 int main(int argc, char **argv) {
-    if (argc != 8) {
+    if (argc != 9) {
         return fail(
-            "expected image, daemon, runner, three apps, and parallel image");
+            "expected image, daemon, runner, three apps, parallel image, and each image");
     }
     size_t image_size = 0u;
     uint8_t *image = read_file(argv[1], &image_size);
@@ -417,9 +417,13 @@ int main(int argc, char **argv) {
         return fail("unexpected grade graph layout");
     }
     const char *app_paths[3] = {argv[4], argv[5], argv[6]};
-    if (!test_unsupported_graph(argv[2], argv[7])) {
+    if (hermas_host_check_image(argv[7]) != HERMAS_HOST_OK) {
         free(image);
-        return fail("bounded-flow graph did not report unsupported-graph");
+        return fail("bounded-all graph did not report supported");
+    }
+    if (!test_unsupported_graph(argv[2], argv[8])) {
+        free(image);
+        return fail("bounded-each graph did not report unsupported-graph");
     }
     char secure_image[] = "/tmp/hermasd-image-XXXXXX";
     int secure_descriptor = mkstemp(secure_image);

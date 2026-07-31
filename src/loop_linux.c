@@ -24,12 +24,52 @@ static size_t image_u32(
            ((size_t)image[offset + 3u] << 24u);
 }
 
+static hermas_group_execution *slot_group(
+    hermas_daemon_loop *loop,
+    const hermas_loop_slot *slot) {
+    if (!slot->grouped ||
+        slot->group_index >= HERMAS_DAEMON_MAX_GROUP_EXECUTIONS) {
+        return NULL;
+    }
+    return &loop->group_executions[slot->group_index];
+}
+
+static const hermas_group_execution *slot_const_group(
+    const hermas_daemon_loop *loop,
+    const hermas_loop_slot *slot) {
+    if (!slot->grouped ||
+        slot->group_index >= HERMAS_DAEMON_MAX_GROUP_EXECUTIONS) {
+        return NULL;
+    }
+    return &loop->group_executions[slot->group_index];
+}
+
+static uint64_t slot_execution_id(
+    const hermas_daemon_loop *loop,
+    const hermas_loop_slot *slot) {
+    const hermas_group_execution *group =
+        slot_const_group(loop, slot);
+    return group == NULL ? slot->execution.execution_id
+                         : group->execution_id;
+}
+
+static bool slot_complete(
+    const hermas_daemon_loop *loop,
+    const hermas_loop_slot *slot) {
+    const hermas_group_execution *group =
+        slot_const_group(loop, slot);
+    return group == NULL
+               ? slot->execution.state == HERMAS_EXECUTION_COMPLETE
+               : group->complete != 0u;
+}
+
 static hermas_loop_slot *find_execution(
     hermas_daemon_loop *loop,
     uint64_t execution_id) {
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas_loop_slot *slot = &loop->executions[index];
-        if (slot->active && slot->execution.execution_id == execution_id) {
+        if (slot->active &&
+            slot_execution_id(loop, slot) == execution_id) {
             return slot;
         }
     }
@@ -41,7 +81,8 @@ static const hermas_loop_slot *find_const_execution(
     uint64_t execution_id) {
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         const hermas_loop_slot *slot = &loop->executions[index];
-        if (slot->active && slot->execution.execution_id == execution_id) {
+        if (slot->active &&
+            slot_execution_id(loop, slot) == execution_id) {
             return slot;
         }
     }
@@ -66,13 +107,31 @@ static void drop_action(
 
 static bool action_owned_by_other(
     const hermas_daemon_loop *loop,
-    const hermas_loop_slot *candidate) {
+    const hermas_loop_slot *candidate,
+    const hermas_loop_delivery *candidate_delivery,
+    uint16_t app_id,
+    uint16_t action_id) {
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         const hermas_loop_slot *slot = &loop->executions[index];
-        if (slot != candidate && slot->active && slot->owns_action &&
-            slot->app_id == candidate->app_id &&
-            slot->action_id == candidate->action_id) {
+        if (!slot->active) {
+            continue;
+        }
+        if (!slot->grouped && slot != candidate && slot->owns_action &&
+            slot->app_id == app_id && slot->action_id == action_id) {
             return true;
+        }
+        if (!slot->grouped) {
+            continue;
+        }
+        for (size_t flow = 0u; flow < HERMAS_RUNTIME_MAX_FLOWS;
+             ++flow) {
+            const hermas_loop_delivery *delivery =
+                &slot->group_deliveries[flow];
+            if (delivery != candidate_delivery &&
+                delivery->owns_action && delivery->app_id == app_id &&
+                delivery->action_id == action_id) {
+                return true;
+            }
         }
     }
     return false;
@@ -90,7 +149,7 @@ static hermas_loop_result append_record(
     hermas_journal_record record = {
         .kind = kind,
         .outcome = outcome,
-        .execution_id = slot->execution.execution_id,
+        .execution_id = slot_execution_id(loop, slot),
         .workflow_id = loop->workflow_id,
         .image_fingerprint = loop->image_fingerprint
     };
@@ -106,16 +165,50 @@ static hermas_loop_result append_record(
                : HERMAS_LOOP_JOURNAL_ERROR;
 }
 
+static hermas_loop_result append_group_record(
+    hermas_daemon_loop *loop,
+    const hermas_loop_slot *slot,
+    const hermas_loop_delivery *delivery,
+    hermas_journal_kind kind,
+    uint16_t outcome) {
+    if (loop->journal == NULL) {
+        return HERMAS_LOOP_OK;
+    }
+    hermas_journal_record record = {
+        .kind = kind,
+        .outcome = outcome,
+        .execution_id = slot_execution_id(loop, slot),
+        .request_id = delivery->request_id,
+        .workflow_id = loop->workflow_id,
+        .node_id = delivery->node_id,
+        .app_id = delivery->app_id,
+        .action_id = delivery->action_id,
+        .image_fingerprint = loop->image_fingerprint
+    };
+    return hermas_journal_writer_append(loop->journal, record) ==
+                   HERMAS_JOURNAL_OK
+               ? HERMAS_LOOP_OK
+               : HERMAS_LOOP_JOURNAL_ERROR;
+}
+
 static hermas_loop_result append_finished_if_complete(
     hermas_daemon_loop *loop,
     hermas_loop_slot *slot) {
-    if (slot->execution.state != HERMAS_EXECUTION_COMPLETE ||
-        slot->journal_finished) {
+    if (!slot_complete(loop, slot) || slot->journal_finished) {
         return HERMAS_LOOP_OK;
+    }
+    uint16_t outcome = slot->execution.terminal_outcome;
+    if (slot->grouped) {
+        hermas_frame result;
+        if (hermas_group_get_result(
+                slot_group(loop, slot), &result) != HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+        outcome = result.outcome;
     }
     hermas_loop_result result = append_record(
         loop, slot, HERMAS_JOURNAL_EXECUTION_FINISHED,
-        slot->execution.terminal_outcome, false);
+        outcome, false);
     if (result == HERMAS_LOOP_OK) {
         slot->journal_finished = true;
     }
@@ -125,12 +218,23 @@ static hermas_loop_result append_finished_if_complete(
 static hermas_loop_result append_result_if_complete(
     hermas_daemon_loop *loop,
     hermas_loop_slot *slot) {
-    if (slot->execution.state != HERMAS_EXECUTION_COMPLETE ||
-        slot->result_stored ||
-        (slot->execution.terminal_outcome !=
-             HERMAS_OUTCOME_SUCCESS &&
-         slot->execution.terminal_outcome !=
-             HERMAS_OUTCOME_APP_ERROR)) {
+    if (!slot_complete(loop, slot) || slot->result_stored) {
+        return HERMAS_LOOP_OK;
+    }
+    hermas_frame final;
+    if (slot->grouped) {
+        if (hermas_group_get_result(
+                slot_group(loop, slot), &final) != HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+    } else {
+        if (hermas_execution_get_result(&slot->execution, &final) !=
+            HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+    }
+    if (final.outcome != HERMAS_OUTCOME_SUCCESS &&
+        final.outcome != HERMAS_OUTCOME_APP_ERROR) {
         return HERMAS_LOOP_OK;
     }
     if (loop->results == NULL) {
@@ -138,16 +242,15 @@ static hermas_loop_result append_result_if_complete(
     }
     hermas_result_record record = {
         .key = {
-            .execution_id = slot->execution.execution_id,
+            .execution_id = slot_execution_id(loop, slot),
             .workflow_id = loop->workflow_id,
             .image_fingerprint = loop->image_fingerprint
         },
-        .outcome = slot->execution.terminal_outcome,
-        .source_type = slot->execution.value_source_type,
-        .destination_type =
-            slot->execution.value_destination_type,
-        .value = slot->execution.value_buffer,
-        .value_length = (uint32_t)slot->execution.value_length
+        .outcome = final.outcome,
+        .source_type = final.source_type,
+        .destination_type = final.destination_type,
+        .value = final.payload,
+        .value_length = final.payload_length
     };
     if (hermas_result_writer_append(
             loop->results, record, loop->compensation_scratch,
@@ -237,21 +340,21 @@ static hermas_saga_state saga_state(
 }
 
 static bool slot_ready(const hermas_loop_slot *slot) {
-    return slot->compensating
+    return !slot->grouped && (slot->compensating
                ? saga_state(slot) == HERMAS_SAGA_READY
-               : slot->execution.state == HERMAS_EXECUTION_READY;
+               : slot->execution.state == HERMAS_EXECUTION_READY);
 }
 
 static bool slot_prepared(const hermas_loop_slot *slot) {
-    return slot->compensating
+    return !slot->grouped && (slot->compensating
                ? saga_state(slot) == HERMAS_SAGA_PREPARED
-               : slot->execution.state == HERMAS_EXECUTION_PREPARED;
+               : slot->execution.state == HERMAS_EXECUTION_PREPARED);
 }
 
 static bool slot_sent(const hermas_loop_slot *slot) {
-    return slot->compensating
+    return !slot->grouped && (slot->compensating
                ? saga_state(slot) == HERMAS_SAGA_SENT
-               : slot->execution.state == HERMAS_EXECUTION_SENT;
+               : slot->execution.state == HERMAS_EXECUTION_SENT);
 }
 
 static void fail_compensation(
@@ -347,6 +450,44 @@ static hermas_loop_result prepare_ready(
         size_t index =
             (loop->scheduler_cursor + step) % HERMAS_DAEMON_MAX_EXECUTIONS;
         hermas_loop_slot *slot = &loop->executions[index];
+        if (slot->active && slot->grouped) {
+            hermas_group_execution *group = slot_group(loop, slot);
+            for (size_t flow_index = 0u;
+                 flow_index < HERMAS_RUNTIME_MAX_FLOWS; ++flow_index) {
+                hermas_flow *flow = &group->flows[flow_index];
+                if (flow->active == 0u ||
+                    flow->state != HERMAS_EXECUTION_READY) {
+                    continue;
+                }
+                hermas_frame invocation;
+                uint16_t node_id = flow->current_node;
+                hermas_runtime_result prepared = hermas_group_prepare(
+                    group, flow_index, &invocation);
+                if (prepared == HERMAS_RUNTIME_INVALID_STATE) {
+                    continue;
+                }
+                if (prepared != HERMAS_RUNTIME_OK) {
+                    return HERMAS_LOOP_RUNTIME_ERROR;
+                }
+                hermas_loop_delivery *delivery =
+                    &slot->group_deliveries[flow_index];
+                *delivery = (hermas_loop_delivery){
+                    .request_id = invocation.request_id,
+                    .node_id = node_id,
+                    .app_id = invocation.app_id,
+                    .action_id = invocation.action_id
+                };
+                hermas_loop_result journaled = append_group_record(
+                    loop, slot, delivery,
+                    HERMAS_JOURNAL_DELIVERY_PREPARED,
+                    HERMAS_OUTCOME_NONE);
+                if (journaled != HERMAS_LOOP_OK) {
+                    return journaled;
+                }
+                ++*progress_count;
+            }
+            continue;
+        }
         if (!slot->active || !slot_ready(slot)) {
             continue;
         }
@@ -403,10 +544,38 @@ static void assign_available_actions(hermas_daemon_loop *loop) {
             !slot_prepared(slot) ||
             hermas_daemon_registry_find_action(
                 loop->registry, slot->app_id, slot->action_id, NULL) < 0 ||
-            action_owned_by_other(loop, slot)) {
+            action_owned_by_other(
+                loop, slot, NULL, slot->app_id, slot->action_id)) {
             continue;
         }
         slot->owns_action = true;
+    }
+    for (size_t step = 0u; step < HERMAS_DAEMON_MAX_EXECUTIONS; ++step) {
+        size_t index =
+            (loop->scheduler_cursor + step) % HERMAS_DAEMON_MAX_EXECUTIONS;
+        hermas_loop_slot *slot = &loop->executions[index];
+        if (!slot->active || !slot->grouped) {
+            continue;
+        }
+        hermas_group_execution *group = slot_group(loop, slot);
+        for (size_t flow_index = 0u;
+             flow_index < HERMAS_RUNTIME_MAX_FLOWS; ++flow_index) {
+            hermas_flow *flow = &group->flows[flow_index];
+            hermas_loop_delivery *delivery =
+                &slot->group_deliveries[flow_index];
+            if (flow->active == 0u ||
+                flow->state != HERMAS_EXECUTION_PREPARED ||
+                delivery->owns_action ||
+                hermas_daemon_registry_find_action(
+                    loop->registry, delivery->app_id,
+                    delivery->action_id, NULL) < 0 ||
+                action_owned_by_other(
+                    loop, slot, delivery, delivery->app_id,
+                    delivery->action_id)) {
+                continue;
+            }
+            delivery->owns_action = true;
+        }
     }
 }
 
@@ -415,6 +584,47 @@ static hermas_loop_result reconcile_missing_actions(
     size_t *progress_count) {
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas_loop_slot *slot = &loop->executions[index];
+        if (slot->active && slot->grouped) {
+            hermas_group_execution *group = slot_group(loop, slot);
+            for (size_t flow_index = 0u;
+                 flow_index < HERMAS_RUNTIME_MAX_FLOWS; ++flow_index) {
+                hermas_loop_delivery *delivery =
+                    &slot->group_deliveries[flow_index];
+                if (!delivery->owns_action ||
+                    hermas_daemon_registry_find_action(
+                        loop->registry, delivery->app_id,
+                        delivery->action_id, NULL) >= 0) {
+                    continue;
+                }
+                delivery->owns_action = false;
+                hermas_flow *flow = &group->flows[flow_index];
+                if (flow->active != 0u &&
+                    flow->state == HERMAS_EXECUTION_SENT) {
+                    hermas_loop_result journaled = append_group_record(
+                        loop, slot, delivery,
+                        HERMAS_JOURNAL_ACTION_UNKNOWN,
+                        HERMAS_OUTCOME_UNKNOWN);
+                    if (journaled != HERMAS_LOOP_OK) {
+                        return journaled;
+                    }
+                    if (hermas_group_mark_unknown(group, flow_index) !=
+                        HERMAS_RUNTIME_OK) {
+                        return HERMAS_LOOP_RUNTIME_ERROR;
+                    }
+                    hermas_loop_result stored =
+                        append_result_if_complete(loop, slot);
+                    if (stored != HERMAS_LOOP_OK) {
+                        return stored;
+                    }
+                    journaled = append_finished_if_complete(loop, slot);
+                    if (journaled != HERMAS_LOOP_OK) {
+                        return journaled;
+                    }
+                    ++*progress_count;
+                }
+            }
+            continue;
+        }
         if (!slot->active || !slot->owns_action ||
             hermas_daemon_registry_find_action(
                 loop->registry, slot->app_id, slot->action_id, NULL) >= 0) {
@@ -448,6 +658,185 @@ static hermas_loop_result reconcile_missing_actions(
             ++*progress_count;
         }
     }
+    return HERMAS_LOOP_OK;
+}
+
+static hermas_loop_result finish_group_transition(
+    hermas_daemon_loop *loop,
+    hermas_loop_slot *slot) {
+    hermas_loop_result stored = append_result_if_complete(loop, slot);
+    if (stored != HERMAS_LOOP_OK) {
+        return stored;
+    }
+    return append_finished_if_complete(loop, slot);
+}
+
+static hermas_loop_result send_group_invocation(
+    hermas_daemon_loop *loop,
+    hermas_loop_slot *slot,
+    size_t flow_index,
+    size_t *progress_count) {
+    hermas_group_execution *group = slot_group(loop, slot);
+    hermas_flow *flow = &group->flows[flow_index];
+    hermas_loop_delivery *delivery =
+        &slot->group_deliveries[flow_index];
+    uint16_t registered_action_id = 0u;
+    int descriptor = hermas_daemon_registry_find_action(
+        loop->registry, delivery->app_id, delivery->action_id,
+        &registered_action_id);
+    if (descriptor < 0) {
+        delivery->owns_action = false;
+        return HERMAS_LOOP_OK;
+    }
+    hermas_frame invocation = {
+        .kind = HERMAS_FRAME_INVOKE,
+        .execution_id = group->execution_id,
+        .request_id = delivery->request_id,
+        .app_id = delivery->app_id,
+        .action_id = registered_action_id,
+        .source_type = flow->value_source_type,
+        .destination_type = flow->value_destination_type,
+        .outcome = HERMAS_OUTCOME_NONE,
+        .payload = flow->value_buffer,
+        .payload_length = (uint32_t)flow->value_length
+    };
+    if (hermas_protocol_encode(
+            &invocation, slot->packet, sizeof(slot->packet),
+            &slot->packet_size) != HERMAS_PROTOCOL_OK) {
+        return HERMAS_LOOP_PROTOCOL_ERROR;
+    }
+    ssize_t sent = send(
+        descriptor, slot->packet, slot->packet_size,
+        MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (sent == (ssize_t)slot->packet_size) {
+        hermas_loop_result journaled = append_group_record(
+            loop, slot, delivery, HERMAS_JOURNAL_DELIVERY_SENT,
+            HERMAS_OUTCOME_NONE);
+        if (journaled != HERMAS_LOOP_OK) {
+            return journaled;
+        }
+        if (hermas_group_mark_sent(group, flow_index) !=
+            HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+        ++*progress_count;
+        return HERMAS_LOOP_OK;
+    }
+    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK ||
+                     errno == EINTR)) {
+        return HERMAS_LOOP_OK;
+    }
+    hermas_loop_result journaled = append_group_record(
+        loop, slot, delivery, HERMAS_JOURNAL_ACTION_FAILED,
+        HERMAS_OUTCOME_NOT_SENT);
+    if (journaled != HERMAS_LOOP_OK) {
+        return journaled;
+    }
+    if (hermas_group_mark_not_sent(group, flow_index) !=
+        HERMAS_RUNTIME_OK) {
+        return HERMAS_LOOP_RUNTIME_ERROR;
+    }
+    delivery->owns_action = false;
+    drop_action(loop->registry, delivery->app_id, delivery->action_id);
+    journaled = finish_group_transition(loop, slot);
+    if (journaled != HERMAS_LOOP_OK) {
+        return journaled;
+    }
+    ++*progress_count;
+    return HERMAS_LOOP_OK;
+}
+
+static hermas_loop_result receive_group_result(
+    hermas_daemon_loop *loop,
+    hermas_loop_slot *slot,
+    size_t flow_index,
+    size_t *progress_count) {
+    hermas_group_execution *group = slot_group(loop, slot);
+    hermas_loop_delivery *delivery =
+        &slot->group_deliveries[flow_index];
+    uint16_t registered_action_id = 0u;
+    int descriptor = hermas_daemon_registry_find_action(
+        loop->registry, delivery->app_id, delivery->action_id,
+        &registered_action_id);
+    if (descriptor < 0) {
+        hermas_loop_result journaled = append_group_record(
+            loop, slot, delivery, HERMAS_JOURNAL_ACTION_UNKNOWN,
+            HERMAS_OUTCOME_UNKNOWN);
+        if (journaled != HERMAS_LOOP_OK) {
+            return journaled;
+        }
+        if (hermas_group_mark_unknown(group, flow_index) !=
+            HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+        delivery->owns_action = false;
+        journaled = finish_group_transition(loop, slot);
+        if (journaled != HERMAS_LOOP_OK) {
+            return journaled;
+        }
+        ++*progress_count;
+        return HERMAS_LOOP_OK;
+    }
+    struct iovec vector = {
+        .iov_base = slot->packet,
+        .iov_len = sizeof(slot->packet)
+    };
+    struct msghdr message;
+    memset(&message, 0, sizeof(message));
+    message.msg_iov = &vector;
+    message.msg_iovlen = 1u;
+    ssize_t received = recvmsg(descriptor, &message, MSG_DONTWAIT);
+    if (received < 0 &&
+        (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+        return HERMAS_LOOP_OK;
+    }
+    bool transport_failed =
+        received <= 0 || (message.msg_flags & MSG_TRUNC) != 0;
+    hermas_frame result;
+    bool decoded =
+        !transport_failed &&
+        hermas_protocol_decode(slot->packet, (size_t)received, &result) ==
+            HERMAS_PROTOCOL_OK;
+    if (decoded) {
+        if (result.action_id != registered_action_id) {
+            decoded = false;
+        } else {
+            result.action_id = delivery->action_id;
+        }
+    }
+    bool accepted =
+        decoded &&
+        hermas_group_accept_result(group, flow_index, &result) ==
+            HERMAS_RUNTIME_OK;
+    hermas_loop_result journaled;
+    if (accepted) {
+        hermas_journal_kind kind =
+            result.outcome == HERMAS_OUTCOME_SUCCESS
+                ? HERMAS_JOURNAL_ACTION_SUCCEEDED
+                : HERMAS_JOURNAL_ACTION_FAILED;
+        journaled = append_group_record(
+            loop, slot, delivery, kind, result.outcome);
+    } else {
+        journaled = append_group_record(
+            loop, slot, delivery, HERMAS_JOURNAL_ACTION_UNKNOWN,
+            HERMAS_OUTCOME_UNKNOWN);
+        if (journaled == HERMAS_LOOP_OK &&
+            hermas_group_mark_unknown(group, flow_index) !=
+                HERMAS_RUNTIME_OK) {
+            return HERMAS_LOOP_RUNTIME_ERROR;
+        }
+        drop_action(loop->registry, delivery->app_id,
+                    delivery->action_id);
+    }
+    if (journaled != HERMAS_LOOP_OK) {
+        return journaled;
+    }
+    delivery->owns_action = false;
+    journaled = finish_group_transition(loop, slot);
+    if (journaled != HERMAS_LOOP_OK) {
+        return journaled;
+    }
+    ++*progress_count;
     return HERMAS_LOOP_OK;
 }
 
@@ -690,6 +1079,10 @@ hermas_loop_result hermas_daemon_image_check(
     if ((required & ~hermas_daemon_supported_graph_features()) != 0u) {
         return HERMAS_LOOP_UNSUPPORTED_GRAPH;
     }
+    if ((required & HERMAS_GRAPH_FEATURE_ALL) != 0u &&
+        (required & HERMAS_GRAPH_FEATURE_SAGA) != 0u) {
+        return HERMAS_LOOP_UNSUPPORTED_GRAPH;
+    }
     return HERMAS_LOOP_OK;
 }
 
@@ -697,7 +1090,8 @@ hermas_graph_features hermas_daemon_supported_graph_features(void) {
     return HERMAS_GRAPH_FEATURE_ACTION |
            HERMAS_GRAPH_FEATURE_MATCH |
            HERMAS_GRAPH_FEATURE_WITHIN |
-           HERMAS_GRAPH_FEATURE_SAGA;
+           HERMAS_GRAPH_FEATURE_SAGA |
+           HERMAS_GRAPH_FEATURE_ALL;
 }
 
 hermas_loop_result hermas_daemon_loop_init(
@@ -917,22 +1311,66 @@ hermas_loop_result hermas_daemon_loop_admit(
     if (find_execution(loop, execution_id) != NULL) {
         return HERMAS_LOOP_DUPLICATE_EXECUTION;
     }
+    hermas_graph_features features = 0u;
+    if (hermas_image_features(
+            loop->image, loop->image_size, &features) != HERMAS_IMAGE_OK) {
+        return HERMAS_LOOP_INVALID_IMAGE;
+    }
+    bool grouped = (features & HERMAS_GRAPH_FEATURE_ALL) != 0u;
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas_loop_slot *slot = &loop->executions[index];
         if (slot->active) {
             continue;
         }
         memset(slot, 0, sizeof(*slot));
-        hermas_runtime_result started = hermas_execution_start(
-            &slot->execution, loop->image, loop->image_size, execution_id,
-            slot->value, sizeof(slot->value), input_type, input, input_length);
+        hermas_runtime_result started;
+        size_t group_index = HERMAS_DAEMON_MAX_GROUP_EXECUTIONS;
+        if (grouped) {
+            for (size_t candidate = 0u;
+                 candidate < HERMAS_DAEMON_MAX_GROUP_EXECUTIONS;
+                 ++candidate) {
+                if (!loop->group_used[candidate]) {
+                    group_index = candidate;
+                    break;
+                }
+            }
+            if (group_index == HERMAS_DAEMON_MAX_GROUP_EXECUTIONS) {
+                return HERMAS_LOOP_CAPACITY_EXHAUSTED;
+            }
+            loop->group_used[group_index] = true;
+            slot->grouped = true;
+            slot->group_index = (uint8_t)group_index;
+            started = hermas_group_start(
+                &loop->group_executions[group_index], loop->image,
+                loop->image_size, execution_id,
+                &loop->group_values[group_index][0][0],
+                sizeof(loop->group_values[group_index]),
+                HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE, input_type, input,
+                input_length);
+        } else {
+            started = hermas_execution_start(
+                &slot->execution, loop->image, loop->image_size,
+                execution_id, slot->value, sizeof(slot->value), input_type,
+                input, input_length);
+        }
         if (started != HERMAS_RUNTIME_OK) {
+            if (group_index < HERMAS_DAEMON_MAX_GROUP_EXECUTIONS) {
+                loop->group_used[group_index] = false;
+                memset(&loop->group_executions[group_index], 0,
+                       sizeof(loop->group_executions[group_index]));
+            }
+            memset(slot, 0, sizeof(*slot));
             return HERMAS_LOOP_RUNTIME_ERROR;
         }
         hermas_loop_result journaled = append_record(
             loop, slot, HERMAS_JOURNAL_EXECUTION_STARTED,
             HERMAS_OUTCOME_NONE, false);
         if (journaled != HERMAS_LOOP_OK) {
+            if (group_index < HERMAS_DAEMON_MAX_GROUP_EXECUTIONS) {
+                loop->group_used[group_index] = false;
+                memset(&loop->group_executions[group_index], 0,
+                       sizeof(loop->group_executions[group_index]));
+            }
             memset(slot, 0, sizeof(*slot));
             return journaled;
         }
@@ -963,12 +1401,56 @@ hermas_loop_result hermas_daemon_loop_poll(
         return reconciled;
     }
     assign_available_actions(loop);
-    struct pollfd poll_items[HERMAS_DAEMON_MAX_EXECUTIONS];
-    hermas_loop_slot *owners[HERMAS_DAEMON_MAX_EXECUTIONS];
+    struct pollfd poll_items[HERMAS_DAEMON_MAX_ACTIONS];
+    typedef struct poll_owner {
+        hermas_loop_slot *slot;
+        size_t flow_index;
+        bool grouped;
+    } poll_owner;
+    poll_owner owners[HERMAS_DAEMON_MAX_ACTIONS];
     size_t poll_count = 0u;
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas_loop_slot *slot = &loop->executions[index];
-        if (!slot->active || !slot->owns_action) {
+        if (!slot->active) {
+            continue;
+        }
+        if (slot->grouped) {
+            hermas_group_execution *group = slot_group(loop, slot);
+            for (size_t flow_index = 0u;
+                 flow_index < HERMAS_RUNTIME_MAX_FLOWS; ++flow_index) {
+                hermas_loop_delivery *delivery =
+                    &slot->group_deliveries[flow_index];
+                hermas_flow *flow = &group->flows[flow_index];
+                if (!delivery->owns_action || flow->active == 0u ||
+                    (flow->state != HERMAS_EXECUTION_PREPARED &&
+                     flow->state != HERMAS_EXECUTION_SENT)) {
+                    continue;
+                }
+                int descriptor = hermas_daemon_registry_find_action(
+                    loop->registry, delivery->app_id,
+                    delivery->action_id, NULL);
+                if (descriptor < 0) {
+                    continue;
+                }
+                if (poll_count >= HERMAS_DAEMON_MAX_ACTIONS) {
+                    return HERMAS_LOOP_CAPACITY_EXHAUSTED;
+                }
+                poll_items[poll_count] = (struct pollfd){
+                    .fd = descriptor,
+                    .events = flow->state == HERMAS_EXECUTION_PREPARED
+                                  ? POLLOUT
+                                  : POLLIN
+                };
+                owners[poll_count] = (poll_owner){
+                    .slot = slot,
+                    .flow_index = flow_index,
+                    .grouped = true
+                };
+                ++poll_count;
+            }
+            continue;
+        }
+        if (!slot->owns_action) {
             continue;
         }
         int descriptor =
@@ -981,7 +1463,7 @@ hermas_loop_result hermas_daemon_loop_poll(
             .fd = descriptor,
             .events = slot_prepared(slot) ? POLLOUT : POLLIN
         };
-        owners[poll_count] = slot;
+        owners[poll_count] = (poll_owner){.slot = slot};
         ++poll_count;
     }
     int poll_result;
@@ -992,9 +1474,34 @@ hermas_loop_result hermas_daemon_loop_poll(
         return HERMAS_LOOP_POLL_ERROR;
     }
     for (size_t index = 0u; index < poll_count; ++index) {
-        hermas_loop_slot *slot = owners[index];
+        hermas_loop_slot *slot = owners[index].slot;
         short events = poll_items[index].revents;
         hermas_loop_result result = HERMAS_LOOP_OK;
+        if (owners[index].grouped) {
+            hermas_flow *flow =
+                &slot_group(loop, slot)->flows[owners[index].flow_index];
+            if ((events & POLLOUT) != 0 &&
+                flow->state == HERMAS_EXECUTION_PREPARED) {
+                result = send_group_invocation(
+                    loop, slot, owners[index].flow_index, progress_count);
+            } else if ((events & POLLIN) != 0 &&
+                       flow->state == HERMAS_EXECUTION_SENT) {
+                result = receive_group_result(
+                    loop, slot, owners[index].flow_index, progress_count);
+            } else if ((events & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+                result = flow->state == HERMAS_EXECUTION_PREPARED
+                             ? send_group_invocation(
+                                   loop, slot, owners[index].flow_index,
+                                   progress_count)
+                             : receive_group_result(
+                                   loop, slot, owners[index].flow_index,
+                                   progress_count);
+            }
+            if (result != HERMAS_LOOP_OK) {
+                return result;
+            }
+            continue;
+        }
         if ((events & POLLOUT) != 0 && slot_prepared(slot)) {
             result = send_invocation(loop, slot, progress_count);
         } else if ((events & POLLIN) != 0 && slot_sent(slot)) {
@@ -1026,8 +1533,12 @@ hermas_loop_result hermas_daemon_loop_result(
     if (slot->compensating) {
         return HERMAS_LOOP_EXECUTION_ACTIVE;
     }
-    return hermas_execution_get_result(&slot->execution, result) ==
-                   HERMAS_RUNTIME_OK
+    hermas_runtime_result available =
+        slot->grouped
+            ? hermas_group_get_result(
+                  slot_const_group(loop, slot), result)
+            : hermas_execution_get_result(&slot->execution, result);
+    return available == HERMAS_RUNTIME_OK
                ? HERMAS_LOOP_OK
                : HERMAS_LOOP_EXECUTION_ACTIVE;
 }
@@ -1042,9 +1553,16 @@ hermas_loop_result hermas_daemon_loop_release(
     if (slot == NULL) {
         return HERMAS_LOOP_UNKNOWN_EXECUTION;
     }
-    if (slot->execution.state != HERMAS_EXECUTION_COMPLETE ||
-        slot->compensating) {
+    if (!slot_complete(loop, slot) || slot->compensating) {
         return HERMAS_LOOP_EXECUTION_ACTIVE;
+    }
+    if (slot->grouped) {
+        size_t group_index = slot->group_index;
+        loop->group_used[group_index] = false;
+        memset(&loop->group_executions[group_index], 0,
+               sizeof(loop->group_executions[group_index]));
+        memset(loop->group_values[group_index], 0,
+               sizeof(loop->group_values[group_index]));
     }
     memset(slot, 0, sizeof(*slot));
     return HERMAS_LOOP_OK;

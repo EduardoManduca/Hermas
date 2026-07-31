@@ -44,6 +44,7 @@ def main() -> None:
     if document.get("limits") != {
         "actions": 80,
         "active_executions": 16,
+        "active_group_executions": 2,
     }:
         fail("daemon limits differ")
     if document.get("flows") != {
@@ -51,7 +52,7 @@ def main() -> None:
         "match": True,
         "within": True,
         "saga": True,
-        "all": False,
+        "all": True,
         "each": False,
     }:
         fail("advertised flow capabilities differ")

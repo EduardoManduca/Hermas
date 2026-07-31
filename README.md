@@ -78,10 +78,11 @@ To inspect execution ordering before producing an image, run
 readiness stages, bounded parallel regions, deadline scopes, and saga recovery
 order. HScript source order is not a hidden scheduling guarantee.
 
-The alpha daemon currently executes sequential, typed-choice, deadline, and
-saga graphs. Although the compiler and bounded-flow interpreter validate
-`all` and `each`, `hermasd` fails closed on those graph nodes until their
-per-flow delivery journal and recovery integration is complete.
+The alpha daemon executes sequential, typed-choice, deadline, saga, and
+bounded `all` graphs. Each parallel branch has its own durable delivery
+identity. Although the compiler and bounded-flow interpreter validate `each`,
+`hermasd` fails closed on those graph nodes until their per-flow delivery and
+recovery integration is complete.
 
 Automation can inspect durable execution facts with
 `hermas_history --json --workspace DIRECTORY`. The versioned JSON Lines stream

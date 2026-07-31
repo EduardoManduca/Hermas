@@ -78,7 +78,8 @@ static void print_capabilities(void) {
         "\"formats\":{\"journal\":%u,\"result\":%u,"
         "\"compensation\":%u,\"saga_log\":%u,"
         "\"workspace_manifest\":%u},"
-        "\"limits\":{\"actions\":%u,\"active_executions\":%u},"
+        "\"limits\":{\"actions\":%u,\"active_executions\":%u,"
+        "\"active_group_executions\":%u},"
         "\"flows\":{\"action\":%s,\"match\":%s,"
         "\"within\":%s,\"saga\":%s,"
         "\"all\":%s,\"each\":%s}}\n",
@@ -88,6 +89,7 @@ static void print_capabilities(void) {
         HERMAS_SAGA_LOG_VERSION, HERMAS_WORKSPACE_MANIFEST_VERSION,
         HERMAS_DAEMON_MAX_ACTIONS,
         HERMAS_DAEMON_MAX_EXECUTIONS,
+        HERMAS_DAEMON_MAX_GROUP_EXECUTIONS,
         feature_boolean(supported, HERMAS_GRAPH_FEATURE_ACTION),
         feature_boolean(supported, HERMAS_GRAPH_FEATURE_MATCH),
         feature_boolean(supported, HERMAS_GRAPH_FEATURE_WITHIN),

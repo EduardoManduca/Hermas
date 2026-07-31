@@ -14,6 +14,7 @@
 
 #define HERMAS_DAEMON_MAX_ACTIONS 80u
 #define HERMAS_DAEMON_MAX_EXECUTIONS 16u
+#define HERMAS_DAEMON_MAX_GROUP_EXECUTIONS 2u
 
 typedef enum hermas_daemon_result {
     HERMAS_DAEMON_OK = 0,
@@ -80,6 +81,14 @@ typedef enum hermas_loop_result {
     HERMAS_LOOP_UNSUPPORTED_GRAPH
 } hermas_loop_result;
 
+typedef struct hermas_loop_delivery {
+    uint64_t request_id;
+    uint16_t node_id;
+    uint16_t app_id;
+    uint16_t action_id;
+    bool owns_action;
+} hermas_loop_delivery;
+
 typedef struct hermas_loop_slot {
     hermas_execution execution;
     uint8_t value[HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE];
@@ -94,6 +103,9 @@ typedef struct hermas_loop_slot {
     bool journal_finished;
     bool result_stored;
     bool compensating;
+    bool grouped;
+    uint8_t group_index;
+    hermas_loop_delivery group_deliveries[HERMAS_RUNTIME_MAX_FLOWS];
     uint8_t saga_success_count;
     uint64_t saga_forward_requests[HERMAS_SAGA_MAX_STEPS];
     hermas_saga_driver saga;
@@ -104,6 +116,12 @@ typedef struct hermas_daemon_loop {
     size_t image_size;
     hermas_daemon_registry *registry;
     hermas_loop_slot executions[HERMAS_DAEMON_MAX_EXECUTIONS];
+    hermas_group_execution
+        group_executions[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS];
+    uint8_t group_values[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS]
+                        [HERMAS_RUNTIME_MAX_FLOWS]
+                        [HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE];
+    bool group_used[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS];
     size_t scheduler_cursor;
     hermas_journal_writer *journal;
     hermas_result_writer *results;

@@ -22,14 +22,15 @@ The v1 document is:
   },
   "limits": {
     "actions": 80,
-    "active_executions": 16
+    "active_executions": 16,
+    "active_group_executions": 2
   },
   "flows": {
     "action": true,
     "match": true,
     "within": true,
     "saga": true,
-    "all": false,
+    "all": true,
     "each": false
   }
 }
@@ -37,9 +38,11 @@ The v1 document is:
 
 Flow names are HScript concepts. `action` covers ordinary dependency-ordered
 Action invocation, `match` covers typed choice, `within` covers deadlines,
-and `saga` covers explicit compensation. `all` and `each` are compiled and
-validated elsewhere in Hermas but are not yet integrated with the production
-daemon's durable scheduler.
+`saga` covers explicit compensation, and `all` covers bounded parallel
+branches with independently journaled deliveries. `each` is compiled and
+validated elsewhere in Hermas but is not yet integrated with the production
+daemon's durable scheduler. Graphs that combine `all` and `saga` are rejected
+until parallel compensation has its own executable recovery invariants.
 
 This JSON object is diagnostic metadata, not a Hermas value or an alternative
 contract language. It never enters an Action invocation or graph image and

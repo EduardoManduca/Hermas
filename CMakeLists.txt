@@ -519,7 +519,8 @@ if(BUILD_TESTING)
                          "$<TARGET_FILE:hermas_grade_list>"
                          "$<TARGET_FILE:hermas_mean_calculator>"
                          "$<TARGET_FILE:hermas_printer>"
-                         "${HERMAS_TEST_PARALLEL_IMAGE}")
+                         "${HERMAS_TEST_PARALLEL_IMAGE}"
+                         "${HERMAS_TEST_EACH_IMAGE}")
         endif()
         if(DEFINED HERMAS_TEST_SAGA_IMAGE)
             add_executable(hermas_host_recovery_tests
