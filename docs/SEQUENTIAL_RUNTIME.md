@@ -83,9 +83,11 @@ the slot.
 Ready executions are prepared in rotating order. An unavailable Action leaves
 the prepared invocation waiting without claiming delivery. Each registered
 Action descriptor can be owned by only one execution at a time, so multiple
-workflows targeting one Action are serialized while different Actions,
-including Actions owned by the same app, may progress independently when they
-have separate registered endpoints.
+workflows targeting one Action are serialized. Item flows in one bounded
+`each` region are the narrow exception: they may share their item Action's
+descriptor up to the declared concurrency and are routed by request ID.
+Different Actions, including Actions owned by the same app, may progress
+independently when they have separate registered endpoints.
 
 Every send and receive uses nonblocking socket operations:
 
@@ -108,17 +110,21 @@ caller-owned flow slots. Fork copies the immutable canonical input into fixed
 branch buffers; Join retains each result under its dense field tag and does
 not expose used fields until every branch has completed.
 
-The engine enforces one prepared or sent request per Action within an
-execution. Independent Actions can be completely delivered concurrently. After a failure,
-undelivered work is cut off while sent work is awaited. Deterministic outcome
-precedence is `Unknown`, known app failure, `NotSent`, then success.
+The engine normally enforces one prepared or sent request per Action within
+an execution. Sibling item flows in the same nonzero `each` region may overlap
+through their shared Action. Independent Actions can also be completely
+delivered concurrently. After a failure, undelivered work is cut off while
+sent work is awaited. Deterministic outcome precedence is `Unknown`, known
+app failure, `NotSent`, then success.
 
 The production daemon embeds two fixed group arenas and executes Fork/Join
 (`all`) and bounded `each`/Collect graphs with up to eight flows each. Every
 branch or item delivery is prepared and sent under its own journal delivery
-identity; independently registered Actions can overlap, while the same Action
-remains single-flight. Collected values retain source-index order regardless
-of completion order. Graphs combining `all` with saga recovery remain
+identity. Independently registered Actions can overlap, and one bounded
+`each` region can multiplex its item identities through the same registered
+Action. All other same-Action delivery remains single-flight. Collected values
+retain source-index order regardless of completion order. Graphs combining
+`all` with saga recovery remain
 fail-closed. This prevents a graph from being partially executed under
 semantics the daemon does not yet claim. `hermas_host_open` and `hermasd`
 expose this distinction as `unsupported-graph`, rather than conflating it with
@@ -127,7 +133,7 @@ malformed external bytes.
 socket side effects, and managed-workspace initialization applies it before
 persisting the exact candidate bytes.
 The same bounded-flow interpreter is used by standalone runtime tests and the
-daemon, so admission, ordering, cutoff, and single-flight behavior do not
+daemon, so admission, ordering, cutoff, and bounded item multiplexing do not
 diverge between those surfaces.
 
 For a root deadline region, the daemon reads the relative millisecond budget

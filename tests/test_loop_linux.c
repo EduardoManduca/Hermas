@@ -55,6 +55,16 @@ static int receive_request(int descriptor, hermas_frame *request) {
            request->kind == HERMAS_FRAME_INVOKE;
 }
 
+static int receive_request_now(int descriptor, hermas_frame *request) {
+    static uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
+    ssize_t received = recv(
+        descriptor, packet, sizeof(packet), MSG_DONTWAIT);
+    return received > 0 &&
+           hermas_protocol_decode(packet, (size_t)received, request) ==
+               HERMAS_PROTOCOL_OK &&
+           request->kind == HERMAS_FRAME_INVOKE;
+}
+
 static int send_unit_error(int descriptor, const hermas_frame *request) {
     uint8_t packet[HERMAS_PROTOCOL_HEADER_SIZE];
     size_t packet_size = 0u;
@@ -664,53 +674,81 @@ static int test_bounded_each(
             hermas_daemon_loop_poll(loop, 1000, &progress) ==
                 HERMAS_LOOP_OK;
     }
-    uint64_t item_requests[4] = {0u};
+    hermas_frame item_requests[4];
+    memset(item_requests, 0, sizeof(item_requests));
+    size_t delivered_items[4] = {0u};
     bool item_seen[4] = {false, false, false, false};
     uint16_t report_type = action_success_type(image, 2u);
-    for (size_t completed = 0u; valid && completed < 4u; ++completed) {
+    for (size_t delivered = 0u; valid && delivered < 3u; ++delivered) {
         stage = "item";
-        hermas_frame request;
-        memset(&request, 0, sizeof(request));
-        int received = receive_request(peers[1], &request);
-        size_t item = request.payload_length == 8u &&
-                              request.payload[0] >= 10u &&
-                              request.payload[0] <= 40u &&
-                              request.payload[0] % 10u == 0u
-                          ? (size_t)(request.payload[0] / 10u - 1u)
+        hermas_frame *request = &item_requests[delivered];
+        int received = receive_request_now(peers[1], request);
+        size_t item = request->payload_length == 8u &&
+                              request->payload[0] >= 10u &&
+                              request->payload[0] <= 40u &&
+                              request->payload[0] % 10u == 0u
+                          ? (size_t)(request->payload[0] / 10u - 1u)
                           : 4u;
         valid = report_type != 0u && received &&
-                request.payload_length == 8u &&
+                request->payload_length == 8u &&
                 item < 4u && !item_seen[item];
         if (!valid) {
             fprintf(
                 stderr,
                 "test_loop: each delivery %zu receive=%d type=%u length=%u "
                 "value=%u\n",
-                completed, received, (unsigned)report_type,
-                (unsigned)request.payload_length,
-                request.payload_length == 0u ? 0u : request.payload[0]);
+                delivered, received, (unsigned)report_type,
+                (unsigned)request->payload_length,
+                request->payload_length == 0u ? 0u : request->payload[0]);
+        }
+        if (valid) {
+            item_seen[item] = true;
+            delivered_items[delivered] = item;
+        }
+        for (size_t prior = 0u; valid && prior < delivered; ++prior) {
+            valid = item_requests[prior].request_id != request->request_id;
+        }
+    }
+    const size_t completion_order[3] = {1u, 0u, 2u};
+    for (size_t completed = 0u; valid && completed < 3u; ++completed) {
+        size_t delivered = completion_order[completed];
+        size_t item = delivered_items[delivered];
+        uint8_t report[8] = {(uint8_t)(101u + item)};
+        valid =
+            send_success(
+                peers[1], &item_requests[delivered], report_type,
+                report, (uint32_t)sizeof(report));
+    }
+    if (valid) {
+        valid = hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                    HERMAS_LOOP_OK &&
+                hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                    HERMAS_LOOP_OK &&
+                receive_request(peers[1], &item_requests[3]);
+    }
+    if (valid) {
+        size_t item = item_requests[3].payload_length == 8u &&
+                              item_requests[3].payload[0] >= 10u &&
+                              item_requests[3].payload[0] <= 40u &&
+                              item_requests[3].payload[0] % 10u == 0u
+                          ? (size_t)(item_requests[3].payload[0] / 10u - 1u)
+                          : 4u;
+        uint8_t report[8] = {(uint8_t)(101u + item)};
+        valid = item_requests[3].payload_length == 8u && item < 4u &&
+                !item_seen[item];
+        for (size_t prior = 0u; valid && prior < 3u; ++prior) {
+            valid = item_requests[prior].request_id !=
+                    item_requests[3].request_id;
         }
         if (valid) {
             item_seen[item] = true;
         }
-        item_requests[completed] = request.request_id;
-        for (size_t prior = 0u; valid && prior < completed; ++prior) {
-            valid = item_requests[prior] != item_requests[completed];
-        }
-        uint8_t report[8] = {
-            item < 4u ? (uint8_t)(101u + item) : 0u
-        };
-        valid =
-            valid &&
-            send_success(
-                peers[1], &request, report_type, report,
-                (uint32_t)sizeof(report)) &&
-            hermas_daemon_loop_poll(loop, 1000, &progress) ==
-                HERMAS_LOOP_OK;
-        if (valid && completed + 1u < 4u) {
-            valid = hermas_daemon_loop_poll(loop, 1000, &progress) ==
+        valid = valid &&
+                send_success(
+                    peers[1], &item_requests[3], report_type, report,
+                    (uint32_t)sizeof(report)) &&
+                hermas_daemon_loop_poll(loop, 1000, &progress) ==
                     HERMAS_LOOP_OK;
-        }
     }
     hermas_frame archive;
     uint8_t done = 1u;

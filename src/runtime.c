@@ -955,7 +955,10 @@ hermas_runtime_result hermas_group_prepare(
         }
         if (read_u16(execution->image, other_node + 4u) == app_id &&
             read_u16(execution->image, other_node + 2u) == action_id) {
-            return HERMAS_RUNTIME_INVALID_STATE;
+            if (flow->each_region == 0u ||
+                flow->each_region != other->each_region) {
+                return HERMAS_RUNTIME_INVALID_STATE;
+            }
         }
     }
     flow->request_id = execution->next_request_id++;

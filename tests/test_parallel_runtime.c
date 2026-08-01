@@ -515,7 +515,9 @@ static int test_bounded_each(
     }
 
     uint8_t reports[4][8] = {{101u}, {102u}, {103u}, {104u}};
-    for (size_t item = 0u; item < 4u; ++item) {
+    hermas_frame item_requests[4];
+    size_t item_slots[4] = {0u};
+    for (size_t item = 0u; item < 3u; ++item) {
         size_t slot = HERMAS_RUNTIME_MAX_FLOWS;
         for (size_t index = 0u; index < HERMAS_RUNTIME_MAX_FLOWS; ++index) {
             if (execution.flows[index].active != 0u &&
@@ -533,41 +535,46 @@ static int test_bounded_each(
                 HERMAS_RUNTIME_OK) {
             return fail("bounded each item was not delivered");
         }
-        for (size_t other = 0u;
-             other < HERMAS_RUNTIME_MAX_FLOWS; ++other) {
-            hermas_frame blocked;
-            if (other != slot &&
-                execution.flows[other].active != 0u &&
-                execution.flows[other].state ==
-                    HERMAS_EXECUTION_READY &&
-                hermas_group_prepare(
-                    &execution, other, &blocked) !=
-                    HERMAS_RUNTIME_INVALID_STATE) {
-                return fail("same-app each items overlapped");
-            }
-        }
+        item_requests[item] = request;
+        item_slots[item] = slot;
+    }
+    const size_t completion_order[3] = {1u, 0u, 2u};
+    for (size_t completed = 0u; completed < 3u; ++completed) {
+        size_t item = completion_order[completed];
         uint16_t report_type = action_success_type(image, 2u);
         hermas_frame reported = success(
-            &request, report_type, reports[item], sizeof(reports[item]));
+            &item_requests[item], report_type, reports[item],
+            sizeof(reports[item]));
         if (report_type == 0u ||
             hermas_group_accept_result(
-                &execution, slot, &reported) != HERMAS_RUNTIME_OK) {
+                &execution, item_slots[item], &reported) !=
+                HERMAS_RUNTIME_OK) {
             return fail("bounded each item result was rejected");
         }
-        if (item == 0u) {
-            ready = 0u;
-            for (size_t index = 0u;
-                 index < HERMAS_RUNTIME_MAX_FLOWS; ++index) {
-                if (execution.flows[index].active != 0u &&
-                    execution.flows[index].state ==
-                        HERMAS_EXECUTION_READY) {
-                    ++ready;
-                }
-            }
-            if (ready != 3u) {
-                return fail("bounded each did not replenish below its ceiling");
-            }
+    }
+    size_t fourth_slot = HERMAS_RUNTIME_MAX_FLOWS;
+    for (size_t index = 0u; index < HERMAS_RUNTIME_MAX_FLOWS; ++index) {
+        if (execution.flows[index].active != 0u &&
+            execution.flows[index].state == HERMAS_EXECUTION_READY &&
+            execution.flows[index].item_index == 3u) {
+            fourth_slot = index;
+            break;
         }
+    }
+    if (fourth_slot == HERMAS_RUNTIME_MAX_FLOWS ||
+        hermas_group_prepare(
+            &execution, fourth_slot, &item_requests[3]) !=
+            HERMAS_RUNTIME_OK ||
+        hermas_group_mark_sent(&execution, fourth_slot) !=
+            HERMAS_RUNTIME_OK) {
+        return fail("bounded each did not replenish below its ceiling");
+    }
+    hermas_frame fourth = success(
+        &item_requests[3], action_success_type(image, 2u), reports[3],
+        sizeof(reports[3]));
+    if (hermas_group_accept_result(
+            &execution, fourth_slot, &fourth) != HERMAS_RUNTIME_OK) {
+        return fail("bounded each fourth result was rejected");
     }
 
     size_t archive_slot = HERMAS_RUNTIME_MAX_FLOWS;

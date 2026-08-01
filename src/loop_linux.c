@@ -130,6 +130,19 @@ static bool action_owned_by_other(
             if (delivery != candidate_delivery &&
                 delivery->owns_action && delivery->app_id == app_id &&
                 delivery->action_id == action_id) {
+                if (slot == candidate && candidate_delivery != NULL) {
+                    const hermas_group_execution *group =
+                        slot_const_group(loop, slot);
+                    size_t candidate_flow = (size_t)(
+                        candidate_delivery - slot->group_deliveries);
+                    if (group != NULL &&
+                        candidate_flow < HERMAS_RUNTIME_MAX_FLOWS &&
+                        group->flows[candidate_flow].each_region != 0u &&
+                        group->flows[candidate_flow].each_region ==
+                            group->flows[flow].each_region) {
+                        continue;
+                    }
+                }
                 return true;
             }
         }
@@ -801,7 +814,29 @@ static hermas_loop_result receive_group_result(
         if (result.action_id != registered_action_id) {
             decoded = false;
         } else {
-            result.action_id = delivery->action_id;
+            size_t matching_flow = HERMAS_RUNTIME_MAX_FLOWS;
+            for (size_t candidate = 0u;
+                 candidate < HERMAS_RUNTIME_MAX_FLOWS; ++candidate) {
+                hermas_flow *candidate_flow = &group->flows[candidate];
+                hermas_loop_delivery *candidate_delivery =
+                    &slot->group_deliveries[candidate];
+                if (candidate_flow->active != 0u &&
+                    candidate_flow->state == HERMAS_EXECUTION_SENT &&
+                    candidate_delivery->owns_action &&
+                    candidate_delivery->app_id == delivery->app_id &&
+                    candidate_delivery->action_id == delivery->action_id &&
+                    candidate_flow->request_id == result.request_id) {
+                    matching_flow = candidate;
+                    break;
+                }
+            }
+            if (matching_flow == HERMAS_RUNTIME_MAX_FLOWS) {
+                decoded = false;
+            } else {
+                flow_index = matching_flow;
+                delivery = &slot->group_deliveries[flow_index];
+                result.action_id = delivery->action_id;
+            }
         }
     }
     bool accepted =
