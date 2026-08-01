@@ -3,7 +3,7 @@
 A release commit must have a clean tree and atomic reviewed history.
 
 - Rust format, Clippy with warnings denied, tests, and documentation pass.
-- All 25 C and CLI contract tests pass under GCC and Clang with ASan and
+- All 26 C and CLI contract tests pass under GCC and Clang with ASan and
   UBSan.
 - Rust/C image decoder parity passes over every deterministic fixture.
 - Rust and C fuzz smoke sessions report no crash.
@@ -14,7 +14,8 @@ A release commit must have a clean tree and atomic reviewed history.
   validated summary, and agrees before and after a clean restart.
 - Action binaries remain valid when schema compilation order changes every
   graph-local app, Action, and Type assignment.
-- Both restart proofs preserve the exact completed journal.
+- Sequential, bounded-group, and saga restart proofs preserve the exact
+  completed journal; a second restart adds no fact or replay.
 - Installation into an empty prefix contains headers, libraries, daemon,
   client, history and image tools, examples, documentation, and licenses.
 - Two identical builds from the same commit produce the same checksums.

@@ -540,7 +540,8 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME hermas_host_recovery_tests
                      COMMAND hermas_host_recovery_tests
-                             "${HERMAS_TEST_SAGA_IMAGE}")
+                             "${HERMAS_TEST_SAGA_IMAGE}"
+                             "${HERMAS_TEST_EACH_IMAGE}")
             add_executable(hermas_saga_loop_tests
                            tests/test_saga_loop_linux.c)
             target_link_libraries(hermas_saga_loop_tests PRIVATE
