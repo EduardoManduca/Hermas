@@ -497,6 +497,120 @@ impl VerifiedGraph {
         output
     }
 
+    fn readiness_levels(&self) -> Vec<usize> {
+        let schedulable = |node: &NodeKind| !matches!(node, NodeKind::Terminal(_));
+        let mut levels = vec![0usize; self.graph.nodes.len()];
+
+        for _ in 0..self.graph.nodes.len() {
+            let mut changed = false;
+            for (index, node) in self.graph.nodes.iter().enumerate() {
+                if !schedulable(node) {
+                    continue;
+                }
+                let id = node_id(index);
+                let mut level = 0usize;
+                for edge in &self.graph.edges {
+                    if target_node(edge.target, &self.graph) != Some(id) {
+                        continue;
+                    }
+                    match source_node(edge.source, &self.graph) {
+                        Some(source) if source != id => {
+                            let source_level = levels[usize::from(source.raw() - 1)];
+                            if source_level != 0 {
+                                level = level.max(source_level + 1);
+                            }
+                        }
+                        None if edge.source == EdgeSource::WorkflowInput => {
+                            level = level.max(1);
+                        }
+                        Some(_) | None => {}
+                    }
+                }
+                if level > levels[index] {
+                    levels[index] = level;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        levels
+    }
+
+    /// Emits stable compiler metadata for automation. This describes the
+    /// verified graph; it is not a runtime value or an HSchema replacement.
+    pub fn execution_plan_json(&self, catalog: &Catalog) -> String {
+        let levels = self.readiness_levels();
+        let resources = self.resources(catalog);
+        let mut output = format!(
+            "{{\"format\":\"hermas-workflow-plan-v1\",\"workflow\":\"{}\",\"semantics\":{{\"scheduling\":\"dependency-driven\",\"source_order_guarantee\":false}},\"resources\":{{\"actions\":{},\"dispatches\":{},\"forks\":{},\"joins\":{},\"deadline_regions\":{},\"each_regions\":{},\"terminals\":{},\"edges\":{},\"apps\":{},\"max_concurrent_actions\":{},\"max_payload_bytes\":{}}},\"actions\":[",
+            json_escape(&self.graph.name),
+            resources.action_nodes,
+            resources.dispatch_nodes,
+            resources.fork_nodes,
+            resources.join_nodes,
+            resources.deadline_regions,
+            resources.each_regions,
+            resources.terminal_nodes,
+            resources.edges,
+            resources.required_apps,
+            resources.maximum_concurrent_actions,
+            resources.maximum_payload_bytes
+        );
+        let mut first = true;
+        for (index, node) in self.graph.nodes.iter().enumerate() {
+            let NodeKind::Action(action_id) = node else {
+                continue;
+            };
+            let action = catalog
+                .action(*action_id)
+                .expect("verified graph contains known Actions");
+            if !first {
+                output.push(',');
+            }
+            first = false;
+            output.push_str(&format!(
+                "{{\"node_id\":{},\"app_id\":{},\"action_id\":{},\"name\":\"{}\",\"stage\":{}}}",
+                index + 1,
+                action.app.raw(),
+                action.id.raw(),
+                json_escape(&catalog.action_name(*action_id)),
+                levels[index]
+            ));
+        }
+        output.push_str("],\"parallel_regions\":[");
+        first = true;
+        for (index, node) in self.graph.nodes.iter().enumerate() {
+            let NodeKind::Fork(_, branches) = node else {
+                continue;
+            };
+            if !first {
+                output.push(',');
+            }
+            first = false;
+            output.push_str(&format!(
+                "{{\"kind\":\"all\",\"fork_node_id\":{},\"branches\":{}}}",
+                index + 1,
+                branches
+            ));
+        }
+        for region in &self.graph.each_regions {
+            if !first {
+                output.push(',');
+            }
+            first = false;
+            output.push_str(&format!(
+                "{{\"kind\":\"each\",\"template_node_id\":{},\"bound\":{},\"concurrency\":{}}}",
+                region.template.raw(),
+                region.bound,
+                region.concurrency
+            ));
+        }
+        output.push_str("]}\n");
+        output
+    }
+
     pub(crate) fn image_view(&self, catalog: &Catalog) -> GraphImageView {
         let nodes = self
             .graph
@@ -646,42 +760,7 @@ impl VerifiedGraph {
     /// particular runtime schedule.
     pub fn execution_plan(&self, catalog: &Catalog) -> String {
         let schedulable = |node: &NodeKind| !matches!(node, NodeKind::Terminal(_));
-        let mut levels = vec![0usize; self.graph.nodes.len()];
-
-        for _ in 0..self.graph.nodes.len() {
-            let mut changed = false;
-            for (index, node) in self.graph.nodes.iter().enumerate() {
-                if !schedulable(node) {
-                    continue;
-                }
-                let id = node_id(index);
-                let mut level = 0usize;
-                for edge in &self.graph.edges {
-                    if target_node(edge.target, &self.graph) != Some(id) {
-                        continue;
-                    }
-                    match source_node(edge.source, &self.graph) {
-                        Some(source) if source != id => {
-                            let source_level = levels[usize::from(source.raw() - 1)];
-                            if source_level != 0 {
-                                level = level.max(source_level + 1);
-                            }
-                        }
-                        None if edge.source == EdgeSource::WorkflowInput => {
-                            level = level.max(1);
-                        }
-                        Some(_) | None => {}
-                    }
-                }
-                if level > levels[index] {
-                    levels[index] = level;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
+        let levels = self.readiness_levels();
 
         let mut output = format!(
             "execution plan {}\n\
@@ -1969,4 +2048,24 @@ fn dot_target(target: EdgeTarget) -> String {
 
 fn dot_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn json_escape(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\u{08}' => output.push_str("\\b"),
+            '\u{0c}' => output.push_str("\\f"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            character if character.is_control() => {
+                output.push_str(&format!("\\u{:04x}", u32::from(character)));
+            }
+            character => output.push(character),
+        }
+    }
+    output
 }
