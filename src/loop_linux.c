@@ -1091,7 +1091,8 @@ hermas_graph_features hermas_daemon_supported_graph_features(void) {
            HERMAS_GRAPH_FEATURE_MATCH |
            HERMAS_GRAPH_FEATURE_WITHIN |
            HERMAS_GRAPH_FEATURE_SAGA |
-           HERMAS_GRAPH_FEATURE_ALL;
+           HERMAS_GRAPH_FEATURE_ALL |
+           HERMAS_GRAPH_FEATURE_EACH;
 }
 
 hermas_loop_result hermas_daemon_loop_init(
@@ -1316,7 +1317,9 @@ hermas_loop_result hermas_daemon_loop_admit(
             loop->image, loop->image_size, &features) != HERMAS_IMAGE_OK) {
         return HERMAS_LOOP_INVALID_IMAGE;
     }
-    bool grouped = (features & HERMAS_GRAPH_FEATURE_ALL) != 0u;
+    bool grouped =
+        (features & (HERMAS_GRAPH_FEATURE_ALL |
+                     HERMAS_GRAPH_FEATURE_EACH)) != 0u;
     for (size_t index = 0u; index < HERMAS_DAEMON_MAX_EXECUTIONS; ++index) {
         hermas_loop_slot *slot = &loop->executions[index];
         if (slot->active) {

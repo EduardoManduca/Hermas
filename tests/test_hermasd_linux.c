@@ -267,10 +267,9 @@ static void remove_state(const char *directory) {
     (void)rmdir(directory);
 }
 
-static int run_unsupported_command(
+static int run_supported_check_command(
     const char *daemon,
-    const char *image,
-    const char *workspace) {
+    const char *image) {
     int errors[2];
     if (pipe(errors) != 0) {
         return 0;
@@ -278,20 +277,13 @@ static int run_unsupported_command(
     pid_t child = fork();
     if (child == 0) {
         close(errors[0]);
-        int output = workspace == NULL ? STDOUT_FILENO : STDERR_FILENO;
-        if (dup2(errors[1], output) < 0) {
+        if (dup2(errors[1], STDOUT_FILENO) < 0) {
             _exit(127);
         }
         close(errors[1]);
-        if (workspace == NULL) {
-            execl(
-                daemon, daemon, "--check-image", image, "--json",
-                (char *)NULL);
-        } else {
-            execl(
-                daemon, daemon, "--workspace", workspace,
-                image, "7", (char *)NULL);
-        }
+        execl(
+            daemon, daemon, "--check-image", image, "--json",
+            (char *)NULL);
         _exit(127);
     }
     close(errors[1]);
@@ -313,87 +305,9 @@ static int run_unsupported_command(
     text[length] = '\0';
     int status = 0;
     return waitpid(child, &status, 0) == child &&
-           WIFEXITED(status) && WEXITSTATUS(status) == 4 &&
-           strstr(text, "unsupported-graph") != NULL &&
-           (workspace != NULL ||
-            strstr(text, "\"format\":\"hermas-image-check-v1\"") != NULL) &&
-           (workspace != NULL ||
-            strstr(text, "\"status\":\"unsupported\"") != NULL);
-}
-
-static int test_unsupported_graph(
-    const char *daemon,
-    const char *image_path) {
-    size_t image_size = 0u;
-    uint8_t *image = read_file(image_path, &image_size);
-    char secure_image[] = "/tmp/hermasd-unsupported-image-XXXXXX";
-    int descriptor = mkstemp(secure_image);
-    int prepared = 0;
-    if (image != NULL && descriptor >= 0) {
-        int written = write_all(descriptor, image, image_size);
-        int closed = close(descriptor) == 0;
-        descriptor = -1;
-        prepared =
-            written && closed &&
-            chmod(secure_image, 0600) == 0;
-    }
-    free(image);
-    if (!prepared) {
-        if (descriptor >= 0) {
-            close(descriptor);
-        }
-        (void)unlink(secure_image);
-        return 0;
-    }
-    char state[] = "/tmp/hermasd-unsupported-state-XXXXXX";
-    if (mkdtemp(state) == NULL) {
-        (void)unlink(secure_image);
-        return 0;
-    }
-    char app_socket[512];
-    char control_socket[512];
-    (void)snprintf(
-        app_socket, sizeof(app_socket), "%s/apps.sock", state);
-    (void)snprintf(
-        control_socket, sizeof(control_socket),
-        "%s/control.sock", state);
-    hermas_host *host = calloc(1u, sizeof(*host));
-    if (host == NULL) {
-        (void)rmdir(state);
-        (void)unlink(secure_image);
-        return 0;
-    }
-    hermas_host_result result = hermas_host_open(
-        host,
-        &(hermas_host_config){
-            .image_path = secure_image,
-            .state_directory = state,
-            .app_socket_path = app_socket,
-            .control_socket_path = control_socket,
-            .workflow_id = 7u,
-        });
-    int rejected =
-        result == HERMAS_HOST_UNSUPPORTED_GRAPH &&
-        strcmp(
-            hermas_host_result_name(result),
-            "unsupported-graph") == 0;
-    hermas_host_close(host);
-    free(host);
-    char workspace[] = "/tmp/hermasd-unbound-workspace-XXXXXX";
-    int workspace_ready =
-        mkdtemp(workspace) != NULL && rmdir(workspace) == 0;
-    rejected =
-        rejected &&
-        hermas_host_check_image(secure_image) ==
-            HERMAS_HOST_UNSUPPORTED_GRAPH &&
-        run_unsupported_command(daemon, secure_image, NULL) &&
-        workspace_ready &&
-        run_unsupported_command(
-            daemon, secure_image, workspace) &&
-        access(workspace, F_OK) != 0 && errno == ENOENT;
-    (void)rmdir(state);
-    (void)unlink(secure_image);
-    return rejected;
+           WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
+           strstr(text, "\"format\":\"hermas-image-check-v1\"") != NULL &&
+           strstr(text, "\"status\":\"supported\"") != NULL;
 }
 
 int main(int argc, char **argv) {
@@ -421,9 +335,10 @@ int main(int argc, char **argv) {
         free(image);
         return fail("bounded-all graph did not report supported");
     }
-    if (!test_unsupported_graph(argv[2], argv[8])) {
+    if (hermas_host_check_image(argv[8]) != HERMAS_HOST_OK ||
+        !run_supported_check_command(argv[2], argv[8])) {
         free(image);
-        return fail("bounded-each graph did not report unsupported-graph");
+        return fail("bounded-each graph did not report supported");
     }
     char secure_image[] = "/tmp/hermasd-image-XXXXXX";
     int secure_descriptor = mkstemp(secure_image);

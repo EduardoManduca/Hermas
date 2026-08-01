@@ -127,7 +127,8 @@ int main(int argc, char **argv) {
             "Later starts derive its pinned image and workflow ID.\n\n"
             "Run one verified graph image with private durable state. "
             "This alpha daemon accepts sequential, typed-choice, deadline, "
-            "and saga graphs; bounded all/each graphs fail closed.");
+            "saga, bounded all, and bounded each graphs. Unsupported graph "
+            "combinations fail closed.");
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "--capabilities") == 0) {

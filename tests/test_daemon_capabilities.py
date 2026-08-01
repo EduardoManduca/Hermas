@@ -53,7 +53,7 @@ def main() -> None:
         "within": True,
         "saga": True,
         "all": True,
-        "each": False,
+        "each": True,
     }:
         fail("advertised flow capabilities differ")
 

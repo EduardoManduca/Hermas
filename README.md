@@ -80,11 +80,11 @@ order. HScript source order is not a hidden scheduling guarantee.
 Integrations can add `--json` to obtain stable Action node and protocol
 identities without parsing the human-readable report.
 
-The alpha daemon executes sequential, typed-choice, deadline, saga, and
-bounded `all` graphs. Each parallel branch has its own durable delivery
-identity. Although the compiler and bounded-flow interpreter validate `each`,
-`hermasd` fails closed on those graph nodes until their per-flow delivery and
-recovery integration is complete.
+The alpha daemon executes sequential, typed-choice, deadline, saga, bounded
+`all`, and bounded `each` graphs. Every parallel branch and expanded item has
+its own durable delivery identity; `collect` preserves source-index order even
+when items complete in a different order. The fixed arenas bound active group
+executions, item count, concurrency, and payload storage before execution.
 
 Automation can inspect durable execution facts with
 `hermas_history --json --workspace DIRECTORY`. The versioned JSON Lines stream
