@@ -112,16 +112,25 @@ fn workflow_command(arguments: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     let mut cursor = 1usize;
-    let workflow_name = if arguments.get(cursor).map(String::as_str) == Some("--workflow") {
-        let Some(name) = arguments.get(cursor + 1) else {
-            usage();
-            return ExitCode::from(2);
-        };
-        cursor += 2;
-        Some(name.as_str())
-    } else {
-        None
-    };
+    let mut workflow_name = None;
+    let mut json = false;
+    loop {
+        match arguments.get(cursor).map(String::as_str) {
+            Some("--workflow") if workflow_name.is_none() => {
+                let Some(name) = arguments.get(cursor + 1) else {
+                    usage();
+                    return ExitCode::from(2);
+                };
+                workflow_name = Some(name.as_str());
+                cursor += 2;
+            }
+            Some("--json") if operation == "plan" && !json => {
+                json = true;
+                cursor += 1;
+            }
+            _ => break,
+        }
+    }
     let Some(script_path) = arguments.get(cursor) else {
         usage();
         return ExitCode::from(2);
@@ -187,6 +196,7 @@ fn workflow_command(arguments: &[String]) -> ExitCode {
     };
     match operation.as_str() {
         "explain" => print!("{}", graph.explain(&catalog)),
+        "plan" if json => print!("{}", graph.execution_plan_json(&catalog)),
         "plan" => print!("{}", graph.execution_plan(&catalog)),
         "graph" => print!("{}", graph.to_dot(&catalog)),
         "resources" => println!("{}", graph.resources(&catalog)),
@@ -267,7 +277,7 @@ fn read_bounded(path: &str, kind: &str, limit: usize) -> Result<Vec<u8>, ExitCod
 
 fn usage() {
     eprintln!(
-        "usage:\n  hermas schema check <file.hschema>...\n  hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|plan|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
+        "usage:\n  hermas schema check <file.hschema>...\n  hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  hermas workflow check <module.hscript> <file.hschema>...\n  hermas workflow <explain|plan|graph|resources|sources> [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow plan --json [--workflow NAME] <module.hscript> <file.hschema>...\n  hermas workflow image [--workflow NAME] <module.hscript> <output.hgi> <file.hschema>...\n  hermas image check <file.hgi>"
     );
 }
 
@@ -279,6 +289,8 @@ hermas schema c-header <file.hschema> <output.h> <C_PREFIX>\n  \
 hermas workflow check <module.hscript> <file.hschema>...\n  \
 hermas workflow <explain|plan|graph|resources|sources> [--workflow NAME] \
 <module.hscript> <file.hschema>...\n  \
+hermas workflow plan --json [--workflow NAME] <module.hscript> \
+<file.hschema>...\n  \
 hermas workflow image [--workflow NAME] <module.hscript> \
 <output.hgi> <file.hschema>...\n  \
 hermas image check <file.hgi>\n  hermas --version"

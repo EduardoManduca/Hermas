@@ -1,6 +1,7 @@
 #ifndef HERMAS_DAEMON_H
 #define HERMAS_DAEMON_H
 
+#include "hermas/image.h"
 #include "hermas/runtime.h"
 #include "hermas/journal.h"
 #include "hermas/compensation.h"
@@ -13,6 +14,7 @@
 
 #define HERMAS_DAEMON_MAX_ACTIONS 80u
 #define HERMAS_DAEMON_MAX_EXECUTIONS 16u
+#define HERMAS_DAEMON_MAX_GROUP_EXECUTIONS 2u
 
 typedef enum hermas_daemon_result {
     HERMAS_DAEMON_OK = 0,
@@ -75,8 +77,17 @@ typedef enum hermas_loop_result {
     HERMAS_LOOP_PROTOCOL_ERROR,
     HERMAS_LOOP_JOURNAL_ERROR,
     HERMAS_LOOP_COMPENSATION_ERROR,
-    HERMAS_LOOP_RESULT_ERROR
+    HERMAS_LOOP_RESULT_ERROR,
+    HERMAS_LOOP_UNSUPPORTED_GRAPH
 } hermas_loop_result;
+
+typedef struct hermas_loop_delivery {
+    uint64_t request_id;
+    uint16_t node_id;
+    uint16_t app_id;
+    uint16_t action_id;
+    bool owns_action;
+} hermas_loop_delivery;
 
 typedef struct hermas_loop_slot {
     hermas_execution execution;
@@ -92,6 +103,9 @@ typedef struct hermas_loop_slot {
     bool journal_finished;
     bool result_stored;
     bool compensating;
+    bool grouped;
+    uint8_t group_index;
+    hermas_loop_delivery group_deliveries[HERMAS_RUNTIME_MAX_FLOWS];
     uint8_t saga_success_count;
     uint64_t saga_forward_requests[HERMAS_SAGA_MAX_STEPS];
     hermas_saga_driver saga;
@@ -102,6 +116,12 @@ typedef struct hermas_daemon_loop {
     size_t image_size;
     hermas_daemon_registry *registry;
     hermas_loop_slot executions[HERMAS_DAEMON_MAX_EXECUTIONS];
+    hermas_group_execution
+        group_executions[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS];
+    uint8_t group_values[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS]
+                        [HERMAS_RUNTIME_MAX_FLOWS]
+                        [HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE];
+    bool group_used[HERMAS_DAEMON_MAX_GROUP_EXECUTIONS];
     size_t scheduler_cursor;
     hermas_journal_writer *journal;
     hermas_result_writer *results;
@@ -118,6 +138,17 @@ typedef struct hermas_daemon_loop {
     uint64_t image_fingerprint;
     uint64_t minimum_execution_id;
 } hermas_daemon_loop;
+
+/*
+ * Validates both the graph-image format and the execution capabilities of
+ * this daemon build without creating runtime or durable state.
+ */
+hermas_loop_result hermas_daemon_image_check(
+    const uint8_t *image,
+    size_t image_size);
+
+/* The authoritative flow-feature mask implemented by this daemon build. */
+hermas_graph_features hermas_daemon_supported_graph_features(void);
 
 hermas_loop_result hermas_daemon_loop_init(
     hermas_daemon_loop *loop,

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 typedef struct saga_route {
@@ -465,8 +466,155 @@ static hermas_host_config host_config(
     };
 }
 
+typedef struct forward_recovery_counts {
+    size_t unknown_actions;
+    size_t unknown_finishes;
+} forward_recovery_counts;
+
+static hermas_journal_result count_forward_recovery(
+    void *context,
+    const hermas_journal_record *record) {
+    forward_recovery_counts *counts = context;
+    if (record->kind == HERMAS_JOURNAL_ACTION_UNKNOWN) {
+        ++counts->unknown_actions;
+    } else if (record->kind == HERMAS_JOURNAL_EXECUTION_FINISHED &&
+               record->outcome == HERMAS_OUTCOME_UNKNOWN) {
+        ++counts->unknown_finishes;
+    }
+    return HERMAS_JOURNAL_OK;
+}
+
+static int write_interrupted_each(
+    const fixture_paths *paths,
+    const uint8_t *image,
+    size_t image_size,
+    uint64_t execution_id) {
+    uint16_t region_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_REGION_COUNT_OFFSET);
+    size_t regions = read_u32(
+        image, HERMAS_IMAGE_HEADER_REGIONS_OFFSET);
+    size_t nodes = read_u32(
+        image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
+    uint16_t item_node = 0u;
+    for (uint16_t index = 0u; index < region_count; ++index) {
+        size_t region =
+            regions + (size_t)index * HERMAS_IMAGE_REGION_RECORD_SIZE;
+        if (image[region] == HERMAS_IMAGE_REGION_EACH) {
+            item_node = read_u16(image, region + 2u);
+            break;
+        }
+    }
+    if (item_node == 0u) {
+        return 0;
+    }
+    size_t node =
+        nodes + ((size_t)item_node - 1u) * HERMAS_IMAGE_NODE_RECORD_SIZE;
+    uint16_t action_id = read_u16(image, node + 2u);
+    uint16_t app_id = read_u16(image, node + 4u);
+    uint64_t fingerprint =
+        hermas_journal_image_fingerprint(image, image_size);
+    hermas_journal_file journal;
+    hermas_journal_summary summary;
+    if (hermas_journal_file_open(
+            &journal, paths->journal, &summary) != HERMAS_JOURNAL_OK) {
+        return 0;
+    }
+    int ok = hermas_journal_writer_append(
+                 &journal.writer,
+                 (hermas_journal_record){
+                     .kind = HERMAS_JOURNAL_EXECUTION_STARTED,
+                     .execution_id = execution_id,
+                     .workflow_id = 7u,
+                     .image_fingerprint = fingerprint
+                 }) == HERMAS_JOURNAL_OK;
+    for (uint64_t request_id = 1u; ok && request_id <= 3u;
+         ++request_id) {
+        hermas_journal_record delivery = {
+            .kind = HERMAS_JOURNAL_DELIVERY_PREPARED,
+            .execution_id = execution_id,
+            .workflow_id = 7u,
+            .request_id = request_id,
+            .node_id = item_node,
+            .app_id = app_id,
+            .action_id = action_id,
+            .image_fingerprint = fingerprint
+        };
+        ok = hermas_journal_writer_append(
+                 &journal.writer, delivery) == HERMAS_JOURNAL_OK;
+        if (ok && request_id > 1u) {
+            delivery.kind = HERMAS_JOURNAL_DELIVERY_SENT;
+            ok = hermas_journal_writer_append(
+                     &journal.writer, delivery) == HERMAS_JOURNAL_OK;
+        }
+    }
+    hermas_journal_file_close(&journal);
+    return ok;
+}
+
+static int test_each_forward_recovery(const char *image_path) {
+    uint8_t image[4096];
+    size_t image_size = 0u;
+    hermas_graph_features features = 0u;
+    fixture_paths paths;
+    memset(&paths, 0, sizeof(paths));
+    const uint64_t execution_id = 701u;
+    if (!load_image(
+            image_path, image, sizeof(image), &image_size) ||
+        hermas_image_features(image, image_size, &features) !=
+            HERMAS_IMAGE_OK ||
+        (features & HERMAS_GRAPH_FEATURE_EACH) == 0u ||
+        !make_paths(&paths) ||
+        !write_secure_image(&paths, image, image_size) ||
+        chmod(paths.image, 0600) != 0 ||
+        !write_interrupted_each(
+            &paths, image, image_size, execution_id)) {
+        remove_fixture(&paths);
+        return 0;
+    }
+    hermas_host_config config = host_config(paths.image, &paths);
+    hermas_host host;
+    memset(&host, 0, sizeof(host));
+    if (hermas_host_open(&host, &config) != HERMAS_HOST_OK ||
+        host.recovered_execution_count != 0u ||
+        hermas_daemon_loop_active(&host.loop) != 0u ||
+        host.next_execution_id != execution_id + 1u) {
+        hermas_host_close(&host);
+        remove_fixture(&paths);
+        return 0;
+    }
+    hermas_host_close(&host);
+    hermas_journal_summary first_summary;
+    forward_recovery_counts first_counts = {0u, 0u};
+    int valid =
+        hermas_journal_file_inspect(
+            paths.journal, count_forward_recovery, &first_counts,
+            &first_summary) == HERMAS_JOURNAL_OK &&
+        first_summary.record_count == 10u &&
+        first_summary.interrupted_count == 0u &&
+        first_counts.unknown_actions == 3u &&
+        first_counts.unknown_finishes == 1u;
+    if (valid) {
+        valid = hermas_host_open(&host, &config) == HERMAS_HOST_OK &&
+                host.recovered_execution_count == 0u &&
+                hermas_daemon_loop_active(&host.loop) == 0u;
+        hermas_host_close(&host);
+    }
+    hermas_journal_summary second_summary;
+    forward_recovery_counts second_counts = {0u, 0u};
+    valid = valid &&
+            hermas_journal_file_inspect(
+                paths.journal, count_forward_recovery, &second_counts,
+                &second_summary) == HERMAS_JOURNAL_OK &&
+            second_summary.record_count == first_summary.record_count &&
+            second_summary.interrupted_count == 0u &&
+            second_counts.unknown_actions == first_counts.unknown_actions &&
+            second_counts.unknown_finishes == first_counts.unknown_finishes;
+    remove_fixture(&paths);
+    return valid;
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    if (argc != 3) {
         return 2;
     }
     uint8_t image[4096];
@@ -480,6 +628,10 @@ int main(int argc, char **argv) {
         !read_routes(image, routes)) {
         fputs("saga image fixture failed\n", stderr);
         return 2;
+    }
+    if (!test_each_forward_recovery(argv[2])) {
+        fputs("bounded-each forward recovery failed\n", stderr);
+        return 1;
     }
 
     fixture_paths safe_paths;
@@ -557,6 +709,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     remove_fixture(&unsafe_paths);
-    puts("safe and uncertain host recovery passed");
+    puts("bounded forward, safe reverse, and uncertain recovery passed");
     return 0;
 }

@@ -31,6 +31,73 @@ static int parse_workflow_id(const char *text, uint32_t *value) {
     return 1;
 }
 
+static bool daemon_accepts_image(
+    const uint8_t *image,
+    size_t image_size,
+    void *context) {
+    (void)context;
+    return hermas_daemon_image_check(image, image_size) ==
+           HERMAS_LOOP_OK;
+}
+
+static int image_check_exit(hermas_host_result result) {
+    return result == HERMAS_HOST_UNSUPPORTED_GRAPH ? 4 : 1;
+}
+
+static const char *image_check_status(hermas_host_result result) {
+    if (result == HERMAS_HOST_OK) {
+        return "supported";
+    }
+    if (result == HERMAS_HOST_UNSUPPORTED_GRAPH) {
+        return "unsupported";
+    }
+    return "invalid";
+}
+
+static void print_image_check_json(hermas_host_result result) {
+    printf(
+        "{\"format\":\"hermas-image-check-v1\","
+        "\"status\":\"%s\",\"reason\":\"%s\"}\n",
+        image_check_status(result), hermas_host_result_name(result));
+}
+
+static const char *feature_boolean(
+    hermas_graph_features supported,
+    hermas_graph_features feature) {
+    return (supported & feature) != 0u ? "true" : "false";
+}
+
+static void print_capabilities(void) {
+    hermas_graph_features supported =
+        hermas_daemon_supported_graph_features();
+    printf(
+        "{\"format\":\"hermas-daemon-capabilities-v1\","
+        "\"hermas_version\":\"%s\","
+        "\"graph_image_version\":%u,"
+        "\"protocol_version\":%u,"
+        "\"formats\":{\"journal\":%u,\"result\":%u,"
+        "\"compensation\":%u,\"saga_log\":%u,"
+        "\"workspace_manifest\":%u},"
+        "\"limits\":{\"actions\":%u,\"active_executions\":%u,"
+        "\"active_group_executions\":%u},"
+        "\"flows\":{\"action\":%s,\"match\":%s,"
+        "\"within\":%s,\"saga\":%s,"
+        "\"all\":%s,\"each\":%s}}\n",
+        HERMAS_VERSION, HERMAS_GRAPH_IMAGE_VERSION,
+        HERMAS_PROTOCOL_VERSION, HERMAS_JOURNAL_VERSION,
+        HERMAS_RESULT_VERSION, HERMAS_COMPENSATION_VERSION,
+        HERMAS_SAGA_LOG_VERSION, HERMAS_WORKSPACE_MANIFEST_VERSION,
+        HERMAS_DAEMON_MAX_ACTIONS,
+        HERMAS_DAEMON_MAX_EXECUTIONS,
+        HERMAS_DAEMON_MAX_GROUP_EXECUTIONS,
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_ACTION),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_MATCH),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_WITHIN),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_SAGA),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_ALL),
+        feature_boolean(supported, HERMAS_GRAPH_FEATURE_EACH));
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
@@ -48,12 +115,42 @@ int main(int argc, char **argv) {
         puts(
             "usage: hermasd IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       hermasd --capabilities\n"
+            "       hermasd --check-image IMAGE [--json]\n"
             "       hermasd --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       hermasd --workspace DIRECTORY\n\n"
+            "--capabilities emits versioned JSON for automation.\n"
+            "--check-image verifies file safety, graph format, and daemon "
+            "capability without creating state or sockets. --json emits "
+            "hermas-image-check-v1.\n\n"
             "The IMAGE form initializes or verifies the managed workspace. "
             "Later starts derive its pinned image and workflow ID.\n\n"
-            "Run one verified graph image with private durable state.");
+            "Run one verified graph image with private durable state. "
+            "This alpha daemon accepts sequential, typed-choice, deadline, "
+            "saga, bounded all, and bounded each graphs. Unsupported graph "
+            "combinations fail closed.");
         return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--capabilities") == 0) {
+        print_capabilities();
+        return 0;
+    }
+    if ((argc == 3 ||
+         (argc == 4 && strcmp(argv[3], "--json") == 0)) &&
+        strcmp(argv[1], "--check-image") == 0) {
+        hermas_host_result checked = hermas_host_check_image(argv[2]);
+        if (argc == 4) {
+            print_image_check_json(checked);
+            return checked == HERMAS_HOST_OK ? 0 : image_check_exit(checked);
+        }
+        if (checked == HERMAS_HOST_OK) {
+            printf("hermasd: supported image: %s\n", argv[2]);
+            return 0;
+        }
+        fprintf(
+            stderr, "hermasd: image check failed: %s\n",
+            hermas_host_result_name(checked));
+        return image_check_exit(checked);
     }
     int workspace_bind_mode =
         argc == 5 && strcmp(argv[1], "--workspace") == 0;
@@ -65,10 +162,26 @@ int main(int argc, char **argv) {
             stderr,
             "usage: %s IMAGE WORKFLOW_ID STATE_DIR "
             "APP_SOCKET CONTROL_SOCKET\n"
+            "       %s --capabilities\n"
+            "       %s --check-image IMAGE [--json]\n"
             "       %s --workspace DIRECTORY IMAGE WORKFLOW_ID\n"
             "       %s --workspace DIRECTORY\n",
-            argv[0], argv[0], argv[0]);
+            argv[0], argv[0], argv[0], argv[0], argv[0]);
         return 2;
+    }
+    uint32_t workflow_id = 0u;
+    if (workspace_bind_mode) {
+        if (!parse_workflow_id(argv[4], &workflow_id)) {
+            fputs("hermasd: invalid workflow ID\n", stderr);
+            return 2;
+        }
+        hermas_host_result checked = hermas_host_check_image(argv[3]);
+        if (checked != HERMAS_HOST_OK) {
+            fprintf(
+                stderr, "hermasd: image check failed: %s\n",
+                hermas_host_result_name(checked));
+            return image_check_exit(checked);
+        }
     }
     hermas_workspace_paths workspace;
     if (workspace_mode) {
@@ -81,15 +194,11 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    uint32_t workflow_id = 0u;
     hermas_workspace_binding binding;
     if (workspace_bind_mode) {
-        if (!parse_workflow_id(argv[4], &workflow_id)) {
-            fputs("hermasd: invalid workflow ID\n", stderr);
-            return 2;
-        }
-        hermas_workspace_result bound = hermas_workspace_bind(
-            &workspace, argv[3], workflow_id, &binding);
+        hermas_workspace_result bound = hermas_workspace_bind_checked(
+            &workspace, argv[3], workflow_id,
+            daemon_accepts_image, NULL, &binding);
         if (bound != HERMAS_WORKSPACE_OK) {
             fprintf(
                 stderr, "hermasd: workspace binding failed: %s\n",
@@ -144,7 +253,10 @@ int main(int argc, char **argv) {
             stderr, "hermasd: startup failed: %s\n",
             hermas_host_result_name(result));
         free(host);
-        return result == HERMAS_HOST_RECOVERY_REQUIRED ? 3 : 1;
+        if (result == HERMAS_HOST_RECOVERY_REQUIRED) {
+            return 3;
+        }
+        return image_check_exit(result);
     }
     while (!stop_requested) {
         size_t progress = 0u;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contract and integration checks for hermas-history-v1."""
+"""Contract and integration checks for hermas-history-v2."""
 
 import argparse
 import json
@@ -25,7 +25,7 @@ def record(
 ) -> bytes:
     value = bytearray(64)
     value[0:4] = b"HJR1"
-    struct.pack_into("<HHHH", value, 4, 1, 64, kind, 0)
+    struct.pack_into("<HHHH", value, 4, 2, 64, kind, 0)
     struct.pack_into("<QQI", value, 16, sequence, 41, 7)
     struct.pack_into("<QHHH", value, 36, request, node, app, action)
     struct.pack_into("<Q", value, 52, FINGERPRINT)
@@ -53,11 +53,14 @@ def test_contract(executable: str) -> None:
         path.write_bytes(
             record(1, 1)
             + record(2, 2, request=9, node=2, app=3, action=4)
+            + record(3, 2, request=10, node=3, app=5, action=6)
         )
         path.chmod(0o600)
 
         items = decoded_lines(inspect(executable, path))
+        assert all(item["format"] == "hermas-history-v2" for item in items)
         assert [item["type"] for item in items] == [
+            "record",
             "record",
             "record",
             "summary",
@@ -66,26 +69,38 @@ def test_contract(executable: str) -> None:
         assert items[1]["request_id"] == "9"
         summary = items[-1]
         assert summary["workspace"] is None
-        assert summary["record_count"] == "2"
+        assert summary["record_count"] == "3"
         assert summary["next_execution_id"] == "42"
         assert summary["interrupted"] == [
             {
                 "execution_id": "41",
                 "workflow_id": 7,
                 "image_fingerprint": "123456789abcdef0",
-                "has_open_delivery": True,
-                "delivery_was_sent": False,
-                "request_id": "9",
-                "node_id": 2,
-                "app_id": 3,
-                "action_id": 4,
+                "open_deliveries": [
+                    {
+                        "delivery_was_sent": False,
+                        "request_id": "9",
+                        "node_id": 2,
+                        "app_id": 3,
+                        "action_id": 4,
+                    },
+                    {
+                        "delivery_was_sent": False,
+                        "request_id": "10",
+                        "node_id": 3,
+                        "app_id": 5,
+                        "action_id": 6,
+                    },
+                ],
             }
         ]
 
         with path.open("ab") as journal:
-            journal.write(record(3, 3, request=9, node=2, app=3, action=4))
+            journal.write(record(4, 3, request=9, node=2, app=3, action=4))
         sent = decoded_lines(inspect(executable, path))
-        assert sent[-1]["interrupted"][0]["delivery_was_sent"] is True
+        assert sent[-1]["interrupted"][0]["open_deliveries"][0][
+            "delivery_was_sent"
+        ] is True
 
         with path.open("ab") as journal:
             journal.write(b"\0")
@@ -103,12 +118,12 @@ def test_completed(
     lines = path.read_text(encoding="utf-8").splitlines()
     assert lines, "history stream is empty"
     items = [json.loads(line) for line in lines]
-    assert all(item["format"] == "hermas-history-v1" for item in items)
+    assert all(item["format"] == "hermas-history-v2" for item in items)
     assert all(item["type"] == "record" for item in items[:-1])
 
     summary = items[-1]
     assert summary["type"] == "summary"
-    assert summary["journal_version"] == 1
+    assert summary["journal_version"] == 2
     assert int(summary["record_count"]) == len(items) - 1
     assert summary["interrupted"] == []
     assert summary["workspace"]["workflow_id"] == workflow

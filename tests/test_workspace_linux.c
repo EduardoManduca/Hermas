@@ -60,6 +60,16 @@ static int join_expected(
     return 1;
 }
 
+static bool reject_image(
+    const uint8_t *image,
+    size_t image_size,
+    void *context) {
+    (void)image;
+    (void)image_size;
+    (void)context;
+    return false;
+}
+
 int main(int argc, char **argv) {
     char base[] = "/tmp/hermas-workspace-XXXXXX";
     if (mkdtemp(base) == NULL) {
@@ -169,6 +179,11 @@ int main(int argc, char **argv) {
         hermas_workspace_binding binding;
         if (hermas_workspace_load(&paths, &binding) !=
                 HERMAS_WORKSPACE_NOT_INITIALIZED ||
+            hermas_workspace_bind_checked(
+                &paths, argv[1], 7u, reject_image, NULL,
+                &binding) != HERMAS_WORKSPACE_INCOMPATIBLE ||
+            access(paths.image_path, F_OK) == 0 ||
+            access(paths.manifest_path, F_OK) == 0 ||
             hermas_workspace_bind(&paths, argv[1], 7u, &binding) !=
                 HERMAS_WORKSPACE_OK ||
             binding.workflow_id != 7u ||
@@ -213,6 +228,10 @@ int main(int argc, char **argv) {
             hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_INCOMPATIBLE ||
             !replace_byte(paths.manifest_path, 4, 1u) ||
+            !replace_byte(paths.manifest_path, 16, 1u) ||
+            hermas_workspace_load(&paths, &loaded) !=
+                HERMAS_WORKSPACE_INCOMPATIBLE ||
+            !replace_byte(paths.manifest_path, 16, 2u) ||
             !replace_byte(paths.manifest_path, 63, 1u) ||
             hermas_workspace_load(&paths, &loaded) !=
                 HERMAS_WORKSPACE_INVALID_MANIFEST ||

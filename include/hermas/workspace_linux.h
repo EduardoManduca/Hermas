@@ -41,6 +41,11 @@ typedef struct hermas_workspace_binding {
     uint64_t image_size;
 } hermas_workspace_binding;
 
+typedef bool (*hermas_workspace_image_acceptor)(
+    const uint8_t *image,
+    size_t image_size,
+    void *context);
+
 /*
  * Resolves the fixed alpha workspace layout. When `create` is true, missing
  * workspace and state directories are created with mode 0700. Existing
@@ -61,6 +66,18 @@ hermas_workspace_result hermas_workspace_bind(
     const hermas_workspace_paths *paths,
     const char *image_path,
     uint32_t workflow_id,
+    hermas_workspace_binding *binding);
+
+/*
+ * As hermas_workspace_bind, but applies an additional capability predicate to
+ * the exact validated bytes before any managed image or manifest is written.
+ */
+hermas_workspace_result hermas_workspace_bind_checked(
+    const hermas_workspace_paths *paths,
+    const char *image_path,
+    uint32_t workflow_id,
+    hermas_workspace_image_acceptor acceptor,
+    void *acceptor_context,
     hermas_workspace_binding *binding);
 
 /*

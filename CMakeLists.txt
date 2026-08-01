@@ -336,7 +336,9 @@ if(BUILD_TESTING)
             target_link_options(hermas_workspace_tests PRIVATE
                 -fsanitize=address,undefined)
         endif()
-        if(DEFINED HERMAS_TEST_IMAGE)
+        if(DEFINED HERMAS_TEST_IMAGE
+           AND DEFINED HERMAS_TEST_PARALLEL_IMAGE
+           AND DEFINED HERMAS_TEST_EACH_IMAGE)
             add_test(NAME hermas_workspace_tests
                      COMMAND hermas_workspace_tests
                              "${HERMAS_TEST_IMAGE}")
@@ -396,6 +398,11 @@ if(BUILD_TESTING)
                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_history_json.py"
                         contract
                         "$<TARGET_FILE:hermas_history>")
+            add_test(
+                NAME hermas_daemon_capabilities_tests
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_daemon_capabilities.py"
+                        "$<TARGET_FILE:hermasd>")
         endif()
         add_executable(hermas_saga_log_linux_tests
                        tests/test_saga_log_linux.c)
@@ -478,7 +485,10 @@ if(BUILD_TESTING)
                 endif()
             endif()
             add_test(NAME hermas_loop_tests
-                     COMMAND hermas_loop_tests "${HERMAS_TEST_IMAGE}")
+                     COMMAND hermas_loop_tests
+                         "${HERMAS_TEST_IMAGE}"
+                         "${HERMAS_TEST_PARALLEL_IMAGE}"
+                         "${HERMAS_TEST_EACH_IMAGE}")
             add_test(NAME hermas_pipeline_tests
                      COMMAND hermas_pipeline_tests
                          "${HERMAS_TEST_IMAGE}"
@@ -491,7 +501,7 @@ if(BUILD_TESTING)
                 hermasd hermas_run hermas_grade_list
                 hermas_mean_calculator hermas_printer)
             target_link_libraries(hermasd_tests PRIVATE
-                hermas_client hermas_journal)
+                hermas_client hermas_journal hermas_host)
             target_compile_options(hermasd_tests PRIVATE
                 -Wall -Wextra -Wpedantic -Werror)
             if(HERMAS_SANITIZE)
@@ -508,7 +518,9 @@ if(BUILD_TESTING)
                          "$<TARGET_FILE:hermas_run>"
                          "$<TARGET_FILE:hermas_grade_list>"
                          "$<TARGET_FILE:hermas_mean_calculator>"
-                         "$<TARGET_FILE:hermas_printer>")
+                         "$<TARGET_FILE:hermas_printer>"
+                         "${HERMAS_TEST_PARALLEL_IMAGE}"
+                         "${HERMAS_TEST_EACH_IMAGE}")
         endif()
         if(DEFINED HERMAS_TEST_SAGA_IMAGE)
             add_executable(hermas_host_recovery_tests
@@ -528,7 +540,8 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME hermas_host_recovery_tests
                      COMMAND hermas_host_recovery_tests
-                             "${HERMAS_TEST_SAGA_IMAGE}")
+                             "${HERMAS_TEST_SAGA_IMAGE}"
+                             "${HERMAS_TEST_EACH_IMAGE}")
             add_executable(hermas_saga_loop_tests
                            tests/test_saga_loop_linux.c)
             target_link_libraries(hermas_saga_loop_tests PRIVATE

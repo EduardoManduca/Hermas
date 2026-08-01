@@ -40,6 +40,14 @@ static int validate_additional_fixture(const char *path) {
         HERMAS_IMAGE_OK) {
         result = fail("additional Rust image was rejected");
     }
+    hermas_graph_features features = 0u;
+    if (result == 0 &&
+        (hermas_image_features(
+             bytes, (size_t)length, &features) != HERMAS_IMAGE_OK ||
+         features != (HERMAS_GRAPH_FEATURE_ACTION |
+                      HERMAS_GRAPH_FEATURE_ALL))) {
+        result = fail("parallel image features differ");
+    }
     if (result == 0) {
         size_t nodes_offset = read_u32(bytes, 48u);
         uint16_t node_count =
@@ -90,6 +98,13 @@ static int validate_saga_fixture(const char *path) {
         HERMAS_IMAGE_OK) {
         result = fail("valid saga image was rejected");
     } else {
+        hermas_graph_features features = 0u;
+        if (hermas_image_features(
+                bytes, (size_t)length, &features) != HERMAS_IMAGE_OK ||
+            features != (HERMAS_GRAPH_FEATURE_ACTION |
+                         HERMAS_GRAPH_FEATURE_SAGA)) {
+            result = fail("saga image features differ");
+        }
         uint16_t contract_count =
             (uint16_t)bytes[
                 HERMAS_IMAGE_HEADER_ACTION_CONTRACT_COUNT_OFFSET] |
@@ -202,6 +217,14 @@ int main(int argc, char **argv) {
         summary.workflow_name_length != 14u ||
         memcmp(summary.workflow_name, "grade_pipeline", 14u) != 0) {
         return fail("decoded summary differs");
+    }
+    hermas_graph_features features = 0u;
+    if (hermas_image_features(
+            bytes, (size_t)length, &features) != HERMAS_IMAGE_OK ||
+        features != HERMAS_GRAPH_FEATURE_ACTION ||
+        hermas_image_features(
+            bytes, (size_t)length, NULL) != HERMAS_IMAGE_INVALID_VALUE) {
+        return fail("sequential image features differ");
     }
     uint8_t action_fingerprint[32];
     hermas_image_action_contract action_contract;

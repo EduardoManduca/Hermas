@@ -23,3 +23,8 @@ Every record append that authorizes a later transition is synchronized before
 that transition is exposed. Corruption, truncation, sequence gaps, identity
 mismatch, duplicate authority, unsafe permissions, or lock conflicts are
 state errors rather than recovery hints.
+
+Forward classifications apply independently to every bounded `all` branch and
+bounded `each` item delivery identity. A restart never reconstructs or replays
+an incomplete group; it closes the containing execution as `Unknown` exactly
+once under the same rules as sequential forward delivery.

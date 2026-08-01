@@ -77,6 +77,12 @@ static void test_codec(void) {
                 decoded.image_fingerprint ==
                     prepared.image_fingerprint,
             "prepared record did not round trip");
+    encoded[4] = 1u;
+    require(hermas_journal_decode(
+                encoded, sizeof(encoded), &decoded) ==
+                HERMAS_JOURNAL_INVALID_VERSION,
+            "journal v1 was silently reinterpreted");
+    encoded[4] = HERMAS_JOURNAL_VERSION;
     encoded[32] ^= 1u;
     require(hermas_journal_decode(
                 encoded, sizeof(encoded), &decoded) ==
@@ -111,30 +117,48 @@ static void test_scan_and_restart_classification(void) {
     length = append_encoded(bytes, length, action_record(
         HERMAS_JOURNAL_DELIVERY_SENT,
         HERMAS_OUTCOME_NONE, 3u));
+    hermas_journal_record second = action_record(
+        HERMAS_JOURNAL_DELIVERY_PREPARED,
+        HERMAS_OUTCOME_NONE, 4u);
+    second.request_id = 10u;
+    second.node_id = 3u;
+    second.app_id = 6u;
+    second.action_id = 7u;
+    length = append_encoded(bytes, length, second);
     hermas_journal_summary summary;
     require(hermas_journal_scan(
                 bytes, length, NULL, NULL, &summary) ==
                 HERMAS_JOURNAL_OK &&
-                summary.record_count == 3u &&
-                summary.next_sequence == 4u &&
+                summary.record_count == 4u &&
+                summary.next_sequence == 5u &&
                 summary.next_execution_id == 18u &&
                 summary.interrupted_count == 1u &&
-                summary.interrupted[0].has_open_delivery == 1u &&
-                summary.interrupted[0].delivery_was_sent == 1u &&
-                summary.interrupted[0].request_id == 9u,
-            "sent crash was not classified as interrupted");
+                summary.interrupted[0].open_delivery_count == 2u &&
+                summary.interrupted[0].open_deliveries[0]
+                        .delivery_was_sent == 1u &&
+                summary.interrupted[0].open_deliveries[0]
+                        .request_id == 9u &&
+                summary.interrupted[0].open_deliveries[1]
+                        .delivery_was_sent == 0u &&
+                summary.interrupted[0].open_deliveries[1]
+                        .request_id == 10u,
+            "overlapping crash was not classified per delivery");
 
+    second.kind = HERMAS_JOURNAL_ACTION_UNKNOWN;
+    second.outcome = HERMAS_OUTCOME_UNKNOWN;
+    second.sequence = 5u;
+    length = append_encoded(bytes, length, second);
     length = append_encoded(bytes, length, action_record(
         HERMAS_JOURNAL_ACTION_UNKNOWN,
-        HERMAS_OUTCOME_UNKNOWN, 4u));
+        HERMAS_OUTCOME_UNKNOWN, 6u));
     length = append_encoded(bytes, length, execution_record(
         HERMAS_JOURNAL_EXECUTION_FINISHED,
-        HERMAS_OUTCOME_UNKNOWN, 5u));
+        HERMAS_OUTCOME_UNKNOWN, 7u));
     require(hermas_journal_scan(
                 bytes, length, NULL, NULL, &summary) ==
                 HERMAS_JOURNAL_OK &&
                 summary.interrupted_count == 0u &&
-                summary.next_sequence == 6u,
+                summary.next_sequence == 8u,
             "durably closed Unknown remained interrupted");
 
     bytes[2u * HERMAS_JOURNAL_RECORD_SIZE + 16u] = 7u;
@@ -161,6 +185,52 @@ static void test_scan_and_restart_classification(void) {
                 invalid, invalid_length, NULL, NULL, &summary) ==
                 HERMAS_JOURNAL_INVALID_TRANSITION,
             "terminal outcome mismatch was accepted");
+
+    uint8_t precedence[8u * HERMAS_JOURNAL_RECORD_SIZE];
+    size_t precedence_length = 0u;
+    hermas_journal_record left = action_record(
+        HERMAS_JOURNAL_DELIVERY_PREPARED,
+        HERMAS_OUTCOME_NONE, 2u);
+    hermas_journal_record right = left;
+    right.request_id = 10u;
+    right.node_id = 3u;
+    right.app_id = 6u;
+    right.action_id = 7u;
+    precedence_length = append_encoded(
+        precedence, precedence_length,
+        execution_record(HERMAS_JOURNAL_EXECUTION_STARTED,
+                         HERMAS_OUTCOME_NONE, 1u));
+    precedence_length = append_encoded(
+        precedence, precedence_length, left);
+    left.kind = HERMAS_JOURNAL_DELIVERY_SENT;
+    left.sequence = 3u;
+    precedence_length = append_encoded(
+        precedence, precedence_length, left);
+    right.sequence = 4u;
+    precedence_length = append_encoded(
+        precedence, precedence_length, right);
+    right.kind = HERMAS_JOURNAL_DELIVERY_SENT;
+    right.sequence = 5u;
+    precedence_length = append_encoded(
+        precedence, precedence_length, right);
+    left.kind = HERMAS_JOURNAL_ACTION_FAILED;
+    left.outcome = HERMAS_OUTCOME_APP_ERROR;
+    left.sequence = 6u;
+    precedence_length = append_encoded(
+        precedence, precedence_length, left);
+    right.kind = HERMAS_JOURNAL_ACTION_UNKNOWN;
+    right.outcome = HERMAS_OUTCOME_UNKNOWN;
+    right.sequence = 7u;
+    precedence_length = append_encoded(
+        precedence, precedence_length, right);
+    precedence_length = append_encoded(
+        precedence, precedence_length,
+        execution_record(HERMAS_JOURNAL_EXECUTION_FINISHED,
+                         HERMAS_OUTCOME_UNKNOWN, 8u));
+    require(hermas_journal_scan(
+                precedence, precedence_length, NULL, NULL, &summary) ==
+                HERMAS_JOURNAL_OK && summary.interrupted_count == 0u,
+            "Unknown did not dominate a concurrent app error");
 }
 
 typedef struct memory_sink {

@@ -64,6 +64,20 @@ fn cli_checks_the_module_and_requires_selection_for_one_graph() {
     let plan = String::from_utf8(planned.stdout).unwrap();
     assert!(plan.starts_with("execution plan operations::calculate\n"));
     assert!(plan.contains("HScript source order is not a scheduling guarantee"));
+
+    let planned_json = Command::new(env!("CARGO_BIN_EXE_hermas"))
+        .args(["workflow", "plan", "--workflow", "calculate", "--json"])
+        .args(&paths)
+        .output()
+        .expect("machine-readable execution plan runs");
+    assert!(planned_json.status.success());
+    let plan_json = String::from_utf8(planned_json.stdout).unwrap();
+    assert!(plan_json.ends_with('\n'));
+    assert_eq!(plan_json.lines().count(), 1);
+    assert!(plan_json.starts_with(
+        "{\"format\":\"hermas-workflow-plan-v1\",\"workflow\":\"operations::calculate\""
+    ));
+    assert!(plan_json.contains("\"name\":\"mean-calculator/calculate\",\"stage\":1"));
 }
 
 #[test]

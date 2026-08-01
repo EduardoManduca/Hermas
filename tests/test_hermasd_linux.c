@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "hermas/client.h"
+#include "hermas/host_linux.h"
 #include "hermas/journal_linux.h"
 
 #include <errno.h>
@@ -266,10 +267,53 @@ static void remove_state(const char *directory) {
     (void)rmdir(directory);
 }
 
+static int run_supported_check_command(
+    const char *daemon,
+    const char *image) {
+    int errors[2];
+    if (pipe(errors) != 0) {
+        return 0;
+    }
+    pid_t child = fork();
+    if (child == 0) {
+        close(errors[0]);
+        if (dup2(errors[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        close(errors[1]);
+        execl(
+            daemon, daemon, "--check-image", image, "--json",
+            (char *)NULL);
+        _exit(127);
+    }
+    close(errors[1]);
+    char text[512];
+    size_t length = 0u;
+    while (length + 1u < sizeof(text)) {
+        ssize_t received = read(
+            errors[0], text + length,
+            sizeof(text) - length - 1u);
+        if (received < 0 && errno == EINTR) {
+            continue;
+        }
+        if (received <= 0) {
+            break;
+        }
+        length += (size_t)received;
+    }
+    close(errors[0]);
+    text[length] = '\0';
+    int status = 0;
+    return waitpid(child, &status, 0) == child &&
+           WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
+           strstr(text, "\"format\":\"hermas-image-check-v1\"") != NULL &&
+           strstr(text, "\"status\":\"supported\"") != NULL;
+}
+
 int main(int argc, char **argv) {
-    if (argc != 7) {
+    if (argc != 9) {
         return fail(
-            "expected image, daemon, runner, and three app executables");
+            "expected image, daemon, runner, three apps, parallel image, and each image");
     }
     size_t image_size = 0u;
     uint8_t *image = read_file(argv[1], &image_size);
@@ -287,6 +331,15 @@ int main(int argc, char **argv) {
         return fail("unexpected grade graph layout");
     }
     const char *app_paths[3] = {argv[4], argv[5], argv[6]};
+    if (hermas_host_check_image(argv[7]) != HERMAS_HOST_OK) {
+        free(image);
+        return fail("bounded-all graph did not report supported");
+    }
+    if (hermas_host_check_image(argv[8]) != HERMAS_HOST_OK ||
+        !run_supported_check_command(argv[2], argv[8])) {
+        free(image);
+        return fail("bounded-each graph did not report supported");
+    }
     char secure_image[] = "/tmp/hermasd-image-XXXXXX";
     int secure_descriptor = mkstemp(secure_image);
     int image_written =

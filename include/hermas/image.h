@@ -59,10 +59,29 @@ typedef struct hermas_image_action_contract {
     uint8_t fingerprint[32];
 } hermas_image_action_contract;
 
+typedef uint32_t hermas_graph_features;
+
+#define HERMAS_GRAPH_FEATURE_ACTION (1u << 0u)
+#define HERMAS_GRAPH_FEATURE_MATCH (1u << 1u)
+#define HERMAS_GRAPH_FEATURE_WITHIN (1u << 2u)
+#define HERMAS_GRAPH_FEATURE_SAGA (1u << 3u)
+#define HERMAS_GRAPH_FEATURE_ALL (1u << 4u)
+#define HERMAS_GRAPH_FEATURE_EACH (1u << 5u)
+
 hermas_image_result hermas_image_validate(
     const uint8_t *bytes,
     size_t size,
     hermas_image_summary *summary);
+
+/*
+ * Returns the semantic flow features required by a fully validated image.
+ * Callers compare this mask with their own supported-feature mask instead of
+ * interpreting graph-image records directly.
+ */
+hermas_image_result hermas_image_features(
+    const uint8_t *image,
+    size_t image_size,
+    hermas_graph_features *features);
 
 /*
  * Describes the outer canonical representation of one nominal Type.

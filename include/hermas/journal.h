@@ -6,9 +6,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define HERMAS_JOURNAL_VERSION 1u
+#define HERMAS_JOURNAL_VERSION 2u
 #define HERMAS_JOURNAL_RECORD_SIZE 64u
 #define HERMAS_JOURNAL_MAX_INTERRUPTED 16u
+#define HERMAS_JOURNAL_MAX_OPEN_DELIVERIES 8u
 
 typedef enum hermas_journal_result {
     HERMAS_JOURNAL_OK = 0,
@@ -51,16 +52,21 @@ typedef struct hermas_journal_record {
     uint64_t image_fingerprint;
 } hermas_journal_record;
 
-typedef struct hermas_journal_interrupted {
-    uint64_t execution_id;
-    uint32_t workflow_id;
-    uint64_t image_fingerprint;
-    uint8_t has_open_delivery;
+typedef struct hermas_journal_open_delivery {
     uint8_t delivery_was_sent;
     uint64_t request_id;
     uint16_t node_id;
     uint16_t app_id;
     uint16_t action_id;
+} hermas_journal_open_delivery;
+
+typedef struct hermas_journal_interrupted {
+    uint64_t execution_id;
+    uint32_t workflow_id;
+    uint64_t image_fingerprint;
+    uint8_t open_delivery_count;
+    hermas_journal_open_delivery
+        open_deliveries[HERMAS_JOURNAL_MAX_OPEN_DELIVERIES];
 } hermas_journal_interrupted;
 
 typedef struct hermas_journal_summary {

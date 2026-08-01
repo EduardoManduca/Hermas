@@ -11,8 +11,9 @@ typedef enum scan_delivery_state {
 
 typedef struct scan_execution {
     hermas_journal_interrupted value;
-    scan_delivery_state delivery;
-    uint16_t last_outcome;
+    scan_delivery_state deliveries[HERMAS_JOURNAL_MAX_OPEN_DELIVERIES];
+    uint64_t largest_request_id;
+    uint16_t terminal_outcome;
     bool has_action_outcome;
     bool active;
 } scan_execution;
@@ -222,12 +223,40 @@ static scan_execution *find_scan_execution(
 }
 
 static bool route_matches(
-    const hermas_journal_interrupted *execution,
+    const hermas_journal_open_delivery *delivery,
     const hermas_journal_record *record) {
-    return execution->request_id == record->request_id &&
-           execution->node_id == record->node_id &&
-           execution->app_id == record->app_id &&
-           execution->action_id == record->action_id;
+    return delivery->request_id == record->request_id &&
+           delivery->node_id == record->node_id &&
+           delivery->app_id == record->app_id &&
+           delivery->action_id == record->action_id;
+}
+
+static size_t find_delivery(
+    const scan_execution *execution,
+    const hermas_journal_record *record) {
+    for (size_t index = 0u;
+         index < execution->value.open_delivery_count; ++index) {
+        if (route_matches(
+                &execution->value.open_deliveries[index], record)) {
+            return index;
+        }
+    }
+    return HERMAS_JOURNAL_MAX_OPEN_DELIVERIES;
+}
+
+static unsigned outcome_precedence(uint16_t outcome) {
+    switch (outcome) {
+        case HERMAS_OUTCOME_UNKNOWN:
+            return 4u;
+        case HERMAS_OUTCOME_APP_ERROR:
+            return 3u;
+        case HERMAS_OUTCOME_NOT_SENT:
+            return 2u;
+        case HERMAS_OUTCOME_SUCCESS:
+            return 1u;
+        default:
+            return 0u;
+    }
 }
 
 static hermas_journal_result scan_transition(
@@ -261,52 +290,69 @@ static hermas_journal_result scan_transition(
         return HERMAS_JOURNAL_INVALID_TRANSITION;
     }
     if (record->kind == HERMAS_JOURNAL_DELIVERY_PREPARED) {
-        if (execution->delivery != SCAN_DELIVERY_NONE) {
+        if (execution->value.open_delivery_count >=
+                HERMAS_JOURNAL_MAX_OPEN_DELIVERIES ||
+            record->request_id <= execution->largest_request_id ||
+            find_delivery(execution, record) !=
+                HERMAS_JOURNAL_MAX_OPEN_DELIVERIES) {
             return HERMAS_JOURNAL_INVALID_TRANSITION;
         }
-        execution->delivery = SCAN_DELIVERY_PREPARED;
-        execution->value.has_open_delivery = 1u;
-        execution->value.delivery_was_sent = 0u;
-        execution->value.request_id = record->request_id;
-        execution->value.node_id = record->node_id;
-        execution->value.app_id = record->app_id;
-        execution->value.action_id = record->action_id;
+        size_t delivery = execution->value.open_delivery_count++;
+        execution->deliveries[delivery] = SCAN_DELIVERY_PREPARED;
+        execution->largest_request_id = record->request_id;
+        execution->value.open_deliveries[delivery] =
+            (hermas_journal_open_delivery){
+                .request_id = record->request_id,
+                .node_id = record->node_id,
+                .app_id = record->app_id,
+                .action_id = record->action_id
+            };
         return HERMAS_JOURNAL_OK;
     }
     if (record->kind == HERMAS_JOURNAL_DELIVERY_SENT) {
-        if (execution->delivery != SCAN_DELIVERY_PREPARED ||
-            !route_matches(&execution->value, record)) {
+        size_t delivery = find_delivery(execution, record);
+        if (delivery == HERMAS_JOURNAL_MAX_OPEN_DELIVERIES ||
+            execution->deliveries[delivery] != SCAN_DELIVERY_PREPARED) {
             return HERMAS_JOURNAL_INVALID_TRANSITION;
         }
-        execution->delivery = SCAN_DELIVERY_SENT;
-        execution->value.delivery_was_sent = 1u;
+        execution->deliveries[delivery] = SCAN_DELIVERY_SENT;
+        execution->value.open_deliveries[delivery]
+            .delivery_was_sent = 1u;
         return HERMAS_JOURNAL_OK;
     }
     if (record->kind >= HERMAS_JOURNAL_ACTION_SUCCEEDED &&
         record->kind <= HERMAS_JOURNAL_ACTION_UNKNOWN) {
-        if (execution->delivery == SCAN_DELIVERY_NONE ||
-            !route_matches(&execution->value, record) ||
+        size_t delivery = find_delivery(execution, record);
+        if (delivery == HERMAS_JOURNAL_MAX_OPEN_DELIVERIES ||
             (record->kind == HERMAS_JOURNAL_ACTION_SUCCEEDED &&
-             execution->delivery != SCAN_DELIVERY_SENT) ||
+             execution->deliveries[delivery] != SCAN_DELIVERY_SENT) ||
             (record->kind == HERMAS_JOURNAL_ACTION_FAILED &&
              record->outcome == HERMAS_OUTCOME_APP_ERROR &&
-             execution->delivery != SCAN_DELIVERY_SENT) ||
+             execution->deliveries[delivery] != SCAN_DELIVERY_SENT) ||
             (record->kind == HERMAS_JOURNAL_ACTION_FAILED &&
              record->outcome == HERMAS_OUTCOME_NOT_SENT &&
-             execution->delivery != SCAN_DELIVERY_PREPARED)) {
+             execution->deliveries[delivery] != SCAN_DELIVERY_PREPARED)) {
             return HERMAS_JOURNAL_INVALID_TRANSITION;
         }
-        execution->delivery = SCAN_DELIVERY_NONE;
-        execution->value.has_open_delivery = 0u;
-        execution->value.delivery_was_sent = 0u;
-        execution->last_outcome = record->outcome;
+        --execution->value.open_delivery_count;
+        for (size_t index = delivery;
+             index < execution->value.open_delivery_count; ++index) {
+            execution->deliveries[index] = execution->deliveries[index + 1u];
+            execution->value.open_deliveries[index] =
+                execution->value.open_deliveries[index + 1u];
+        }
+        if (!execution->has_action_outcome ||
+            outcome_precedence(record->outcome) >
+                outcome_precedence(execution->terminal_outcome)) {
+            execution->terminal_outcome = record->outcome;
+        }
         execution->has_action_outcome = true;
         return HERMAS_JOURNAL_OK;
     }
     if (record->kind == HERMAS_JOURNAL_EXECUTION_FINISHED) {
-        if (execution->delivery != SCAN_DELIVERY_NONE ||
+        if (execution->value.open_delivery_count != 0u ||
             (execution->has_action_outcome &&
-             execution->last_outcome != record->outcome) ||
+             execution->terminal_outcome != record->outcome) ||
             (!execution->has_action_outcome &&
              record->outcome != HERMAS_OUTCOME_UNKNOWN)) {
             return HERMAS_JOURNAL_INVALID_TRANSITION;

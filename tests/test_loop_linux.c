@@ -74,6 +74,77 @@ static int send_unit_error(int descriptor, const hermas_frame *request) {
                (ssize_t)packet_size;
 }
 
+static uint16_t read_u16(const uint8_t *bytes, size_t offset) {
+    return (uint16_t)bytes[offset] |
+           ((uint16_t)bytes[offset + 1u] << 8u);
+}
+
+static uint32_t read_u32(const uint8_t *bytes, size_t offset) {
+    return (uint32_t)bytes[offset] |
+           ((uint32_t)bytes[offset + 1u] << 8u) |
+           ((uint32_t)bytes[offset + 2u] << 16u) |
+           ((uint32_t)bytes[offset + 3u] << 24u);
+}
+
+static uint16_t action_success_type(
+    const uint8_t *image,
+    uint16_t app_id) {
+    uint16_t node_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_NODE_COUNT_OFFSET);
+    size_t nodes = read_u32(
+        image, HERMAS_IMAGE_HEADER_NODES_OFFSET);
+    uint16_t action_node = 0u;
+    for (uint16_t index = 0u; index < node_count; ++index) {
+        size_t node =
+            nodes + (size_t)index * HERMAS_IMAGE_NODE_RECORD_SIZE;
+        if (image[node] == 1u &&
+            read_u16(image, node + 4u) == app_id) {
+            action_node = (uint16_t)(index + 1u);
+            break;
+        }
+    }
+    uint16_t edge_count = read_u16(
+        image, HERMAS_IMAGE_HEADER_EDGE_COUNT_OFFSET);
+    size_t edges = read_u32(
+        image, HERMAS_IMAGE_HEADER_EDGES_OFFSET);
+    for (uint16_t index = 0u; index < edge_count; ++index) {
+        size_t edge =
+            edges + (size_t)index * HERMAS_IMAGE_EDGE_RECORD_SIZE;
+        if (image[edge] == 1u &&
+            read_u16(image, edge + 4u) == action_node) {
+            return read_u16(image, edge + 8u);
+        }
+    }
+    return 0u;
+}
+
+static int send_success(
+    int descriptor,
+    const hermas_frame *request,
+    uint16_t type,
+    const uint8_t *payload,
+    uint32_t payload_length) {
+    uint8_t packet[HERMAS_PROTOCOL_MAX_PACKET_SIZE];
+    size_t packet_size = 0u;
+    hermas_frame response = {
+        .kind = HERMAS_FRAME_RESULT,
+        .execution_id = request->execution_id,
+        .request_id = request->request_id,
+        .app_id = request->app_id,
+        .action_id = request->action_id,
+        .source_type = type,
+        .destination_type = type,
+        .outcome = HERMAS_OUTCOME_SUCCESS,
+        .payload = payload,
+        .payload_length = payload_length
+    };
+    return hermas_protocol_encode(
+               &response, packet, sizeof(packet), &packet_size) ==
+               HERMAS_PROTOCOL_OK &&
+           send(descriptor, packet, packet_size, MSG_NOSIGNAL) ==
+               (ssize_t)packet_size;
+}
+
 typedef struct journal_memory {
     uint8_t bytes[8u * HERMAS_JOURNAL_RECORD_SIZE];
     size_t length;
@@ -273,7 +344,9 @@ static int test_durable_delivery_facts(
             HERMAS_JOURNAL_OK ||
         summary.record_count != 3u ||
         summary.interrupted_count != 1u ||
-        summary.interrupted[0].delivery_was_sent != 1u) {
+        summary.interrupted[0].open_delivery_count != 1u ||
+        summary.interrupted[0].open_deliveries[0]
+                .delivery_was_sent != 1u) {
         close(sockets[1]);
         return fail("sent delivery facts were not durable");
     }
@@ -311,9 +384,386 @@ static int test_durable_delivery_facts(
     return 0;
 }
 
+typedef struct large_journal_memory {
+    uint8_t bytes[32u * HERMAS_JOURNAL_RECORD_SIZE];
+    size_t length;
+} large_journal_memory;
+
+static hermas_journal_result write_large_journal_memory(
+    void *context,
+    const uint8_t *record,
+    size_t record_size) {
+    large_journal_memory *memory = context;
+    if (record_size > sizeof(memory->bytes) - memory->length) {
+        return HERMAS_JOURNAL_WRITE_ERROR;
+    }
+    memcpy(memory->bytes + memory->length, record, record_size);
+    memory->length += record_size;
+    return HERMAS_JOURNAL_OK;
+}
+
+static int test_bounded_all(
+    hermas_daemon_loop *loop,
+    const char *path) {
+    size_t image_size = 0u;
+    uint8_t *image = read_fixture(path, &image_size);
+    if (image == NULL) {
+        return fail("cannot read bounded-all fixture");
+    }
+    hermas_daemon_registry registry;
+    if (hermas_daemon_registry_init(&registry, image, image_size) !=
+        HERMAS_DAEMON_OK) {
+        free(image);
+        return fail("cannot initialize bounded-all registry");
+    }
+    int peers[4] = {-1, -1, -1, -1};
+    for (size_t index = 0u; index < registry.action_count; ++index) {
+        int sockets[2];
+        if (index >= 4u ||
+            socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
+            hermas_daemon_registry_close(&registry);
+            free(image);
+            return fail("cannot create bounded-all Action sockets");
+        }
+        registry.actions[index].file_descriptor = sockets[0];
+        registry.actions[index].registered_action_id =
+            (uint16_t)(71u + index);
+        peers[registry.actions[index].app_id - 1u] = sockets[1];
+    }
+    large_journal_memory memory;
+    memset(&memory, 0, sizeof(memory));
+    hermas_journal_writer writer;
+    if (registry.action_count != 4u ||
+        hermas_journal_writer_init(
+            &writer, write_large_journal_memory, &memory, 1u) !=
+            HERMAS_JOURNAL_OK ||
+        hermas_daemon_loop_init(loop, &registry, image, image_size) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_attach_journal(loop, &writer, 12u) !=
+            HERMAS_LOOP_OK ||
+        hermas_daemon_loop_admit(loop, 301u, 3u, NULL, 0u) !=
+            HERMAS_LOOP_OK) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("cannot admit bounded-all execution");
+    }
+    size_t progress = 0u;
+    hermas_frame source;
+    uint8_t integer[8] = {42u};
+    if (hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK ||
+        !receive_request(peers[0], &source) ||
+        !send_success(
+            peers[0], &source,
+            action_success_type(image, source.app_id), integer,
+            sizeof(integer)) ||
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK ||
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("bounded-all source did not reach its Fork");
+    }
+    hermas_frame alpha;
+    hermas_frame beta;
+    if (!receive_request(peers[1], &alpha) ||
+        !receive_request(peers[2], &beta) ||
+        alpha.request_id == beta.request_id) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("bounded-all branches did not overlap");
+    }
+    hermas_journal_summary summary;
+    if (hermas_journal_scan(
+            memory.bytes, memory.length, NULL, NULL, &summary) !=
+            HERMAS_JOURNAL_OK ||
+        summary.interrupted_count != 1u ||
+        summary.interrupted[0].open_delivery_count != 2u) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("parallel deliveries were not both durable");
+    }
+    uint8_t alpha_value[8] = {43u};
+    uint8_t beta_value[8] = {44u};
+    uint16_t beta_type =
+        action_success_type(image, beta.app_id);
+    uint16_t alpha_type =
+        action_success_type(image, alpha.app_id);
+    if (beta_type == 0u || alpha_type == 0u ||
+        !send_success(
+            peers[2], &beta, beta_type, beta_value,
+            sizeof(beta_value)) ||
+        !send_success(
+            peers[1], &alpha, alpha_type, alpha_value,
+            sizeof(alpha_value))) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("cannot return bounded-all branch results");
+    }
+    hermas_loop_result first_poll =
+        hermas_daemon_loop_poll(loop, 1000, &progress);
+    hermas_loop_result second_poll =
+        first_poll == HERMAS_LOOP_OK
+            ? hermas_daemon_loop_poll(loop, 1000, &progress)
+            : first_poll;
+    if (first_poll != HERMAS_LOOP_OK || second_poll != HERMAS_LOOP_OK) {
+        fprintf(stderr, "test_loop: bounded-all poll results: %s, %s\n",
+                hermas_loop_result_name(first_poll),
+                hermas_loop_result_name(second_poll));
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("bounded-all branches did not join");
+    }
+    hermas_frame sink;
+    uint8_t done = 1u;
+    if (!receive_request(peers[3], &sink) ||
+        !send_success(
+            peers[3], &sink,
+            action_success_type(image, sink.app_id), &done, 1u) ||
+        hermas_daemon_loop_poll(loop, 1000, &progress) != HERMAS_LOOP_OK) {
+        hermas_daemon_registry_close(&registry);
+        free(image);
+        return fail("bounded-all sink did not complete");
+    }
+    hermas_frame result;
+    int valid =
+        hermas_daemon_loop_result(loop, 301u, &result) == HERMAS_LOOP_OK &&
+        result.outcome == HERMAS_OUTCOME_SUCCESS &&
+        result.payload_length == 1u && result.payload[0] == 1u &&
+        hermas_journal_scan(
+            memory.bytes, memory.length, NULL, NULL, &summary) ==
+            HERMAS_JOURNAL_OK &&
+        summary.record_count == 14u && summary.interrupted_count == 0u &&
+        hermas_daemon_loop_release(loop, 301u) == HERMAS_LOOP_OK &&
+        hermas_daemon_loop_admit(loop, 302u, 3u, NULL, 0u) ==
+            HERMAS_LOOP_OK;
+    hermas_frame source_unknown;
+    hermas_frame alpha_unknown;
+    hermas_frame beta_unknown;
+    if (valid) {
+        valid =
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            receive_request(peers[0], &source_unknown) &&
+            send_success(
+                peers[0], &source_unknown,
+                action_success_type(image, source_unknown.app_id), integer,
+                sizeof(integer)) &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            receive_request(peers[1], &alpha_unknown) &&
+            receive_request(peers[2], &beta_unknown);
+    }
+    if (valid) {
+        close(peers[2]);
+        peers[2] = -1;
+        valid =
+            send_success(
+                peers[1], &alpha_unknown,
+                action_success_type(image, alpha_unknown.app_id),
+                alpha_value, sizeof(alpha_value)) &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            hermas_daemon_loop_result(loop, 302u, &result) ==
+                HERMAS_LOOP_OK &&
+            result.outcome == HERMAS_OUTCOME_UNKNOWN &&
+            hermas_journal_scan(
+                memory.bytes, memory.length, NULL, NULL, &summary) ==
+                HERMAS_JOURNAL_OK &&
+            summary.record_count == 25u &&
+            summary.interrupted_count == 0u &&
+            hermas_daemon_loop_release(loop, 302u) == HERMAS_LOOP_OK;
+    }
+    if (valid) {
+        valid =
+            hermas_daemon_loop_admit(
+                loop, 303u, 3u, NULL, 0u) == HERMAS_LOOP_OK &&
+            hermas_daemon_loop_admit(
+                loop, 304u, 3u, NULL, 0u) == HERMAS_LOOP_OK &&
+            hermas_daemon_loop_admit(
+                loop, 305u, 3u, NULL, 0u) ==
+                HERMAS_LOOP_CAPACITY_EXHAUSTED &&
+            hermas_daemon_loop_active(loop) ==
+                HERMAS_DAEMON_MAX_GROUP_EXECUTIONS;
+    }
+    hermas_daemon_registry_close(&registry);
+    free(image);
+    return valid ? 0 : fail("bounded-all result or journal differs");
+}
+
+static int test_bounded_each(
+    hermas_daemon_loop *loop,
+    const char *path) {
+    size_t image_size = 0u;
+    uint8_t *image = read_fixture(path, &image_size);
+    hermas_image_summary image_summary;
+    if (image == NULL ||
+        hermas_image_validate(image, image_size, &image_summary) !=
+            HERMAS_IMAGE_OK) {
+        free(image);
+        return fail("cannot read bounded-each fixture");
+    }
+    hermas_daemon_registry registry;
+    if (hermas_daemon_registry_init(&registry, image, image_size) !=
+        HERMAS_DAEMON_OK) {
+        free(image);
+        return fail("cannot initialize bounded-each registry");
+    }
+    int peers[3] = {-1, -1, -1};
+    for (size_t index = 0u; index < registry.action_count; ++index) {
+        int sockets[2];
+        if (registry.actions[index].app_id == 0u ||
+            registry.actions[index].app_id > 3u ||
+            socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets) != 0) {
+            hermas_daemon_registry_close(&registry);
+            free(image);
+            return fail("cannot create bounded-each Action sockets");
+        }
+        registry.actions[index].file_descriptor = sockets[0];
+        registry.actions[index].registered_action_id =
+            (uint16_t)(81u + index);
+        peers[registry.actions[index].app_id - 1u] = sockets[1];
+    }
+    large_journal_memory memory;
+    memset(&memory, 0, sizeof(memory));
+    hermas_journal_writer writer;
+    int valid =
+        registry.action_count == 3u &&
+        hermas_journal_writer_init(
+            &writer, write_large_journal_memory, &memory, 1u) ==
+            HERMAS_JOURNAL_OK &&
+        hermas_daemon_loop_init(loop, &registry, image, image_size) ==
+            HERMAS_LOOP_OK &&
+        hermas_daemon_loop_attach_journal(loop, &writer, 13u) ==
+            HERMAS_LOOP_OK &&
+        hermas_daemon_loop_admit(
+            loop, 401u, image_summary.input_type, NULL, 0u) ==
+            HERMAS_LOOP_OK;
+    const char *stage = "setup";
+    size_t progress = 0u;
+    hermas_frame source;
+    uint8_t orders[40] = {0u};
+    orders[0] = 4u;
+    orders[8] = 10u;
+    orders[16] = 20u;
+    orders[24] = 30u;
+    orders[32] = 40u;
+    uint16_t list_type = action_success_type(image, 1u);
+    if (valid) {
+        stage = "source";
+        valid =
+            list_type != 0u &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            receive_request(peers[0], &source) &&
+            send_success(
+                peers[0], &source, list_type, orders,
+                (uint32_t)sizeof(orders)) &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK;
+    }
+    uint64_t item_requests[4] = {0u};
+    bool item_seen[4] = {false, false, false, false};
+    uint16_t report_type = action_success_type(image, 2u);
+    for (size_t completed = 0u; valid && completed < 4u; ++completed) {
+        stage = "item";
+        hermas_frame request;
+        memset(&request, 0, sizeof(request));
+        int received = receive_request(peers[1], &request);
+        size_t item = request.payload_length == 8u &&
+                              request.payload[0] >= 10u &&
+                              request.payload[0] <= 40u &&
+                              request.payload[0] % 10u == 0u
+                          ? (size_t)(request.payload[0] / 10u - 1u)
+                          : 4u;
+        valid = report_type != 0u && received &&
+                request.payload_length == 8u &&
+                item < 4u && !item_seen[item];
+        if (!valid) {
+            fprintf(
+                stderr,
+                "test_loop: each delivery %zu receive=%d type=%u length=%u "
+                "value=%u\n",
+                completed, received, (unsigned)report_type,
+                (unsigned)request.payload_length,
+                request.payload_length == 0u ? 0u : request.payload[0]);
+        }
+        if (valid) {
+            item_seen[item] = true;
+        }
+        item_requests[completed] = request.request_id;
+        for (size_t prior = 0u; valid && prior < completed; ++prior) {
+            valid = item_requests[prior] != item_requests[completed];
+        }
+        uint8_t report[8] = {
+            item < 4u ? (uint8_t)(101u + item) : 0u
+        };
+        valid =
+            valid &&
+            send_success(
+                peers[1], &request, report_type, report,
+                (uint32_t)sizeof(report)) &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK;
+        if (valid && completed + 1u < 4u) {
+            valid = hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                    HERMAS_LOOP_OK;
+        }
+    }
+    hermas_frame archive;
+    uint8_t done = 1u;
+    uint16_t done_type = action_success_type(image, 3u);
+    if (valid) {
+        stage = "archive";
+        valid =
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK &&
+            receive_request(peers[2], &archive) &&
+            archive.payload_length == sizeof(orders) &&
+            archive.payload[0] == 4u &&
+            archive.payload[8] == 101u &&
+            archive.payload[16] == 102u &&
+            archive.payload[24] == 103u &&
+            archive.payload[32] == 104u && done_type != 0u &&
+            send_success(peers[2], &archive, done_type, &done, 1u) &&
+            hermas_daemon_loop_poll(loop, 1000, &progress) ==
+                HERMAS_LOOP_OK;
+    }
+    hermas_frame result;
+    hermas_journal_summary summary;
+    if (valid) {
+        stage = "result";
+        valid =
+            hermas_daemon_loop_result(loop, 401u, &result) ==
+                HERMAS_LOOP_OK &&
+            result.outcome == HERMAS_OUTCOME_SUCCESS &&
+            result.payload_length == 1u && result.payload[0] == 1u &&
+            hermas_journal_scan(
+                memory.bytes, memory.length, NULL, NULL, &summary) ==
+                HERMAS_JOURNAL_OK &&
+            summary.record_count == 20u &&
+            summary.interrupted_count == 0u &&
+            hermas_daemon_loop_release(loop, 401u) == HERMAS_LOOP_OK;
+    }
+    for (size_t index = 0u; index < 3u; ++index) {
+        if (peers[index] >= 0) {
+            close(peers[index]);
+        }
+    }
+    hermas_daemon_registry_close(&registry);
+    free(image);
+    if (!valid) {
+        fprintf(stderr, "test_loop: bounded-each failed during %s\n", stage);
+    }
+    return valid ? 0 : fail("bounded-each daemon execution differs");
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        return fail("expected graph-image fixture path");
+    if (argc != 4) {
+        return fail(
+            "expected sequential, parallel, and each graph-image fixtures");
     }
     size_t image_size = 0u;
     uint8_t *image = read_fixture(argv[1], &image_size);
@@ -342,6 +792,12 @@ int main(int argc, char **argv) {
     if (result == 0) {
         result = test_durable_delivery_facts(
             loop, &registry, image, image_size);
+    }
+    if (result == 0) {
+        result = test_bounded_all(loop, argv[2]);
+    }
+    if (result == 0) {
+        result = test_bounded_each(loop, argv[3]);
     }
     hermas_daemon_registry_close(&registry);
     free(loop);

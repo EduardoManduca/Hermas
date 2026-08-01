@@ -1,6 +1,6 @@
 # Hermas Execution Journal
 
-Status: durable delivery-fact journal, version 1.
+Status: durable delivery-fact journal, version 2.
 
 The journal is mutable execution history. It is deliberately separate from
 the immutable graph image and never contains application payloads. It is not
@@ -13,7 +13,7 @@ Every record is exactly 64 bytes and uses unsigned little-endian fields:
 | Offset | Size | Field |
 | ---: | ---: | --- |
 | 0 | 4 | Magic `HJR1` |
-| 4 | 2 | Version `1` |
+| 4 | 2 | Version `2` |
 | 6 | 2 | Record size `64` |
 | 8 | 2 | Record kind |
 | 10 | 2 | Protocol outcome |
@@ -60,10 +60,13 @@ Startup validates the complete file before accepting writes:
 - Sequence numbers begin at one and are contiguous.
 - Per-execution transitions and request routes are consistent.
 - At most sixteen executions are unfinished simultaneously.
+- At most eight deliveries are open simultaneously per execution.
+- Concurrent terminal facts aggregate deterministically as `Unknown`, known
+  app failure, `NotSent`, then success.
 - Truncated or corrupt files are refused.
 
-An interrupted `DeliveryPrepared` or `DeliverySent` is closed with
-`ActionUnknown`, followed by `ExecutionFinished(Unknown)`. An unfinished
+Every interrupted `DeliveryPrepared` or `DeliverySent` is closed with its own
+`ActionUnknown`, followed by one `ExecutionFinished(Unknown)`. An unfinished
 execution without an open delivery is also closed as `Unknown`. Hermas never
 replays or resumes the forward graph from journal facts.
 
@@ -89,7 +92,7 @@ hermas_history execution.hjournal
 ```
 
 For automation and agent consumers, `--json` emits the versioned
-[`hermas-history-v1`](HISTORY_JSON_V1.md) JSON Lines view. Its terminal summary
+[`hermas-history-v2`](HISTORY_JSON_V2.md) JSON Lines view. Its terminal summary
 includes the workspace binding, record count, next execution ID, and exact
 interrupted-delivery classification:
 

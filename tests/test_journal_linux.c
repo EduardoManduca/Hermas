@@ -68,9 +68,20 @@ int main(void) {
         .action_id = 4u,
         .image_fingerprint = fingerprint
     };
+    hermas_journal_record sent = prepared;
+    sent.kind = HERMAS_JOURNAL_DELIVERY_SENT;
+    hermas_journal_record second = prepared;
+    second.request_id = 2u;
+    second.node_id = 5u;
+    second.app_id = 6u;
+    second.action_id = 7u;
     if (hermas_journal_writer_append(&file.writer, started) !=
             HERMAS_JOURNAL_OK ||
         hermas_journal_writer_append(&file.writer, prepared) !=
+            HERMAS_JOURNAL_OK ||
+        hermas_journal_writer_append(&file.writer, sent) !=
+            HERMAS_JOURNAL_OK ||
+        hermas_journal_writer_append(&file.writer, second) !=
             HERMAS_JOURNAL_OK) {
         hermas_journal_file_close(&file);
         unlink(path);
@@ -80,12 +91,15 @@ int main(void) {
 
     if (hermas_journal_file_open(&file, path, &summary) !=
             HERMAS_JOURNAL_OK ||
-        summary.record_count != 2u ||
+        summary.record_count != 4u ||
         summary.interrupted_count != 1u ||
-        summary.interrupted[0].has_open_delivery != 1u ||
-        summary.interrupted[0].delivery_was_sent != 0u) {
+        summary.interrupted[0].open_delivery_count != 2u ||
+        summary.interrupted[0].open_deliveries[0]
+                .delivery_was_sent != 1u ||
+        summary.interrupted[0].open_deliveries[1]
+                .delivery_was_sent != 0u) {
         unlink(path);
-        return fail("prepared crash was not classified");
+        return fail("overlapping crash was not classified");
     }
     size_t closed = 0u;
     if (hermas_journal_file_close_interrupted(
@@ -99,9 +113,9 @@ int main(void) {
 
     if (hermas_journal_file_open(&file, path, &summary) !=
             HERMAS_JOURNAL_OK ||
-        summary.record_count != 4u ||
+        summary.record_count != 7u ||
         summary.interrupted_count != 0u ||
-        summary.next_sequence != 5u ||
+        summary.next_sequence != 8u ||
         summary.next_execution_id != 42u) {
         unlink(path);
         return fail("recovered journal did not validate");
@@ -112,7 +126,7 @@ int main(void) {
     if (hermas_journal_file_inspect(
             path, count_record, &inspected, &summary) !=
             HERMAS_JOURNAL_OK ||
-        inspected != 4u || summary.record_count != 4u) {
+        inspected != 7u || summary.record_count != 7u) {
         unlink(path);
         return fail("history inspection did not visit every record");
     }

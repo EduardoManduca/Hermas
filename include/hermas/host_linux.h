@@ -22,7 +22,8 @@ typedef enum hermas_host_result {
     HERMAS_HOST_SOCKET_ERROR,
     HERMAS_HOST_REGISTRATION_ERROR,
     HERMAS_HOST_CONTROL_ERROR,
-    HERMAS_HOST_POLL_ERROR
+    HERMAS_HOST_POLL_ERROR,
+    HERMAS_HOST_UNSUPPORTED_GRAPH
 } hermas_host_result;
 
 typedef struct hermas_host_config {
@@ -62,6 +63,12 @@ typedef struct hermas_host {
     hermas_daemon_loop loop;
     hermas_control_server control;
 } hermas_host;
+
+/*
+ * Opens and validates an image using the daemon's normal file-safety and
+ * capability rules without creating state or sockets.
+ */
+hermas_host_result hermas_host_check_image(const char *image_path);
 
 hermas_host_result hermas_host_open(
     hermas_host *host,

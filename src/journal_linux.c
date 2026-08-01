@@ -135,16 +135,20 @@ hermas_journal_result hermas_journal_file_close_interrupted(
          index < summary->interrupted_count; ++index) {
         const hermas_journal_interrupted *interrupted =
             &summary->interrupted[index];
-        if (interrupted->has_open_delivery != 0u) {
+        for (size_t delivery_index = 0u;
+             delivery_index < interrupted->open_delivery_count;
+             ++delivery_index) {
+            const hermas_journal_open_delivery *delivery =
+                &interrupted->open_deliveries[delivery_index];
             hermas_journal_record unknown = {
                 .kind = HERMAS_JOURNAL_ACTION_UNKNOWN,
                 .outcome = HERMAS_OUTCOME_UNKNOWN,
                 .execution_id = interrupted->execution_id,
                 .workflow_id = interrupted->workflow_id,
-                .request_id = interrupted->request_id,
-                .node_id = interrupted->node_id,
-                .app_id = interrupted->app_id,
-                .action_id = interrupted->action_id,
+                .request_id = delivery->request_id,
+                .node_id = delivery->node_id,
+                .app_id = delivery->app_id,
+                .action_id = delivery->action_id,
                 .image_fingerprint =
                     interrupted->image_fingerprint
             };
