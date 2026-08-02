@@ -83,6 +83,14 @@ every response. Different Actions, including Actions from the same app, use
 distinct endpoints and may progress concurrently. App-internal concurrency
 remains app-owned.
 
+Use `hermas_edge_receive_invocation` and retain its
+`hermas_edge_invocation` token when an Action needs more than one request in
+flight. Copy any business input that must outlive the caller-owned packet
+buffer, then reply with `hermas_edge_send_result`. These helpers preserve the
+delivery identity and construct the protocol response; Action code does not
+decode or encode Hermas frames. `hermas_edge_serve_once` remains the compact
+single-request helper.
+
 ## 4. Compensation
 
 Inside an explicit `saga`, a successful Action value is also its opaque

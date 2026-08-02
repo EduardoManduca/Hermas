@@ -29,7 +29,7 @@ identity.
 
 1. Receives exactly one packet with truncation detection.
 2. Decodes and validates the protocol header.
-3. Requires an `INVOKE` for the registered app.
+3. Requires an `INVOKE` for the registered app and Action.
 4. Marks one complete delivery.
 5. Calls the app-owned handler exactly once.
 6. Requires exact success or app-error outcome metadata.
@@ -42,6 +42,16 @@ chooses its success or error Type from the outcome, keeping graph-local
 numbers out of business handlers. The library does not interpret business
 meaning, convert payloads, retry, supervise, or allocate.
 
+For an app-owned event loop or a bounded `each` Action,
+`hermas_edge_receive_invocation` returns a small routing token plus borrowed
+canonical input bytes. The input pointer remains valid only until that packet
+buffer is reused. The app may copy the business value, keep the routing token,
+and receive more work. `hermas_edge_send_result` later accepts any retained
+token, so results may be returned in a different order without the app parsing,
+constructing, or exposing protocol frames. Both helpers verify the registered
+Action identity and fixed packet/payload bounds.
+
 The Linux integration test uses a real `SOCK_SEQPACKET` socket and separate
 client/server processes. It proves registration, invocation, result framing,
-and exactly one handler call under ASan and UBSan.
+one-shot handling, multiple outstanding invocations, and reverse-order result
+routing under ASan and UBSan.

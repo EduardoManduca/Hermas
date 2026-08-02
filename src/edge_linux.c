@@ -133,27 +133,20 @@ hermas_edge_result hermas_edge_serve_once(
         result_buffer == NULL || handler == NULL) {
         return HERMAS_EDGE_INVALID_ARGUMENT;
     }
-    size_t packet_size = 0u;
-    hermas_edge_result result = receive_packet(
-        edge->file_descriptor, packet_buffer, packet_capacity, &packet_size);
-    hermas_frame request;
-    if (result != HERMAS_EDGE_OK) {
-        return result;
+    hermas_edge_invocation invocation;
+    const uint8_t *input = NULL;
+    size_t input_length = 0u;
+    hermas_edge_result received = hermas_edge_receive_invocation(
+        edge, packet_buffer, packet_capacity, &invocation, &input,
+        &input_length);
+    if (received != HERMAS_EDGE_OK) {
+        return received;
     }
-    if (hermas_protocol_decode(packet_buffer, packet_size, &request) !=
-            HERMAS_PROTOCOL_OK ||
-        request.kind != HERMAS_FRAME_INVOKE) {
-        return HERMAS_EDGE_PROTOCOL_ERROR;
-    }
-    if (request.app_id != edge->app_id) {
-        return HERMAS_EDGE_WRONG_APP;
-    }
-    ++edge->delivered_invocations;
     uint16_t outcome = HERMAS_OUTCOME_NONE;
     uint16_t result_type = 0u;
     size_t result_length = 0u;
-    if (!handler(user_data, request.action_id, request.destination_type,
-                 request.payload, request.payload_length, &outcome,
+    if (!handler(user_data, invocation.action_id, invocation.input_type,
+                 input, input_length, &outcome,
                  &result_type, result_buffer, result_capacity,
                  &result_length) ||
         result_length > result_capacity ||
@@ -163,16 +156,84 @@ hermas_edge_result hermas_edge_serve_once(
         result_type == 0u) {
         return HERMAS_EDGE_HANDLER_ERROR;
     }
-    hermas_frame response = {
-        .kind = HERMAS_FRAME_RESULT,
+    return hermas_edge_send_result(
+        edge, packet_buffer, packet_capacity, &invocation, outcome,
+        result_type, result_buffer, result_length);
+}
+
+hermas_edge_result hermas_edge_receive_invocation(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    hermas_edge_invocation *invocation,
+    const uint8_t **input,
+    size_t *input_length) {
+    if (edge == NULL || edge->file_descriptor < 0 ||
+        packet_buffer == NULL ||
+        packet_capacity < HERMAS_PROTOCOL_HEADER_SIZE ||
+        invocation == NULL || input == NULL || input_length == NULL) {
+        return HERMAS_EDGE_INVALID_ARGUMENT;
+    }
+    size_t packet_size = 0u;
+    hermas_edge_result received = receive_packet(
+        edge->file_descriptor, packet_buffer, packet_capacity, &packet_size);
+    if (received != HERMAS_EDGE_OK) {
+        return received;
+    }
+    hermas_frame request;
+    if (hermas_protocol_decode(packet_buffer, packet_size, &request) !=
+            HERMAS_PROTOCOL_OK ||
+        request.kind != HERMAS_FRAME_INVOKE ||
+        request.execution_id == 0u || request.request_id == 0u) {
+        return HERMAS_EDGE_PROTOCOL_ERROR;
+    }
+    if (request.app_id != edge->app_id ||
+        request.action_id != edge->action_id) {
+        return HERMAS_EDGE_WRONG_APP;
+    }
+    *invocation = (hermas_edge_invocation){
         .execution_id = request.execution_id,
         .request_id = request.request_id,
-        .app_id = request.app_id,
         .action_id = request.action_id,
+        .input_type = request.destination_type,
+    };
+    *input = request.payload;
+    *input_length = request.payload_length;
+    ++edge->delivered_invocations;
+    return HERMAS_EDGE_OK;
+}
+
+hermas_edge_result hermas_edge_send_result(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    const hermas_edge_invocation *invocation,
+    uint16_t outcome,
+    uint16_t result_type,
+    const uint8_t *result,
+    size_t result_length) {
+    if (edge == NULL || edge->file_descriptor < 0 ||
+        packet_buffer == NULL ||
+        packet_capacity < HERMAS_PROTOCOL_HEADER_SIZE ||
+        invocation == NULL || invocation->execution_id == 0u ||
+        invocation->request_id == 0u ||
+        invocation->action_id != edge->action_id || result_type == 0u ||
+        (outcome != HERMAS_OUTCOME_SUCCESS &&
+         outcome != HERMAS_OUTCOME_APP_ERROR) ||
+        result_length > HERMAS_PROTOCOL_MAX_PAYLOAD_SIZE ||
+        (result_length != 0u && result == NULL)) {
+        return HERMAS_EDGE_INVALID_ARGUMENT;
+    }
+    hermas_frame response = {
+        .kind = HERMAS_FRAME_RESULT,
+        .execution_id = invocation->execution_id,
+        .request_id = invocation->request_id,
+        .app_id = edge->app_id,
+        .action_id = invocation->action_id,
         .source_type = result_type,
         .destination_type = result_type,
         .outcome = outcome,
-        .payload = result_buffer,
+        .payload = result,
         .payload_length = (uint32_t)result_length
     };
     return send_frame(edge->file_descriptor, &response,
