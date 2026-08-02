@@ -23,7 +23,7 @@ static int handler(
     size_t result_capacity,
     size_t *result_length) {
     (void)user_data;
-    if (action_id != 2u || input_type != 3u || input_length != 8u ||
+    if (action_id != 7u || input_type != 3u || input_length != 8u ||
         result_capacity < 8u) {
         return 0;
     }
@@ -70,7 +70,7 @@ static int server(int listener) {
         .execution_id = 10u,
         .request_id = 20u,
         .app_id = 1u,
-        .action_id = 2u,
+        .action_id = 7u,
         .source_type = 3u,
         .destination_type = 3u,
         .outcome = HERMAS_OUTCOME_NONE,
@@ -86,7 +86,28 @@ static int server(int listener) {
                     HERMAS_PROTOCOL_OK &&
                 frame.kind == HERMAS_FRAME_RESULT &&
                 frame.outcome == HERMAS_OUTCOME_SUCCESS &&
-                frame.source_type == 4u && frame.payload_length == 8u;
+                frame.source_type == 4u && frame.payload_length == 8u &&
+                frame.request_id == 20u;
+    for (uint64_t request_id = 21u; valid && request_id <= 22u;
+         ++request_id) {
+        value[0] = (uint8_t)request_id;
+        invoke.request_id = request_id;
+        valid = send_encoded(client, &invoke);
+    }
+    for (uint64_t expected = 22u; valid && expected >= 21u; --expected) {
+        size = recv(client, packet, sizeof(packet), 0);
+        valid = size > 0 &&
+                hermas_protocol_decode(packet, (size_t)size, &frame) ==
+                    HERMAS_PROTOCOL_OK &&
+                frame.kind == HERMAS_FRAME_RESULT &&
+                frame.outcome == HERMAS_OUTCOME_SUCCESS &&
+                frame.request_id == expected && frame.source_type == 4u &&
+                frame.payload_length == 8u &&
+                frame.payload[0] == (uint8_t)expected;
+        if (expected == 21u) {
+            break;
+        }
+    }
     close(client);
     return valid ? 0 : 1;
 }
@@ -124,6 +145,27 @@ int main(void) {
                                 sizeof(result), handler, NULL) ==
             HERMAS_EDGE_OK &&
         edge.delivered_invocations == 1u && handled == 1;
+    hermas_edge_invocation invocations[2];
+    uint8_t values[2][8];
+    for (size_t index = 0u; valid && index < 2u; ++index) {
+        const uint8_t *input = NULL;
+        size_t input_length = 0u;
+        valid = hermas_edge_receive_invocation(
+                    &edge, packet, sizeof(packet), &invocations[index],
+                    &input, &input_length) == HERMAS_EDGE_OK &&
+                input_length == sizeof(values[index]);
+        if (valid) {
+            memcpy(values[index], input, input_length);
+        }
+    }
+    for (size_t index = 2u; valid && index > 0u; --index) {
+        size_t selected = index - 1u;
+        valid = hermas_edge_send_result(
+                    &edge, packet, sizeof(packet), &invocations[selected],
+                    HERMAS_OUTCOME_SUCCESS, 4u, values[selected],
+                    sizeof(values[selected])) == HERMAS_EDGE_OK;
+    }
+    valid = valid && edge.delivered_invocations == 3u;
     hermas_edge_disconnect(&edge);
     int status = 0;
     waitpid(child, &status, 0);

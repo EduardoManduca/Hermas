@@ -245,10 +245,12 @@ let reports = each order in orders concurrency 3 {
 The source and collected types must be named bounded lists. Their element
 types must exactly match the item input and Action success respectively, and
 the collected bound must cover the source bound. The initial executable slice
-permits one Action in the item template. Runtime completion order does not
-change output order: `collect` emits items in source-index order. The fixed
-runtime arena also retains normal single-flight ownership, so invocations
-belonging to one app are serialized even when several item flows are ready.
+permits one Action in the item template. Up to the declared concurrency may be
+in flight through that Action's endpoint, with request IDs routing responses
+to their item flows. Runtime completion order does not change output order:
+`collect` emits items in source-index order. This multiplexing is confined to
+items in the same bounded `each` region; ordinary Action delivery remains
+single-flight.
 
 ## Failure and delivery uncertainty
 
@@ -323,8 +325,10 @@ parallelism, deadline scopes, and saga recovery order. It is deliberately not
 a predicted runtime trace. HScript statement order assigns names and
 constructs edges; it does not independently serialize Actions. Actions in the
 same readiness stage have no data dependency between them, but actual overlap
-still depends on branch selection, app availability, per-app ownership,
-capacity, and the runtime scheduler.
+still depends on branch selection, app availability, per-Action ownership,
+capacity, and the runtime scheduler. A bounded `each` item Action is the
+exception to ordinary single-flight ownership and may carry up to the
+region's explicit concurrency.
 
 `plan --json` emits the versioned `hermas-workflow-plan-v1` automation
 projection documented in `WORKFLOW_PLAN_JSON_V1.md`. It exposes verified

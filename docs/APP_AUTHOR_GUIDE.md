@@ -75,9 +75,21 @@ complete send, loss is `NotSent`. After complete delivery, loss is `Unknown`;
 Hermas will not retry. An app therefore must not assume a missing response
 means its handler was never invoked.
 
-One endpoint is single-flight for one Action. Different Actions, including
-Actions from the same app, use distinct endpoints and may progress
-concurrently. App-internal concurrency remains app-owned.
+One endpoint is normally single-flight for one Action. A bounded `each` region
+may have up to its declared number of item requests in flight on the item
+Action's endpoint. Responses may complete in any order and are matched by
+request ID, so an `each` Action must preserve the invocation identifiers in
+every response. Different Actions, including Actions from the same app, use
+distinct endpoints and may progress concurrently. App-internal concurrency
+remains app-owned.
+
+Use `hermas_edge_receive_invocation` and retain its
+`hermas_edge_invocation` token when an Action needs more than one request in
+flight. Copy any business input that must outlive the caller-owned packet
+buffer, then reply with `hermas_edge_send_result`. These helpers preserve the
+delivery identity and construct the protocol response; Action code does not
+decode or encode Hermas frames. `hermas_edge_serve_once` remains the compact
+single-request helper.
 
 ## 4. Compensation
 

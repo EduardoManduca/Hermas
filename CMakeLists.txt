@@ -682,6 +682,7 @@ install(FILES
         README.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md ROADMAP.md
         LICENSE-MIT LICENSE-APACHE
         docs/QUICKSTART.md docs/APP_AUTHOR_GUIDE.md
+        docs/EDGE_ABI.md
         docs/WORKSPACE.md docs/WORKSPACE_MANIFEST_V1.md
         docs/COMPATIBILITY.md docs/THREAT_MODEL.md
         docs/CRASH_RECOVERY_MATRIX.md docs/FEATURE_ADMISSION.md

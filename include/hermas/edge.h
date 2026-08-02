@@ -28,6 +28,13 @@ typedef struct hermas_edge {
     uint64_t delivered_invocations;
 } hermas_edge;
 
+typedef struct hermas_edge_invocation {
+    uint64_t execution_id;
+    uint64_t request_id;
+    uint16_t action_id;
+    uint16_t input_type;
+} hermas_edge_invocation;
+
 typedef int (*hermas_action_handler)(
     void *user_data,
     uint16_t action_id,
@@ -55,6 +62,24 @@ hermas_edge_result hermas_edge_serve_once(
     size_t result_capacity,
     hermas_action_handler handler,
     void *user_data);
+
+hermas_edge_result hermas_edge_receive_invocation(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    hermas_edge_invocation *invocation,
+    const uint8_t **input,
+    size_t *input_length);
+
+hermas_edge_result hermas_edge_send_result(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    const hermas_edge_invocation *invocation,
+    uint16_t outcome,
+    uint16_t result_type,
+    const uint8_t *result,
+    size_t result_length);
 
 void hermas_edge_disconnect(hermas_edge *edge);
 
