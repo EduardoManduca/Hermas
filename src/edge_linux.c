@@ -161,6 +161,29 @@ hermas_edge_result hermas_edge_serve_once(
         result_type, result_buffer, result_length);
 }
 
+hermas_edge_result hermas_edge_serve_many(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    uint8_t *result_buffer,
+    size_t result_capacity,
+    uint64_t invocation_count,
+    hermas_action_handler handler,
+    void *user_data) {
+    if (invocation_count == 0u) {
+        return HERMAS_EDGE_INVALID_ARGUMENT;
+    }
+    for (uint64_t index = 0u; index < invocation_count; ++index) {
+        hermas_edge_result served = hermas_edge_serve_once(
+            edge, packet_buffer, packet_capacity, result_buffer,
+            result_capacity, handler, user_data);
+        if (served != HERMAS_EDGE_OK) {
+            return served;
+        }
+    }
+    return HERMAS_EDGE_OK;
+}
+
 hermas_edge_result hermas_edge_receive_invocation(
     hermas_edge *edge,
     uint8_t *packet_buffer,

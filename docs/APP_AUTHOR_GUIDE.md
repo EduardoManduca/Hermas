@@ -89,7 +89,10 @@ flight. Copy any business input that must outlive the caller-owned packet
 buffer, then reply with `hermas_edge_send_result`. These helpers preserve the
 delivery identity and construct the protocol response; Action code does not
 decode or encode Hermas frames. `hermas_edge_serve_once` remains the compact
-single-request helper.
+single-request helper. For a sequential long-lived Action,
+`hermas_edge_serve_many` reuses the same buffers and registered connection for
+an explicit nonzero number of invocations; it stops on the first error and
+does not retry.
 
 ## 4. Compensation
 
