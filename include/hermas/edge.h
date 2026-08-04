@@ -63,6 +63,16 @@ hermas_edge_result hermas_edge_serve_once(
     hermas_action_handler handler,
     void *user_data);
 
+hermas_edge_result hermas_edge_serve_many(
+    hermas_edge *edge,
+    uint8_t *packet_buffer,
+    size_t packet_capacity,
+    uint8_t *result_buffer,
+    size_t result_capacity,
+    uint64_t invocation_count,
+    hermas_action_handler handler,
+    void *user_data);
+
 hermas_edge_result hermas_edge_receive_invocation(
     hermas_edge *edge,
     uint8_t *packet_buffer,

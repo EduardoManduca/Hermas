@@ -35,6 +35,13 @@ identity.
 6. Requires exact success or app-error outcome metadata.
 7. Encodes and sends one `RESULT`.
 
+`hermas_edge_serve_many` performs the same exchange for an explicit nonzero
+invocation count while reusing the caller-owned buffers and connection. It
+stops on the first edge or handler error and never retries an invocation. The
+count bounds the helper call; process lifetime, reconnection, and supervision
+remain app policy. `delivered_invocations` remains cumulative across both
+serving helpers.
+
 The low-level handler receives Action ID, destination input Type ID, and
 canonical payload bytes. It returns an explicit result Type ID and outcome.
 The example bootstrap checks those IDs against the resolved contract and
