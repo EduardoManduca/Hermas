@@ -56,6 +56,11 @@ Order Total test passes `--value 10000`. Exact canonical bytes remain
 available through `--hex`; advanced callers may still pass an explicit image,
 socket, and Type ID.
 
+Automation can prepend `--json` to receive one
+`hermas-execution-result-v1` object containing the exact terminal outcome,
+Type IDs, and canonical result bytes. Domain exit statuses are identical in
+human and JSON modes.
+
 ## Independent architecture check
 
 Run `tools/test_order_total.sh` to compile and execute a second, unrelated

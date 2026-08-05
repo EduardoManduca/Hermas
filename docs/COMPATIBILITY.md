@@ -10,7 +10,8 @@ promise.
   reinterpreted.
 - Machine-readable CLI contracts carry their own format identifier.
   `hermas-history-v2` is a view of journal v2, not a replacement durable
-  format; incompatible output changes require a new identifier.
+  format, and `hermas-execution-result-v1` is a lossless view of one terminal
+  caller frame. Incompatible output changes require a new identifier.
 - Managed workspaces bind one exact graph image and workflow ID to all current
   protocol and durable-state versions. Daemon, Action, caller, and history
   entry points validate this binding before using sockets or state.
