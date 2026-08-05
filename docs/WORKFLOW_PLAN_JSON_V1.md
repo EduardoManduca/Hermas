@@ -14,6 +14,9 @@ The exact top-level format identifier is `hermas-workflow-plan-v1`. The object
 contains:
 
 - `workflow`: the selected qualified workflow name.
+- `interface`: the verified workflow boundary. `input` and `success` each give
+  a graph-local `type_id` and qualified HSchema `name`; `errors` preserves the
+  declared error order with the same identity pair.
 - `semantics`: dependency-driven scheduling metadata. A false
   `source_order_guarantee` states that textual statement order is not a hidden
   execution-order promise.
@@ -35,3 +38,9 @@ and agent automation. It is not accepted by the daemon, cannot be sent as an
 Action value, and is not an alternative contract or workflow language.
 HSchema and HScript remain authoritative; graph images remain the daemon's
 validated executable input.
+
+The interface Type IDs are the same graph-local IDs embedded in that compiled
+image. Automation can therefore verify caller result Type IDs against the
+plan without decoding binary image offsets. Qualified names remain the
+semantic identity; consumers must not assume that numeric IDs are stable when
+schema ordering changes.

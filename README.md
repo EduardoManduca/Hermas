@@ -77,8 +77,9 @@ To inspect execution ordering before producing an image, run
 `hermas workflow plan MODULE SCHEMA...`. The report shows dependency-derived
 readiness stages, bounded parallel regions, deadline scopes, and saga recovery
 order. HScript source order is not a hidden scheduling guarantee.
-Integrations can add `--json` to obtain stable Action node and protocol
-identities without parsing the human-readable report.
+Integrations can add `--json` to obtain the verified workflow interface,
+graph-local Type IDs, and stable Action node and protocol identities without
+parsing the human-readable report.
 
 The alpha daemon executes sequential, typed-choice, deadline, saga, bounded
 `all`, and bounded `each` graphs. Every parallel branch and expanded item has
@@ -93,6 +94,8 @@ interrupted-execution classification.
 Callers can request one lossless terminal object with
 `hermas_run --json --workspace DIRECTORY EXECUTION_ID`; its versioned result
 projection preserves the exact outcome, Type identities, and canonical bytes.
+Automation can compare those Type IDs with the compiler plan and the durable
+history without decoding graph images or constructing protocol frames.
 
 ## Design and extension points
 

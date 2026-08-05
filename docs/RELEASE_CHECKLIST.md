@@ -13,7 +13,8 @@ A release commit must have a clean tree and atomic reviewed history.
 - Machine-readable history parses without numeric precision loss, ends in a
   validated summary, and agrees before and after a clean restart.
 - Machine-readable caller results preserve exact terminal identities,
-  outcomes, Type IDs, and canonical bytes and agree with durable history.
+  outcomes, Type IDs, and canonical bytes and agree with the compiler plan
+  and durable history.
 - Action binaries remain valid when schema compilation order changes every
   graph-local app, Action, and Type assignment.
 - Sequential, bounded-group, and saga restart proofs preserve the exact
