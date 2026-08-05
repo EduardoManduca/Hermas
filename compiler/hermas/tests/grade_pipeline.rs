@@ -10,6 +10,30 @@ use support::{build_grade_pipeline, declare_grade_list, declare_mean_calculator,
 fn grade_pipeline_is_verified_and_inspectable() {
     let (catalog, graph) = build_grade_pipeline().expect("grade graph is valid");
     assert_eq!(graph.name(), "grade_pipeline");
+    let input = catalog
+        .resolve_type("grade-list", "Empty")
+        .expect("workflow input Type");
+    let success = catalog
+        .resolve_type("printer", "Printed")
+        .expect("workflow success Type");
+    let grade_error = catalog
+        .resolve_type("grade-list", "GradeError")
+        .expect("grade error Type");
+    let mean_error = catalog
+        .resolve_type("mean-calculator", "MeanError")
+        .expect("mean error Type");
+    let print_error = catalog
+        .resolve_type("printer", "PrintError")
+        .expect("print error Type");
+    let interface = format!(
+        "\"interface\":{{\"input\":{{\"type_id\":{},\"name\":\"grade-list::Empty\"}},\"success\":{{\"type_id\":{},\"name\":\"printer::Printed\"}},\"errors\":[{{\"type_id\":{},\"name\":\"grade-list::GradeError\"}},{{\"type_id\":{},\"name\":\"mean-calculator::MeanError\"}},{{\"type_id\":{},\"name\":\"printer::PrintError\"}}]}}",
+        input.raw(),
+        success.raw(),
+        grade_error.raw(),
+        mean_error.raw(),
+        print_error.raw()
+    );
+    assert!(graph.execution_plan_json(&catalog).contains(&interface));
     assert_eq!(
         graph.resources(&catalog).to_string(),
         "actions=3 dispatches=0 forks=0 joins=0 deadline_regions=0 each_regions=0 terminals=4 edges=13 apps=3 max_concurrent_actions=1 max_payload_bytes=264"

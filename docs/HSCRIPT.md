@@ -332,10 +332,11 @@ region's explicit concurrency.
 
 `plan --json` emits the versioned `hermas-workflow-plan-v1` automation
 projection documented in `WORKFLOW_PLAN_JSON_V1.md`. It exposes verified
-Action node, numeric protocol identity, readiness stage, resource, and bounded
-parallel-region metadata without asking integrations to infer IDs from source
-order. It is compiler diagnostic metadata, not a workflow value; HSchema
-remains the contract language for all bytes delivered to Actions.
+workflow interface Types, Action nodes, numeric protocol identities, readiness
+stages, resources, and bounded parallel-region metadata without asking
+integrations to infer IDs from source order. It is compiler diagnostic
+metadata, not a workflow value; HSchema remains the contract language for all
+bytes delivered to Actions.
 
 The Grade Pipeline proof source is
 `apps/grade-pipeline/grade-pipeline.hscript`. Its integration path parses the

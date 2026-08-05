@@ -544,8 +544,25 @@ impl VerifiedGraph {
         let levels = self.readiness_levels();
         let resources = self.resources(catalog);
         let mut output = format!(
-            "{{\"format\":\"hermas-workflow-plan-v1\",\"workflow\":\"{}\",\"semantics\":{{\"scheduling\":\"dependency-driven\",\"source_order_guarantee\":false}},\"resources\":{{\"actions\":{},\"dispatches\":{},\"forks\":{},\"joins\":{},\"deadline_regions\":{},\"each_regions\":{},\"terminals\":{},\"edges\":{},\"apps\":{},\"max_concurrent_actions\":{},\"max_payload_bytes\":{}}},\"actions\":[",
+            "{{\"format\":\"hermas-workflow-plan-v1\",\"workflow\":\"{}\",\"interface\":{{\"input\":{{\"type_id\":{},\"name\":\"{}\"}},\"success\":{{\"type_id\":{},\"name\":\"{}\"}},\"errors\":[",
             json_escape(&self.graph.name),
+            self.graph.input.raw(),
+            json_escape(&catalog.type_name(self.graph.input)),
+            self.graph.success.raw(),
+            json_escape(&catalog.type_name(self.graph.success)),
+        );
+        for (index, error_type) in self.graph.errors.iter().enumerate() {
+            if index != 0 {
+                output.push(',');
+            }
+            output.push_str(&format!(
+                "{{\"type_id\":{},\"name\":\"{}\"}}",
+                error_type.raw(),
+                json_escape(&catalog.type_name(*error_type))
+            ));
+        }
+        output.push_str(&format!(
+            "]}},\"semantics\":{{\"scheduling\":\"dependency-driven\",\"source_order_guarantee\":false}},\"resources\":{{\"actions\":{},\"dispatches\":{},\"forks\":{},\"joins\":{},\"deadline_regions\":{},\"each_regions\":{},\"terminals\":{},\"edges\":{},\"apps\":{},\"max_concurrent_actions\":{},\"max_payload_bytes\":{}}},\"actions\":[",
             resources.action_nodes,
             resources.dispatch_nodes,
             resources.fork_nodes,
@@ -557,7 +574,7 @@ impl VerifiedGraph {
             resources.required_apps,
             resources.maximum_concurrent_actions,
             resources.maximum_payload_bytes
-        );
+        ));
         let mut first = true;
         for (index, node) in self.graph.nodes.iter().enumerate() {
             let NodeKind::Action(action_id) = node else {
