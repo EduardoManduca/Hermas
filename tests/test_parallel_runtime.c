@@ -262,6 +262,53 @@ static int test_unknown_precedence(const uint8_t *image, size_t image_size) {
     return 0;
 }
 
+static int test_known_failure_after_sibling_reaches_join(
+    const uint8_t *image,
+    size_t image_size) {
+    hermas_group_execution execution;
+    uint8_t storage[HERMAS_RUNTIME_MAX_FLOWS][8] = {{0u}};
+    int result = reach_fork(&execution, image, image_size, storage, 303u);
+    if (result != 0) {
+        return result;
+    }
+    hermas_frame alpha;
+    hermas_frame beta;
+    if (hermas_group_prepare(&execution, 0u, &alpha) !=
+            HERMAS_RUNTIME_OK ||
+        hermas_group_prepare(&execution, 1u, &beta) !=
+            HERMAS_RUNTIME_OK ||
+        hermas_group_mark_sent(&execution, 0u) != HERMAS_RUNTIME_OK ||
+        hermas_group_mark_sent(&execution, 1u) != HERMAS_RUNTIME_OK) {
+        return fail("could not deliver known-failure branches");
+    }
+    hermas_frame alpha_error = {
+        .kind = HERMAS_FRAME_RESULT,
+        .execution_id = alpha.execution_id,
+        .request_id = alpha.request_id,
+        .app_id = alpha.app_id,
+        .action_id = alpha.action_id,
+        .source_type = 4u,
+        .destination_type = 4u,
+        .outcome = HERMAS_OUTCOME_APP_ERROR
+    };
+    uint8_t beta_value[8] = {44u};
+    hermas_frame beta_result =
+        success(&beta, 9u, beta_value, sizeof(beta_value));
+    if (hermas_group_accept_result(&execution, 0u, &alpha_error) !=
+            HERMAS_RUNTIME_OK ||
+        execution.complete != 0u ||
+        hermas_group_accept_result(&execution, 1u, &beta_result) !=
+            HERMAS_RUNTIME_OK) {
+        return fail("known branch failure did not await delivered sibling");
+    }
+    hermas_frame final;
+    if (hermas_group_get_result(&execution, &final) != HERMAS_RUNTIME_OK ||
+        final.outcome != HERMAS_OUTCOME_APP_ERROR) {
+        return fail("known branch failure did not finish after sibling joined");
+    }
+    return 0;
+}
+
 static int test_unsent_cutoff(const uint8_t *image, size_t image_size) {
     hermas_group_execution execution;
     uint8_t storage[HERMAS_RUNTIME_MAX_FLOWS][8] = {{0u}};
@@ -656,6 +703,10 @@ int main(int argc, char **argv) {
     int result = test_overlap(image, image_size);
     if (result == 0) {
         result = test_unknown_precedence(image, image_size);
+    }
+    if (result == 0) {
+        result = test_known_failure_after_sibling_reaches_join(
+            image, image_size);
     }
     if (result == 0) {
         result = test_unsent_cutoff(image, image_size);

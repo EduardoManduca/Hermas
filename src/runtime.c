@@ -711,6 +711,7 @@ static hermas_runtime_result group_resolve_join(
             }
         }
         if (!found) {
+            group_maybe_complete(execution);
             return HERMAS_RUNTIME_OK;
         }
     }
