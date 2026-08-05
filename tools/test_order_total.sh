@@ -71,17 +71,20 @@ done
 
 # The graph-aware runner encodes the decimal HSchema Integer. Canonical
 # hexadecimal remains available through --hex for exact-byte automation.
-if "$build/hermas_run" \
+if "$build/hermas_run" --json \
     --workspace "$workspace" 40 --value not-an-integer \
     >"$work/invalid.out" 2>"$work/invalid.err"; then
     echo "order-total: invalid scalar input was accepted" >&2
     exit 1
 fi
+[[ ! -s "$work/invalid.out" ]]
 grep -F "invalid argument or value" "$work/invalid.err"
-run_output=$("$build/hermas_run" \
-    --workspace "$workspace" 41 --value 10000)
-grep -F "outcome=success" <<<"$run_output"
-grep -F "display=true" <<<"$run_output"
+"$build/hermas_run" --json \
+    --workspace "$workspace" 41 --value 10000 \
+    >"$work/execution-result.json"
+python3 tests/test_execution_result_json.py \
+    "$work/execution-result.json" \
+    --execution 41 --outcome success --value-hex 01
 wait "$discount_pid" "$tax_pid" "$receipt_pid"
 grep -Fx "Order total: 9900 cents" "$work/receipt.out"
 

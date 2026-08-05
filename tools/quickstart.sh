@@ -56,8 +56,11 @@ for _ in $(seq 1 100); do
     sleep 0.05
 done
 [[ -S "$control_socket" ]]
-"$build/hermas_run" \
-    --workspace "$workspace" 1
+"$build/hermas_run" --json \
+    --workspace "$workspace" 1 >"$work/execution-result.json"
+python3 tests/test_execution_result_json.py \
+    "$work/execution-result.json" \
+    --execution 1 --outcome success --value-hex 01
 wait "$grade_pid" "$mean_pid" "$printer_pid"
 
 kill "$daemon_pid"

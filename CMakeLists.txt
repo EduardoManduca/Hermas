@@ -683,6 +683,7 @@ install(FILES
         LICENSE-MIT LICENSE-APACHE
         docs/QUICKSTART.md docs/APP_AUTHOR_GUIDE.md
         docs/EDGE_ABI.md
+        docs/EXECUTION_RESULT_JSON_V1.md
         docs/WORKSPACE.md docs/WORKSPACE_MANIFEST_V1.md
         docs/COMPATIBILITY.md docs/THREAT_MODEL.md
         docs/CRASH_RECOVERY_MATRIX.md docs/FEATURE_ADMISSION.md

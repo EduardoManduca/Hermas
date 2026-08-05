@@ -32,6 +32,7 @@ hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --value VALUE
 hermas_run CONTROL_SOCKET EXECUTION_ID --image IMAGE --hex INPUT_HEX
 hermas_run --workspace DIRECTORY EXECUTION_ID --image IMAGE --value VALUE
 hermas_run --workspace DIRECTORY EXECUTION_ID --value VALUE
+hermas_run --json --workspace DIRECTORY EXECUTION_ID --value VALUE
 ```
 
 Managed workspace mode derives both the private control socket and its pinned
@@ -52,3 +53,11 @@ When an image is present and the result is scalar, it also appends a
 human-readable `display=` value. Exit status is `0` for Success, `10` for
 AppError, `11` for NotSent, and `12` for Unknown. Transport, protocol, and
 argument failures remain distinct non-domain failures.
+
+For automation, a leading `--json` emits exactly one
+`hermas-execution-result-v1` object on successful protocol exchange. The
+execution ID is a decimal string so consumers cannot lose integer precision;
+Type IDs are bounded JSON numbers, and `value_hex` contains the exact canonical
+result bytes. Domain exit statuses remain unchanged. Argument and transport
+failures continue to write diagnostics to standard error and do not fabricate
+a result object.

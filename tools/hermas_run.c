@@ -312,6 +312,25 @@ static int outcome_exit_code(uint16_t outcome) {
     }
 }
 
+static void print_hex_value(const uint8_t *bytes, uint32_t size) {
+    for (uint32_t index = 0u; index < size; ++index) {
+        printf("%02x", (unsigned)bytes[index]);
+    }
+}
+
+static void print_json_result(const hermas_frame *result) {
+    printf(
+        "{\"format\":\"hermas-execution-result-v1\","
+        "\"execution_id\":\"%" PRIu64 "\",\"outcome\":\"%s\","
+        "\"source_type\":%u,\"destination_type\":%u,"
+        "\"value_hex\":\"",
+        result->execution_id, outcome_name(result->outcome),
+        (unsigned)result->source_type,
+        (unsigned)result->destination_type);
+    print_hex_value(result->payload, result->payload_length);
+    puts("\"}");
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
         printf(
@@ -324,27 +343,32 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         puts(
             "usage:\n"
-            "  hermas_run CONTROL_SOCKET EXECUTION_ID "
+            "  hermas_run [--json] CONTROL_SOCKET EXECUTION_ID "
             "INPUT_TYPE [INPUT_HEX]\n"
-            "  hermas_run CONTROL_SOCKET EXECUTION_ID "
+            "  hermas_run [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE [INPUT_HEX]\n"
-            "  hermas_run CONTROL_SOCKET EXECUTION_ID "
+            "  hermas_run [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --value VALUE\n"
-            "  hermas_run CONTROL_SOCKET EXECUTION_ID "
+            "  hermas_run [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --hex INPUT_HEX\n\n"
-            "  hermas_run --workspace DIRECTORY EXECUTION_ID "
+            "  hermas_run [--json] --workspace DIRECTORY EXECUTION_ID "
             "[--value VALUE | --hex INPUT_HEX]\n"
-            "  hermas_run --workspace DIRECTORY EXECUTION_ID "
+            "  hermas_run [--json] --workspace DIRECTORY EXECUTION_ID "
             "--image IMAGE [--value VALUE | --hex INPUT_HEX]\n\n"
             "A managed workspace derives and validates its pinned image. "
             "The explicit --image form remains available for diagnostics.\n\n"
+            "--json emits one hermas-execution-result-v1 object.\n"
             "--value accepts unit, decimal Integer, true/false, "
             "String text, or 0x-prefixed Bytes.");
         return 0;
     }
+    int json_mode = argc >= 2 && strcmp(argv[1], "--json") == 0;
+    size_t argument_start = json_mode ? 2u : 1u;
     int workspace_mode =
-        argc >= 2 && strcmp(argv[1], "--workspace") == 0;
-    size_t execution_index = workspace_mode ? 3u : 2u;
+        (size_t)argc > argument_start &&
+        strcmp(argv[argument_start], "--workspace") == 0;
+    size_t execution_index =
+        workspace_mode ? argument_start + 2u : argument_start + 1u;
     size_t mode_index = execution_index + 1u;
     int explicit_image_mode =
         (size_t)argc > mode_index &&
@@ -374,20 +398,20 @@ int main(int argc, char **argv) {
     if ((!managed_arguments_valid &&
          !explicit_image_arguments_valid &&
          !raw_arguments_valid) ||
-        (workspace_mode && argc < 4)) {
+        (workspace_mode && (size_t)argc <= execution_index)) {
         fprintf(
             stderr,
-            "usage: %s CONTROL_SOCKET EXECUTION_ID "
+            "usage: %s [--json] CONTROL_SOCKET EXECUTION_ID "
             "INPUT_TYPE [INPUT_HEX]\n"
-            "       %s CONTROL_SOCKET EXECUTION_ID "
+            "       %s [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE [INPUT_HEX]\n"
-            "       %s CONTROL_SOCKET EXECUTION_ID "
+            "       %s [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --value VALUE\n"
-            "       %s CONTROL_SOCKET EXECUTION_ID "
+            "       %s [--json] CONTROL_SOCKET EXECUTION_ID "
             "--image IMAGE --hex INPUT_HEX\n"
-            "       %s --workspace DIRECTORY EXECUTION_ID "
+            "       %s [--json] --workspace DIRECTORY EXECUTION_ID "
             "[--value VALUE | --hex INPUT_HEX]\n"
-            "       %s --workspace DIRECTORY EXECUTION_ID "
+            "       %s [--json] --workspace DIRECTORY EXECUTION_ID "
             "--image IMAGE [--value VALUE | --hex INPUT_HEX]\n",
             argv[0],
             argv[0],
@@ -398,10 +422,11 @@ int main(int argc, char **argv) {
         return 2;
     }
     hermas_workspace_paths workspace;
-    const char *control_socket = argv[1];
+    const char *control_socket = argv[argument_start];
     if (workspace_mode) {
         hermas_workspace_result opened =
-            hermas_workspace_open(argv[2], false, &workspace);
+            hermas_workspace_open(
+                argv[argument_start + 1u], false, &workspace);
         if (opened != HERMAS_WORKSPACE_OK) {
             fprintf(
                 stderr, "hermas_run: workspace error: %s\n",
@@ -530,22 +555,23 @@ int main(int argc, char **argv) {
         free(input);
         return 1;
     }
-    printf(
-        "execution=%" PRIu64 " outcome=%s source_type=%u "
-        "destination_type=%u value=",
-        result.execution_id, outcome_name(result.outcome),
-        (unsigned)result.source_type,
-        (unsigned)result.destination_type);
-    for (uint32_t index = 0u;
-         index < result.payload_length; ++index) {
-        printf("%02x", (unsigned)result.payload[index]);
+    if (json_mode) {
+        print_json_result(&result);
+    } else {
+        printf(
+            "execution=%" PRIu64 " outcome=%s source_type=%u "
+            "destination_type=%u value=",
+            result.execution_id, outcome_name(result.outcome),
+            (unsigned)result.source_type,
+            (unsigned)result.destination_type);
+        print_hex_value(result.payload, result.payload_length);
+        if (image_loaded) {
+            print_scalar(
+                &image, result.source_type,
+                result.payload, result.payload_length);
+        }
+        putchar('\n');
     }
-    if (image_loaded) {
-        print_scalar(
-            &image, result.source_type,
-            result.payload, result.payload_length);
-    }
-    putchar('\n');
     int exit_code = outcome_exit_code(result.outcome);
     unload_image(&image);
     free(image_storage);

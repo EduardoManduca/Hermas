@@ -90,6 +90,9 @@ Automation can inspect durable execution facts with
 `hermas_history --json --workspace DIRECTORY`. The versioned JSON Lines stream
 preserves 64-bit identifiers without precision loss and ends with the exact
 interrupted-execution classification.
+Callers can request one lossless terminal object with
+`hermas_run --json --workspace DIRECTORY EXECUTION_ID`; its versioned result
+projection preserves the exact outcome, Type identities, and canonical bytes.
 
 ## Design and extension points
 
