@@ -24,7 +24,8 @@ contains:
   concurrency, and maximum canonical payload size.
 - `actions`: Action nodes in graph-node order. Each entry gives `node_id`,
   `app_id`, `action_id`, the qualified `name`, and its dependency-derived
-  `stage`.
+  `stage`. Its `contract` gives the graph-local Type ID and qualified HSchema
+  name for the Action's declared `input`, `success`, and `error` Types.
 - `parallel_regions`: bounded `all` and `each` regions. An `all` entry gives
   its Fork node and fixed branch count. An `each` entry gives its template
   node, static item bound, and concurrency ceiling.
@@ -44,3 +45,8 @@ image. Automation can therefore verify caller result Type IDs against the
 plan without decoding binary image offsets. Qualified names remain the
 semantic identity; consumers must not assume that numeric IDs are stable when
 schema ordering changes.
+
+Action-contract Type IDs follow the same rule. They describe the exact
+HSchema contract compiled into each Action node and let tooling attribute
+durable Action outcomes or generated edge contracts without reconstructing
+catalog order. They do not change Action ownership or make the plan executable.

@@ -78,8 +78,8 @@ To inspect execution ordering before producing an image, run
 readiness stages, bounded parallel regions, deadline scopes, and saga recovery
 order. HScript source order is not a hidden scheduling guarantee.
 Integrations can add `--json` to obtain the verified workflow interface,
-graph-local Type IDs, and stable Action node and protocol identities without
-parsing the human-readable report.
+per-Action typed contracts, graph-local Type IDs, and stable Action node and
+protocol identities without parsing the human-readable report.
 
 The alpha daemon executes sequential, typed-choice, deadline, saga, bounded
 `all`, and bounded `each` graphs. Every parallel branch and expanded item has

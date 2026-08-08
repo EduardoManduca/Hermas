@@ -80,7 +80,9 @@ fn cli_checks_the_module_and_requires_selection_for_one_graph() {
     assert!(plan_json.contains("\"name\":\"mean-calculator::MeanInput\""));
     assert!(plan_json.contains("\"name\":\"mean-calculator::Mean\""));
     assert!(plan_json.contains("\"name\":\"mean-calculator::MeanError\""));
-    assert!(plan_json.contains("\"name\":\"mean-calculator/calculate\",\"stage\":1"));
+    assert!(
+        plan_json.contains("\"name\":\"mean-calculator/calculate\",\"stage\":1,\"contract\":{")
+    );
 }
 
 #[test]

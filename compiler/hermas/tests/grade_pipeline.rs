@@ -33,7 +33,21 @@ fn grade_pipeline_is_verified_and_inspectable() {
         mean_error.raw(),
         print_error.raw()
     );
-    assert!(graph.execution_plan_json(&catalog).contains(&interface));
+    let plan = graph.execution_plan_json(&catalog);
+    assert!(plan.contains(&interface));
+    let get = catalog
+        .resolve_action("grade-list", "get")
+        .expect("grade-list Action");
+    let get = catalog.action(get).expect("grade-list Action definition");
+    let action_contract = format!(
+        "{{\"node_id\":1,\"app_id\":{},\"action_id\":{},\"name\":\"grade-list/get\",\"stage\":1,\"contract\":{{\"input\":{{\"type_id\":{},\"name\":\"grade-list::Empty\"}},\"success\":{{\"type_id\":{},\"name\":\"grade-list::GradeList\"}},\"error\":{{\"type_id\":{},\"name\":\"grade-list::GradeError\"}}}}}}",
+        get.app.raw(),
+        get.id.raw(),
+        get.input.raw(),
+        get.success.raw(),
+        get.error.raw(),
+    );
+    assert!(plan.contains(&action_contract));
     assert_eq!(
         graph.resources(&catalog).to_string(),
         "actions=3 dispatches=0 forks=0 joins=0 deadline_regions=0 each_regions=0 terminals=4 edges=13 apps=3 max_concurrent_actions=1 max_payload_bytes=264"
