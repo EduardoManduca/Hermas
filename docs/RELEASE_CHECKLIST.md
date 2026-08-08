@@ -15,6 +15,8 @@ A release commit must have a clean tree and atomic reviewed history.
 - Machine-readable caller results preserve exact terminal identities,
   outcomes, Type IDs, and canonical bytes and agree with the compiler plan
   and durable history.
+- Machine-readable workflow plans expose qualified and graph-local Type
+  identities for the workflow boundary and every Action contract.
 - Action binaries remain valid when schema compilation order changes every
   graph-local app, Action, and Type assignment.
 - Sequential, bounded-group, and saga restart proofs preserve the exact

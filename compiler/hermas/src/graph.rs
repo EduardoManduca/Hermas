@@ -588,12 +588,18 @@ impl VerifiedGraph {
             }
             first = false;
             output.push_str(&format!(
-                "{{\"node_id\":{},\"app_id\":{},\"action_id\":{},\"name\":\"{}\",\"stage\":{}}}",
+                "{{\"node_id\":{},\"app_id\":{},\"action_id\":{},\"name\":\"{}\",\"stage\":{},\"contract\":{{\"input\":{{\"type_id\":{},\"name\":\"{}\"}},\"success\":{{\"type_id\":{},\"name\":\"{}\"}},\"error\":{{\"type_id\":{},\"name\":\"{}\"}}}}}}",
                 index + 1,
                 action.app.raw(),
                 action.id.raw(),
                 json_escape(&catalog.action_name(*action_id)),
-                levels[index]
+                levels[index],
+                action.input.raw(),
+                json_escape(&catalog.type_name(action.input)),
+                action.success.raw(),
+                json_escape(&catalog.type_name(action.success)),
+                action.error.raw(),
+                json_escape(&catalog.type_name(action.error)),
             ));
         }
         output.push_str("],\"parallel_regions\":[");
