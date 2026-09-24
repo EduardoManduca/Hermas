@@ -39,7 +39,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)"
           test "v$(sed -n 's/^version = "\(.*\)"/\1/p' compiler/hermas/Cargo.toml | head -1)" = "$GITHUB_REF_NAME"
       - run: tools/package_release.sh "${GITHUB_REF_NAME#v}"
-      - uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           prerelease: true
           generate_release_notes: true
